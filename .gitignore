@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib66/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# Environment files
+.env
+.secret.env
+*.env
+
+# IDE / Editor folders
+.vscode/
+.idea/
+
+# Other
+Resume_AI.zip
+*.zip
