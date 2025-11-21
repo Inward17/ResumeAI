@@ -1,0 +1,65 @@
+{
+  "personal_info": {
+    "full_name": "Sarthak Ajit Kotkar",
+    "email": "kotkarsarthak2004@gmail.com",
+    "phone_number": "9423570008",
+    "github": "github.com/Inward17",
+    "linkedin": "in/sarthak-kotkar-6271ab257"
+  },
+  "skills": "JavaScript, TypeScript, Python, C++, HTML5, CSS3, React.js, Vue.js, Three.js, React Native, Bootstrap, Tailwind CSS, Node.js, Express.js, Next.js, FastAPI, REST API, Authentication (JWT, OAuth2), PostgreSQL, MySQL, MongoDB, Neo4j, Redis, Firestore, Google Cloud Platform, Vertex AI, Cloud Run, Firestore, Firebase, Docker, GitHub Actions, Render, Git, GitHub, Postman, Figma, MongoDB Compass, Replit, React, FastAPI, Google Cloud Run, Vertex AI, Gemini API, Firebase, Firestore, Three.js, WebSockets, MongoDB",
+  "education": [
+    "B.E., Pune, graduating 2026",
+    "Bachelor of Engineering in Computer Engineering, Marathwada Mitra Mandal College of Engineering, Pune, 2026, 8.79"
+  ],
+  "experience": [
+    "Software Engineer Intern at Equations Work (January 2025 - March 2025) in Bavdhan, Pune - Developed an AI-powered knowledge graph using machine learning models to extract and structure insights from complex data. - Built backend APIs with Flask and visualized relationships in 3D using Babylon.js and Neo4j."
+  ],
+  "projects": [
+    {
+      "name": "TruthLens",
+      "technologies": [
+        "React",
+        "FastAPI"
+      ],
+      "description": "Misinformation Detection WebApp - flash - clover - 476914 - h6.web.app/ - Developed a full - stack misinformation detection system on Google Cloud Platform using React, FastAPI, Cloud Run, and Firebase Hosting. - Engineered a dual - AI backend: Gemini API (DDGS) for general multi - modal analysis and Vertex AI (Google Search) for deep fact - checking. - Implemented secure user authentication with Firebase and stored user data and analysis history in Cloud Firestore.",
+      "duration": "",
+      "details": "TruthLens - Misinformation Detection WebApp - flash-clover-476914-h6.web.app/ - Developed a full-stack misinformation detection system on Google Cloud Platform using React, FastAPI, Cloud Run, and Firebase Hosting. - Engineered a dual-AI backend: Gemini API (DDGS) for general multi-modal analysis and Vertex AI (Google Search) for deep fact-checking. - Implemented secure user authentication with Firebase and stored user data and analysis history in Cloud Firestore."
+    },
+    {
+      "name": "3D City Knowledge Graph Visualization",
+      "technologies": [
+        "React"
+      ],
+      "description": "Tech Stack: Three.js, React, Firebase (Firestore, Hosting) - Designed and implemented a 3D knowledge graph representing urban infrastructure and interrelationships within a city model. - Used Three.js for real - time 3D visualization and interactive exploration of graph elements. - Integrated Firestore(Firebase database) for data storage.",
+      "duration": "",
+      "details": "3D City Knowledge Graph Visualization - Tech Stack: Three.js, React, Firebase (Firestore, Hosting) - Designed and implemented a 3D knowledge graph representing urban infrastructure and interrelationships within a city model. - Used Three.js for real-time 3D visualization and interactive exploration of graph elements. - Integrated Firestore(Firebase database) for data storage."
+    },
+    {
+      "name": "YatriSuraksha",
+      "technologies": [
+        "React",
+        "MongoDB",
+        "FastAPI"
+      ],
+      "description": "Tourist Safety System - Tech Stack: FastAPI, React, WebSockets, MongoDB - Engineered a full - stack safety system using FastAPI, React, and WebSockets for real - time tourist location tracking and visualization on live maps. - Developed an AI anomaly detection module leveraging MongoDB geospatial queries to identify risks like geofence breaches, route deviations, and inactivity.",
+      "duration": "",
+      "details": "YatriSuraksha - Tourist Safety System - Tech Stack: FastAPI, React, WebSockets, MongoDB - Engineered a full-stack safety system using FastAPI, React, and WebSockets for real-time tourist location tracking and visualization on live maps. - Developed an AI anomaly detection module leveraging MongoDB geospatial queries to identify risks like geofence breaches, route deviations, and inactivity."
+    },
+    {
+      "name": "incident command center dashboard with a live map and alert feed to enhance situational awareness for authorities. Tech Stack: FastAPI, React, MongoDB, WebSockets.",
+      "technologies": [
+        "React",
+        "MongoDB",
+        "FastAPI"
+      ],
+      "description": "",
+      "duration": "",
+      "details": "incident command center dashboard with a live map and alert feed to enhance situational awareness for authorities. Tech Stack: FastAPI, React, MongoDB, WebSockets."
+    }
+  ],
+  "certifications": [
+    "AWS Academy Graduate - Cloud Foundations (Amazon Web Services Training and Certification, 2025), SQL(Basic) Certificate (Hackerrank, 2024)"
+  ],
+  "achievements": null,
+  "raw_project_count": 4
+}

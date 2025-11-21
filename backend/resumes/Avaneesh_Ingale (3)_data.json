@@ -1,0 +1,56 @@
+{
+  "personal_info": {
+    "full_name": "Avaneesh Ingale",
+    "email": "avaneeshingale2704@gmail.com",
+    "phone_number": "+918459196378",
+    "github": "github.com/avaneesh2704",
+    "linkedin": "linkedin.com/in/avaneesh-ingale-5b5083293"
+  },
+  "skills": "Python, C++, HTML, CSS, FastAPI, Flask, Streamlit, Git, Jupyter Notebook, XAMPP, PostgreSQL, MySQL, MongoDB, SQLite, TensorFlow, Keras, Scikit-learn, Pandas, NumPy, Matplotlib, Deep Learning, Generative AI, Data Structures & Algorithms, OOP, OS, DBMS, CN",
+  "education": [
+    "Bachelor of Engineering (Computer Engineering), Marathwada Mitramandal College of Engineering, Pune (2026); Higher Secondary (HSC), MES Higher Secondary School, Pune (2022); Secondary (SSC), Bal Shikshan Mandir English Medium School, Pune (2020)"
+  ],
+  "experience": [
+    "Machine Learning Research Intern Vishwas Vaidya (Engineering Consultant), Pune",
+    "Jan2025–Mar2025 - Developed a hybrid Random Forest + LSTM model to predict Remaining Useful Life (RUL) of halogen brake lamps with 98% accuracy. - Engineered preprocessing and feature extraction pipelines improving model robustness and interpretability. - Created visual dashboards in Streamlit for real-time performance insights."
+  ],
+  "projects": [
+    {
+      "name": "Accentify—AI",
+      "technologies": [
+        "React",
+        "PostgreSQL",
+        "FastAPI"
+      ],
+      "description": "Powered Shlok Learning Platform - Built a RESTful backend using FastAPI with a React frontend for real - time pronunciation scoring. - Integrated OpenAI Whisper for transcription and designed a custom evaluation algorithm for word - level accuracy. - Architected a multilingual PostgreSQL database supporting Devanagari and English scripts. - TechStack: FastAPI, React, PostgreSQL, SQLAlchemy, OpenAI Whisper API",
+      "duration": "",
+      "details": "Accentify—AI-Powered Shlok Learning Platform - Built a RESTful backend using FastAPI with a React frontend for real-time pronunciation scoring. - Integrated OpenAI Whisper for transcription and designed a custom evaluation algorithm for word-level accuracy. - Architected a multilingual PostgreSQL database supporting Devanagari and English scripts. - TechStack: FastAPI, React, PostgreSQL, SQLAlchemy, OpenAI Whisper API"
+    },
+    {
+      "name": "GenAI Interactive Learning Game",
+      "technologies": [
+        "Python"
+      ],
+      "description": "Developed an AI - powered learning platform using Streamlit and OpenAI API for personalized quizzes and feedback. - Implemented an adaptive difficulty engine to tailor question levels based on user performance. - TechStack: Python, Streamlit, SQLite, Gemini API, Pandas",
+      "duration": "",
+      "details": "GenAI Interactive Learning Game - Developed an AI-powered learning platform using Streamlit and OpenAI API for personalized quizzes and feedback. - Implemented an adaptive difficulty engine to tailor question levels based on user performance. - TechStack: Python, Streamlit, SQLite, Gemini API, Pandas"
+    },
+    {
+      "name": "TotalElectronContent",
+      "technologies": [
+        "Python",
+        "TensorFlow"
+      ],
+      "description": "Designed an LSTM - based model to forecast space weather and TEC variations impacting aviation and satellite systems. Applied normalization, features scaling, and hyperparameter tuning to enhance accuracy. Tools: Python, TensorFlow, NumPy, Matplotlib",
+      "duration": "TEC",
+      "details": "TotalElectronContent(TEC)Prediction - Designed an LSTM-based model to forecast space weather and TEC variations impacting aviation and satellite systems. Applied normalization, features scaling, and hyperparameter tuning to enhance accuracy. Tools: Python, TensorFlow, NumPy, Matplotlib"
+    }
+  ],
+  "certifications": [
+    "Complete AI and Machine Learning, Data Science Bootcamp (Udemy), Deep Learning A–Z 2025: Neural Networks, AI & ChatGPT (Udemy)"
+  ],
+  "achievements": [
+    "Secretary — Computer Society of India (CSI): Led a 15-member team organizing campus-wide technical events. Marketing Head — GDSC: Increased event participation by 40% through strategic digital campaigns. Secured Top 10 position in Internal Smart India Hackathon 2025."
+  ],
+  "raw_project_count": 3
+}

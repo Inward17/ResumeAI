@@ -1,0 +1,69 @@
+{
+  "personal_info": {
+    "full_name": "Rohan Mohite",
+    "email": "rohanmohite140404@gmail.com",
+    "phone_number": "+91-8956007453",
+    "github": "github.com/Rohan-Mohite14",
+    "linkedin": "linkedin.com/in/rohan-mohite"
+  },
+  "skills": "AI, data-driven systems, logistics optimization, financial market analysis, personalized recommendations, backend solutions, automation, Java, Python, C++, JavaScript, Typescript, Spring Boot, Flask, FastAPI, Express.js, React, React Native, Tailwind, MongoDB, MySQL, SQLite, Neo4j, Git, Jenkins, Docker, Kafka, REST APIs, Microservices",
+  "education": [
+    "Savitribai Phule Pune University, BE in Computer Engineering – Pune, 2022 – Present"
+  ],
+  "experience": [
+    "Software Development Intern, Equations Work – Pune, Maharashtra Jan 2025 – Mar 2025 - Engineered a proof-of-concept feature to model the complex relationships between financial news, public companies, and stock market prices, designing a graph-based data model in Neo4j with a supporting Python backend in Flask."
+  ],
+  "projects": [
+    {
+      "name": "Proof",
+      "technologies": [
+        "Python",
+        "Flask"
+      ],
+      "description": "of - concept feature to model financial news, public companies, and stock market prices - Neo4j, Python, Flask - Designed a graph - based data model in Neo4j with a supporting Python backend in Flask.",
+      "duration": "",
+      "details": "Proof-of-concept feature to model financial news, public companies, and stock market prices - Neo4j, Python, Flask - Designed a graph-based data model in Neo4j with a supporting Python backend in Flask."
+    },
+    {
+      "name": "AI",
+      "technologies": [
+        "Java",
+        "Spring"
+      ],
+      "description": "Powered Logistics & Fleet Optimization Platform - Architected and implemented a distributed microservices system using Java and Spring Boot, creating distinct services for Fleet Management, Route Scheduling, and User Authentication.",
+      "duration": "",
+      "details": "AI-Powered Logistics & Fleet Optimization Platform - Architected and implemented a distributed microservices system using Java and Spring Boot, creating distinct services for Fleet Management, Route Scheduling, and User Authentication."
+    },
+    {
+      "name": "Developed interactive data visualization components using 3D libraries to render and explore the Neo4j data graph, improving the clarity of how news events impact specific market sectors. Built RESTful API endpoints with Flask to dynamically manipulate the visualized data graph, allowing for the application of impact scores to company nodes based on the sentiment and relevance of news articles. Implemented a weighting algorithm to analyze news sentiment and connection density within the graph, creating a predictive model to identify stocks with a high potential to trend in the near future.",
+      "technologies": [
+        "Flask"
+      ],
+      "description": "",
+      "duration": "",
+      "details": "Developed interactive data visualization components using 3D libraries to render and explore the Neo4j data graph, improving the clarity of how news events impact specific market sectors. Built RESTful API endpoints with Flask to dynamically manipulate the visualized data graph, allowing for the application of impact scores to company nodes based on the sentiment and relevance of news articles. Implemented a weighting algorithm to analyze news sentiment and connection density within the graph, creating a predictive model to identify stocks with a high potential to trend in the near future."
+    },
+    {
+      "name": "LangGraph",
+      "technologies": [],
+      "description": "based multi - agent AI system - Designed and deployed a LangGraph - based multi - agent AI system to automate the entire delivery lifecycle, orchestrating collaboration between specialized agents for order aggregation and route optimization. Engineered a dynamic re - planning loop where a tracker agent could trigger the optimizer to generate new routes mid - journey in response to unexpected delays, significantly improving delivery time reliability.",
+      "duration": "",
+      "details": "LangGraph-based multi-agent AI system - Designed and deployed a LangGraph-based multi-agent AI system to automate the entire delivery lifecycle, orchestrating collaboration between specialized agents for order aggregation and route optimization. Engineered a dynamic re-planning loop where a tracker agent could trigger the optimizer to generate new routes mid-journey in response to unexpected delays, significantly improving delivery time reliability."
+    },
+    {
+      "name": "Movie Recommendation System",
+      "technologies": [
+        "MongoDB",
+        "Flask"
+      ],
+      "description": "Implemented a hybrid engine combining content - based filtering (TF - IDF) and collaborative filtering (SVD) to improve prediction accuracy and handle the cold - start problem. Designed a session - based model that adapted to real - time user interactions to provide immediate, context - aware suggestions, supported by a Flask backend and MongoDB.",
+      "duration": "",
+      "details": "Movie Recommendation System - Implemented a hybrid engine combining content-based filtering (TF-IDF) and collaborative filtering (SVD) to improve prediction accuracy and handle the cold-start problem. Designed a session-based model that adapted to real-time user interactions to provide immediate, context-aware suggestions, supported by a Flask backend and MongoDB."
+    }
+  ],
+  "certifications": null,
+  "achievements": [
+    "NetElixir AIgnition Hackathon 2024 - Secured a top 10 national ranking by building an ML model to optimize digital advertising impact for tech giants like Google, Meta, and Microsoft."
+  ],
+  "raw_project_count": 5
+}

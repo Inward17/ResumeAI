@@ -1,0 +1,52 @@
+{
+  "personal_info": {
+    "full_name": "SOHAM MINIYAR",
+    "email": "miniyarsoham@gmail.com",
+    "phone_number": "+91 942291830",
+    "github": "https://github.com/sohamminiyar",
+    "linkedin": "https://www.linkedin.com/in/soham-miniyar"
+  },
+  "skills": "Python, C++, HTML, CSS, Javascript, SQL, CypherQL, Flutter, React.js, Node.js, Express.js, Flask, MySQL, MongoDB, GraphQL, Salesforce, Canva, Figma, Git, GitHub, Jupyter Notebook, Google Colab, Emotional Intelligence, Creative Thinking, Leadership, Communication, Teamwork",
+  "education": [
+    "Bachelor of Engineering (B.E), MMCOE Pune 2022 - Present CGPA: 8.79/10, Class XII (HSC), Dnyanganga Jr. College 2020 - 2022, Class X (SSC), Silver Crest School 2018"
+  ],
+  "experience": [
+    "Trainee Software Engineer Jan 2025 - March 2025 at Equations Work Pvt. Ltd. Pune, MH - Built a fully deployable financial prediction 3D website with near real-time news processing - 98% accurate prediction - Handled the 3D canvas efficiently reduced the latency in 3D object mapping by using Mediapipe & Babylon.js. - Smoothened the object movement by hand gesture management."
+  ],
+  "projects": [
+    {
+      "name": "GenAI Interactive Learning Games",
+      "technologies": [
+        "Flask"
+      ],
+      "description": "Built an AI - powered aptitude quiz platform using OpenRouter API, generating real - time MCQs across Verbal, Logical and Math categories with difficulty - level filtering. Implemented a dynamic scoring and badge system with user progress tracking and interactive frontend with Streamlit UI including Flask, leaderboard and user authentication. - Technologies: OpenRouter API, Streamlit UI, Flask",
+      "duration": "",
+      "details": "GenAI Interactive Learning Games - Built an AI-powered aptitude quiz platform using OpenRouter API, generating real-time MCQs across Verbal, Logical and Math categories with difficulty-level filtering. Implemented a dynamic scoring and badge system with user progress tracking and interactive frontend with Streamlit UI including Flask, leaderboard and user authentication. - Technologies: OpenRouter API, Streamlit UI, Flask"
+    },
+    {
+      "name": "E",
+      "technologies": [],
+      "description": "Commerce Aggregator Website - Developed an E - commerce aggregator platform that fetches and displays identical products from multiple websites with price, rating, and review comparison, enabling smart shopping via advanced filtering options.",
+      "duration": "",
+      "details": "E-Commerce Aggregator Website - Developed an E-commerce aggregator platform that fetches and displays identical products from multiple websites with price, rating, and review comparison, enabling smart shopping via advanced filtering options."
+    },
+    {
+      "name": "Built backend with Python Flask and frotend using React.js.",
+      "technologies": [
+        "Python",
+        "React",
+        "Flask"
+      ],
+      "description": "",
+      "duration": "",
+      "details": "Built backend with Python Flask and frotend using React.js."
+    }
+  ],
+  "certifications": [
+    "Intel Unnati AI/ML Training Program, AICTE Juniper Cloud Computing Virtual Internship"
+  ],
+  "achievements": [
+    "Best Domain Specific Award in GenAI domain at Convene 2024 (SKN, Pune), Published review paper in UGC Care Journal (Jan 2024)"
+  ],
+  "raw_project_count": 3
+}

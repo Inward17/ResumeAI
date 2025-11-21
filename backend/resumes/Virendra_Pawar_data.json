@@ -1,0 +1,56 @@
+{
+  "personal_info": {
+    "full_name": "VIRENDRA PAWAR",
+    "email": "virendrapawar1402@gmail.com",
+    "phone_number": "9767807889",
+    "github": "github.com/POPPz07",
+    "linkedin": "linkedin.com/in/virendra-pawar-826284293"
+  },
+  "skills": "Python, C++, SQL, JavaScript/TypeScript, FastAPI, Flask, React.js, RESTAPIs, MySQL, MongoDB, SQLite, Neo4j, PostgreSQL, AWS Cloud Foundations, Google Cloud Run, Firebase Hosting, CI/CD (GitHub Actions), Postman, Systems Design, Debugging, Software Reliability, API Integration, Agile Collaboration, Adaptability, Data Management, CS Fundamentals",
+  "education": [
+    "B.E. IN COMPUTER ENGINEERING - 8.86 2022–2026 Marathwada Mittramandal’s College of Engineering, Savitribai Phule Pune University Pune, India"
+  ],
+  "experience": [
+    "TRAINEE SOFTWARE ENGINEER JAN2025–MAR2025",
+    "Equations Work IT Services Pvt. Ltd. Pune, India - Built and optimized RESTful APIs in Python for data ingestion, improving backend efficiency and reliability. Collaborated via GitHub for version control and code integration within a cross-functional team. Assisted in debugging and testing backend modules to enhance code stability and maintainability."
+  ],
+  "projects": [
+    {
+      "name": "Code Vulnerability Detection System (Python, scikit",
+      "technologies": [
+        "Python"
+      ],
+      "description": "learn, AST parsing) – Developing a static code analysis tool using local, open - source LLMs to detect vulnerabilities securely without external API dependencies. Architected the system for future deployment in an air - gapped environment to ensure complete data confidentiality.",
+      "duration": "",
+      "details": "Code Vulnerability Detection System (Python, scikit-learn, AST parsing) – Developing a static code analysis tool using local, open-source LLMs to detect vulnerabilities securely without external API dependencies. Architected the system for future deployment in an air-gapped environment to ensure complete data confidentiality."
+    },
+    {
+      "name": "E",
+      "technologies": [
+        "Python",
+        "Flask"
+      ],
+      "description": "commerce Aggregator Web App (Python, Flask, BeautifulSoup, SQLite) – Built production - inspired ETL workflows to aggregate, preprocess, and store pricing data from multiple sources with authentication and product management.",
+      "duration": "",
+      "details": "E-commerce Aggregator Web App (Python, Flask, BeautifulSoup, SQLite) – Built production-inspired ETL workflows to aggregate, preprocess, and store pricing data from multiple sources with authentication and product management."
+    },
+    {
+      "name": "Hybrid Movie Recommendation System (React, Flask, MongoDB Atlas, scikit",
+      "technologies": [
+        "React",
+        "MongoDB",
+        "Flask"
+      ],
+      "description": "learn) – Designed and deployed a hybrid recommender using content - based (TF - IDF + cosine similarity) and collaborative (SVD) filtering.",
+      "duration": "",
+      "details": "Hybrid Movie Recommendation System (React, Flask, MongoDB Atlas, scikit-learn) – Designed and deployed a hybrid recommender using content-based (TF-IDF + cosine similarity) and collaborative (SVD) filtering."
+    }
+  ],
+  "certifications": [
+    "Machine Learning – Coursera (Andrew Ng), AWS Academy Graduate – Cloud Foundations, Introduction to MongoDB – MongoDB University"
+  ],
+  "achievements": [
+    "Top 10 Nationwide, Net Elixir AIgnition Hackathon 2024 – Built and deployed scalable ML pipelines using Random Forest for multi-platform ad conversion prediction. Applied feature engineering and statistical modeling to deliver actionable marketing insights with 85%+ accuracy."
+  ],
+  "raw_project_count": 3
+}
