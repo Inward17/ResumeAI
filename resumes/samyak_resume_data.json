@@ -1,0 +1,61 @@
+{
+  "personal_info": {
+    "full_name": "Samyak Waikar",
+    "email": "swaikarwork@gmail.com",
+    "phone_number": "7798543460",
+    "github": "github.com/samyak-waikar",
+    "linkedin": "linkedin.com/in/samyak-waikar"
+  },
+  "skills": "Python, C, C++, Java, JavaScript, TypeScript, SQL, React.js, Node.js, Express.js, HTML5, CSS3, Bootstrap, RESTful API Development, MySQL, PostgreSQL, MongoDB, Git, Linux, Firebase, Postman, VS Code, Blender, Full-Stack Development, OOP, API Integration, Database Design, Version Control, Debugging, NestJS, RESTful APIs, CRUD operations, full-stack development, token-based authentication, backend architecture, Python, Pandas, Sklearn, Streamlit, Tkinter",
+  "education": [
+    "Marathwada Mitra Mandal’s College of Engineering November 2022 – Present Bachelor of Engineering 8.43 GPA Pune, Maharashtra"
+  ],
+  "experience": [
+    "HustleBee Softwares Pvt. Ltd. January 2025 – April 2025",
+    "Software Development Intern Pune, Maharashtra – Designed and developed 15+ RESTful APIs using NestJS for efficient CRUD operations, reducing server response time by 30% and improving user experience. – Gained hands-on experience in full-stack development, secure token-based authentication, and optimized backend architecture following industry best practices."
+  ],
+  "projects": [
+    {
+      "name": "Morbus – Disease Prediction App | Python, Pandas, Sklearn, Streamlit – Built a disease prediction web app achieving 85% accuracy using Random Forest and Linear Regression algorithms. – Processed 10,000+ health records through data cleaning, encoding, and feature selection to enhance model performance. – Deployed via Streamlit to provide real",
+      "technologies": [
+        "Python"
+      ],
+      "description": "time results, reducing manual diagnostic effort by 30%.",
+      "duration": "",
+      "details": "Morbus – Disease Prediction App | Python, Pandas, Sklearn, Streamlit – Built a disease prediction web app achieving 85% accuracy using Random Forest and Linear Regression algorithms. – Processed 10,000+ health records through data cleaning, encoding, and feature selection to enhance model performance. – Deployed via Streamlit to provide real-time results, reducing manual diagnostic effort by 30%."
+    },
+    {
+      "name": "ATM UI Simulator | Python, Tkinter – Designed a GUI",
+      "technologies": [
+        "Python"
+      ],
+      "description": "based ATM simulation with 8 interactive frames supporting 5 transaction types, including withdrawals and balance checks.",
+      "duration": "",
+      "details": "ATM UI Simulator | Python, Tkinter – Designed a GUI-based ATM simulation with 8 interactive frames supporting 5 transaction types, including withdrawals and balance checks."
+    },
+    {
+      "name": "Student List Dashboard",
+      "technologies": [
+        "React"
+      ],
+      "description": "React, Firebase - Built an admin dashboard for managing student data using Firebase Authentication and Realtime Database. Implemented secure email - password login, and enabled real - time CRUD operations for a dataset of 100+ students.",
+      "duration": "",
+      "details": "Student List Dashboard - React, Firebase - Built an admin dashboard for managing student data using Firebase Authentication and Realtime Database. Implemented secure email-password login, and enabled real-time CRUD operations for a dataset of 100+ students."
+    },
+    {
+      "name": "Employee Management System",
+      "technologies": [
+        "Java",
+        "MySQL"
+      ],
+      "description": "Java, JDBC, MySQL - Created a role - based employee management system handling 200+ records with CRUD support and report generation. Integrated MySQL database with JDBC and optimized SQL queries, reducing data retrieval latency by 15%. Implemented RBAC (Role - Based Access Control) to minimize unauthorized access by 60%.",
+      "duration": "",
+      "details": "Employee Management System - Java, JDBC, MySQL - Created a role-based employee management system handling 200+ records with CRUD support and report generation. Integrated MySQL database with JDBC and optimized SQL queries, reducing data retrieval latency by 15%. Implemented RBAC (Role-Based Access Control) to minimize unauthorized access by 60%."
+    }
+  ],
+  "certifications": [
+    "MongoDB for Developers – MongoDB University (Online) June 2025, AWS Academy Cloud Foundations – AWS Academy (Online) May 2025, Introduction to Cisco Packet Tracer – Cisco Networking Academy (Online) April 2024"
+  ],
+  "achievements": null,
+  "raw_project_count": 4
+}

@@ -1,0 +1,58 @@
+{
+  "personal_info": {
+    "full_name": "Rohan Mohite",
+    "email": "rohanmohite140404@gmail.com",
+    "phone_number": "+91-8956007453",
+    "github": "github.com/Rohan-Mohite14",
+    "linkedin": "linkedin.com/in/rohan-mohite-347988284/"
+  },
+  "skills": "C++, Python, JavaScript, Typescript, Flask, FastAPI, Express.js, React, ReactNative, Tailwind, MongoDB, MySQL, SQLite, Neo4j, Git, Postman, Docker, Firebase, RESTAPIs, gRPC, GraphQL, WebSocket, MachineLearning, Firebase, MySQL, React, Neo4j, Flask, 3D libraries, data modeling, ML model",
+  "education": [
+    "Savitribai Phule Pune University 2022–Present, B.E. in Computer Engineering, Pune, Maharashtra"
+  ],
+  "experience": [
+    "Software Development Intern Jan2024–Apr2024, EquationsWork, Pune, Maharashtra - Gained hands-on experience with Neo4j, Flask, 3D libraries, and data modeling. - Explored new technologies across backend, visualization, and graph databases. - Worked on multiple internal tools and prototyped application features."
+  ],
+  "projects": [
+    {
+      "name": "MovieRecommendationSystem",
+      "technologies": [
+        "React",
+        "MongoDB",
+        "Flask"
+      ],
+      "description": "Pandas, scikit - learn, React, Flask, MongoDB - Built a personalized movie recommendation engine using content and collaborative filtering techniques. Implemented a session - based algorithm to improve recommendations using real - time user interaction behavior. Created an interactive UI using React and managed backend logic with Flask and MongoDB.",
+      "duration": "",
+      "details": "MovieRecommendationSystem - Pandas, scikit-learn, React, Flask, MongoDB - Built a personalized movie recommendation engine using content and collaborative filtering techniques. Implemented a session-based algorithm to improve recommendations using real-time user interaction behavior. Created an interactive UI using React and managed backend logic with Flask and MongoDB."
+    },
+    {
+      "name": "UrbanServe–LocalServicesPlatform",
+      "technologies": [
+        "React",
+        "Node.js",
+        "MySQL",
+        "Express"
+      ],
+      "description": "React, Firebase, MySQL, Node.js, Express.js",
+      "duration": "",
+      "details": "UrbanServe–LocalServicesPlatform - React, Firebase, MySQL, Node.js, Express.js"
+    },
+    {
+      "name": "Implemented real",
+      "technologies": [
+        "React",
+        "MySQL"
+      ],
+      "description": "time provider matching, booking workflows, and role - based access (provider vs. customer). Used Firebase for authentication, MySQL for data storage, and React for responsive UI.",
+      "duration": "",
+      "details": "Implemented real-time provider matching, booking workflows, and role-based access (provider vs. customer). Used Firebase for authentication, MySQL for data storage, and React for responsive UI."
+    }
+  ],
+  "certifications": [
+    "Mathematics for ML: Foundational Concepts (Coursera), Neo4j Fundamentals (Neo4j)"
+  ],
+  "achievements": [
+    "Secured Top 10 (Nationwide) in the NetElixir AIgnition Hackathon 2024 by building an ML model to optimize digital advertising impact for tech giants like Google, Meta, and Microsoft."
+  ],
+  "raw_project_count": 3
+}
