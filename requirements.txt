@@ -5,3 +5,4 @@ supabase
 langextract
 pdfplumber
 python-docx
+python-dotenv

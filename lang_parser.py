@@ -6,10 +6,14 @@ import json
 import os
 import glob
 import re
+from dotenv import load_dotenv 
+
+# Load environment variables from .env file
+load_dotenv()
 
 # ---------- CONFIG ----------
 MODEL_ID = "gemini-2.5-flash"
-API_KEY = "AIzaSyD0ohlMTMY68jPnJTXlnzw51coP6kjdCu0"
+API_KEY = os.getenv("API_KEY") 
 # ----------------------------
 
 def read_pdf(file_path):
