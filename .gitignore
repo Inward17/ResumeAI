@@ -1,6 +1,10 @@
 .env
 /.env
 
+venv/
+
+generated-diagrams/
+old scraper/
 
 # Python cache
 __pycache__/
