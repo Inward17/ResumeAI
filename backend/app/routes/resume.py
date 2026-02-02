@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, BackgroundTasks, HTTPException
 from app.database import db
 from app.services.parser import parse_resume
+from app.services.unified_verification import unified_verification_service
 from app.utils.file_utils import read_file
 
 
@@ -14,8 +15,33 @@ RESUMES_DIR = os.getenv("RESUMES_DIR", "resumes")
 os.makedirs(RESUMES_DIR, exist_ok=True)
 
 
+def extract_github_username(github_url: str) -> str | None:
+    """Extract GitHub username from URL or return as-is if already username"""
+    if not github_url:
+        return None
+    github_url = github_url.strip()
+    # Handle github.com URLs
+    if "github.com" in github_url:
+        parts = github_url.rstrip("/").split("/")
+        return parts[-1] if parts else None
+    # Already a username
+    return github_url
+
+
+def extract_linkedin_url(linkedin: str) -> str | None:
+    """Ensure LinkedIn is a full URL"""
+    if not linkedin:
+        return None
+    linkedin = linkedin.strip()
+    if linkedin.startswith("http"):
+        return linkedin
+    if "linkedin.com" in linkedin:
+        return f"https://{linkedin}"
+    return f"https://linkedin.com/in/{linkedin}"
+
+
 async def _parse_and_store(filename: str, candidate_id: str):
-    """Background task to parse resume"""
+    """Background task to parse resume and store in candidates collection"""
     try:
         filepath = os.path.join(RESUMES_DIR, filename)
         with open(filepath, "rb") as f:
@@ -27,7 +53,30 @@ async def _parse_and_store(filename: str, candidate_id: str):
         
         parsed = await parse_resume(text)
         
-        # Store in DB
+        # Extract personal info for verification
+        personal_info = parsed.get("personal_info", {})
+        github_url = personal_info.get("github")
+        linkedin_url = personal_info.get("linkedin")
+        
+        # Extract education and experience for verification
+        education = parsed.get("education") or []
+        experience = parsed.get("experience") or []
+        
+        # Extract company names from experience strings
+        experience_companies = []
+        for exp in experience:
+            if isinstance(exp, str):
+                # Try to extract company name (usually after "at" or before "|")
+                if " at " in exp.lower():
+                    company = exp.lower().split(" at ")[-1].split("|")[0].strip()
+                    experience_companies.append(company)
+                elif "|" in exp:
+                    company = exp.split("|")[0].strip()
+                    experience_companies.append(company)
+                else:
+                    experience_companies.append(exp.split(",")[0].strip())
+        
+        # Store in candidates collection
         candidate_doc = {
             "candidate_id": candidate_id,
             "filename": filename,
@@ -36,19 +85,106 @@ async def _parse_and_store(filename: str, candidate_id: str):
             "status": "parsed",
             "jd_match_score": None,
             "verification_score": None,
-            "verification_evidence": None
+            "verification_evidence": None,
+            # Store extracted identifiers for linking
+            "github_username": extract_github_username(github_url),
+            "linkedin_url": extract_linkedin_url(linkedin_url),
+            # Store education and experience for verification
+            "education": education,
+            "experience_companies": experience_companies
         }
         await db.candidates.insert_one(candidate_doc)
         
+        # Update task status
         await db.tasks.update_one(
             {"task_id": candidate_id},
-            {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": {"parsed": True}}}
+            {"$set": {"status": "parsed", "parsed_at": datetime.utcnow()}}
         )
+        
     except Exception as e:
         await db.tasks.update_one(
             {"task_id": candidate_id},
             {"$set": {"status": "failed", "completed_at": datetime.utcnow(), "error": str(e)}}
         )
+
+
+async def _run_unified_verification(candidate_id: str):
+    """Background task to run unified verification after parsing"""
+    try:
+        # Get candidate data
+        candidate = await db.candidates.find_one({"candidate_id": candidate_id})
+        if not candidate:
+            print(f"Candidate {candidate_id} not found for verification")
+            return
+        
+        github_username = candidate.get("github_username")
+        linkedin_url = candidate.get("linkedin_url")
+        parsed = candidate.get("parsed", {})
+        
+        # Build profile data for web search verification
+        # Use LinkedIn-like structure for compatibility with verifier
+        profile_data = None
+        if parsed:
+            profile_data = {
+                "publicIdentifier": candidate_id,
+                "educations": [{"title": edu} for edu in (parsed.get("education") or [])],
+                "experiences": [{"subtitle": exp} for exp in (parsed.get("experience") or [])]
+            }
+        
+        # Update task status
+        await db.tasks.update_one(
+            {"task_id": candidate_id},
+            {"$set": {"status": "verifying", "verification_started_at": datetime.utcnow()}}
+        )
+        
+        # Run verification
+        if github_username or linkedin_url or profile_data:
+            result = await unified_verification_service.run_unified_verification(
+                candidate_id=candidate_id,
+                github_username=github_username,
+                linkedin_url=linkedin_url,
+                profile_data=profile_data
+            )
+            
+            # Update candidate with verification score
+            match_score = result.matchScore
+            if match_score:
+                await db.candidates.update_one(
+                    {"candidate_id": candidate_id},
+                    {"$set": {
+                        "verification_score": match_score.overallCredibility,
+                        "status": "verified"
+                    }}
+                )
+            
+            # Update task as done
+            await db.tasks.update_one(
+                {"task_id": candidate_id},
+                {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": {"verified": True}}}
+            )
+        else:
+            # No verification sources available
+            await db.tasks.update_one(
+                {"task_id": candidate_id},
+                {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": {"verified": False, "reason": "No verification sources"}}}
+            )
+            
+    except Exception as e:
+        print(f"Verification failed for {candidate_id}: {e}")
+        await db.tasks.update_one(
+            {"task_id": candidate_id},
+            {"$set": {"status": "verification_failed", "error": str(e)}}
+        )
+
+
+async def _parse_and_verify(filename: str, candidate_id: str):
+    """Combined background task: parse resume, then run verification"""
+    await _parse_and_store(filename, candidate_id)
+    
+    # Check if parsing succeeded before verification
+    task = await db.tasks.find_one({"task_id": candidate_id})
+    if task and task.get("status") != "failed":
+        await _run_unified_verification(candidate_id)
 
 
 @router.post("/{job_id}/upload")
@@ -57,7 +193,7 @@ async def upload_resumes(
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...)
 ):
-    """Upload resumes for parsing"""
+    """Upload resumes for parsing and verification"""
     saved = []
     
     for file in files:
@@ -65,7 +201,9 @@ async def upload_resumes(
         if ext not in ("pdf", "docx", "doc", "txt"):
             raise HTTPException(400, f"Unsupported file type: {ext}")
         
-        unique_name = f"{uuid.uuid4().hex}_{file.filename}"
+        # Generate unique candidate_id using UUID
+        candidate_id = str(uuid.uuid4())
+        unique_name = f"{candidate_id}_{file.filename}"
         dest = os.path.join(RESUMES_DIR, unique_name)
         
         # Save file
@@ -75,16 +213,47 @@ async def upload_resumes(
         
         # Create task
         await db.tasks.insert_one({
-            "task_id": unique_name,
+            "task_id": candidate_id,
             "job_id": job_id,
             "filename": unique_name,
-            "type": "parse",
+            "type": "parse_and_verify",
             "status": "queued",
             "created_at": datetime.utcnow()
         })
         
-        # Schedule parsing
-        background_tasks.add_task(_parse_and_store, unique_name, unique_name)
-        saved.append({"filename": file.filename, "stored_as": unique_name})
+        # Schedule parsing + verification
+        background_tasks.add_task(_parse_and_verify, unique_name, candidate_id)
+        saved.append({
+            "filename": file.filename, 
+            "stored_as": unique_name,
+            "candidate_id": candidate_id
+        })
     
     return {"status": "accepted", "saved": saved}
+
+
+@router.get("/{job_id}/candidates")
+async def get_job_candidates(job_id: str):
+    """Get all candidates for a job with their verification status"""
+    tasks = await db.tasks.find({"job_id": job_id}).to_list(length=100)
+    
+    result = []
+    for task in tasks:
+        candidate_id = task.get("task_id")
+        
+        # Get candidate data
+        candidate = await db.candidates.find_one({"candidate_id": candidate_id})
+        
+        # Get verification data
+        verification = await db.verification_data.find_one({"candidateId": candidate_id})
+        
+        result.append({
+            "candidate_id": candidate_id,
+            "filename": task.get("filename"),
+            "status": task.get("status"),
+            "created_at": task.get("created_at"),
+            "verification_score": candidate.get("verification_score") if candidate else None,
+            "verification_status": verification.get("verificationStatus") if verification else None
+        })
+    
+    return {"job_id": job_id, "candidates": result}
