@@ -112,7 +112,7 @@ def example_batch_analysis():
     
     service = GitHubAnalysisService(github_token=os.getenv("GITHUB_TOKEN"))
     
-    usernames = ["POPPz07", "Rohan-Mohite14", "sohamminiyar", "octocat"]
+    usernames = ["torvalds", "gvanrossum", "octocat"]
     results = []
     
     print("Batch Analysis")

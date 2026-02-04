@@ -5,6 +5,7 @@ Handles authentication, rate limiting, and error handling
 import requests
 from typing import Dict, List, Optional
 from datetime import datetime
+from ..utils.constants import MAX_BRANCHES_TO_ANALYZE
 
 
 class GitHubClient:
@@ -139,6 +140,85 @@ class GitHubClient:
             "author": username,
             "per_page": min(max_commits, 100)
         }
+        
+        response = self.session.get(url, params=params)
+        
+        if response.status_code != 200:
+            return []
+        
+        return response.json()
+    
+    def get_repo_branches(self, owner: str, repo_name: str) -> List[Dict]:
+        """
+        Fetch branches for a repository
+        """
+        url = f"{self.BASE_URL}/repos/{owner}/{repo_name}/branches"
+        response = self.session.get(url)
+        
+        if response.status_code != 200:
+            return []
+            
+        return response.json()
+
+    def get_repo_commits(self, owner: str, repo_name: str, username: str, max_commits: int = 100, all_branches: bool = False) -> List[Dict]:
+        """
+        Fetch recent commits for a repository filtered by author
+        
+        Args:
+            owner: Repository owner
+            repo_name: Repository name
+            username: GitHub username to filter commits
+            max_commits: Maximum number of commits to fetch
+            all_branches: If True, fetch commits from all branches (up to configured limit)
+            
+        Returns:
+            List of commit objects
+        """
+        if not all_branches:
+            # Phase-1 behavior (main branch only)
+            return self._fetch_commits_single_branch(owner, repo_name, username, max_commits)
+        
+        # Phase-2 behavior (multi-branch)
+        branches = self.get_repo_branches(owner, repo_name)
+        
+        # Limit branches to avoid rate limits
+        target_branches = [b['name'] for b in branches[:MAX_BRANCHES_TO_ANALYZE]]
+        
+        if not target_branches:
+            # Fallback to default behavior if no branches found
+            return self._fetch_commits_single_branch(owner, repo_name, username, max_commits)
+            
+        all_commits = {}
+        
+        for branch in target_branches:
+            branch_commits = self._fetch_commits_single_branch(
+                owner, repo_name, username, max_commits, sha=branch
+            )
+            
+            for commit in branch_commits:
+                sha = commit.get("sha")
+                if sha and sha not in all_commits:
+                    all_commits[sha] = commit
+        
+        # Convert back to list and sort by date (newest first)
+        unique_commits = list(all_commits.values())
+        unique_commits.sort(
+            key=lambda x: x.get("commit", {}).get("author", {}).get("date", ""), 
+            reverse=True
+        )
+        
+        return unique_commits[:max_commits]
+
+    def _fetch_commits_single_branch(self, owner: str, repo_name: str, username: str, max_commits: int, sha: str = None) -> List[Dict]:
+        """Helper to fetch commits from a specific branch/sha"""
+        url = f"{self.BASE_URL}/repos/{owner}/{repo_name}/commits"
+        params = {
+            "author": username,
+            "per_page": min(max_commits, 100)
+        }
+        
+        if sha:
+            params["sha"] = sha
         
         response = self.session.get(url, params=params)
         

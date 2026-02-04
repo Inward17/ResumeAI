@@ -2,6 +2,7 @@
 /.env
 
 venv/
+phase1/
 
 generated-diagrams/
 old scraper/
@@ -10,3 +11,12 @@ old scraper/
 __pycache__/
 *.py[cod]
 *.pyo
+
+debug_*.py
+debug_output.txt
+
+verify_*.py
+
+test_*.py
+
+

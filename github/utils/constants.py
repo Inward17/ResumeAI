@@ -139,3 +139,7 @@ RED_FLAGS = {
 # ============================================
 MAX_COMMITS_PER_REPO = 100  # Maximum commits to fetch per repo
 REQUEST_TIMEOUT = 30  # seconds
+
+# Analyze all branches (Phase-2)
+ANALYZE_ALL_BRANCHES = True
+MAX_BRANCHES_TO_ANALYZE = 10
