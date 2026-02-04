@@ -70,6 +70,8 @@ EXAMPLES = [
             lx.data.Extraction(extraction_class="experience", extraction_text="Software Engineer at Google (2020–2024) - Built scalable microservices - Led team of 5 developers"),
             lx.data.Extraction(extraction_class="projects", extraction_text="E-commerce Platform (Jan 2023 - Mar 2023) - Python, Flask, React, PostgreSQL - Built full-stack e-commerce application - Implemented payment gateway integration"),
             lx.data.Extraction(extraction_class="projects", extraction_text="Task Management App (Apr 2023 - Jun 2023) - React, Node.js, MongoDB, Express - Developed real-time collaboration features - Implemented drag-and-drop functionality"),
+            lx.data.Extraction(extraction_class="company", extraction_text="Google"),
+            lx.data.Extraction(extraction_class="university", extraction_text="MIT"),
             lx.data.Extraction(extraction_class="certifications", extraction_text="AWS Certified Solutions Architect (Amazon)"),
             lx.data.Extraction(extraction_class="achievements", extraction_text="Won Best Innovation Award at TechHack 2023"),
         ]

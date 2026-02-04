@@ -70,7 +70,8 @@ async def parse_resume(text: str) -> dict:
     data = {
         "full_name": "", "email": "", "phone_number": "", "github": "", "linkedin": "",
         "skills": [], "education": [], "experience": [], "projects": [],
-        "certifications": [], "achievements": []
+        "certifications": [], "achievements": [],
+        "university": [], "company": []  # NEW: For verification
     }
     
     for ext in result.extractions:
@@ -82,7 +83,7 @@ async def parse_resume(text: str) -> dict:
         if cls in ["full_name", "email", "phone_number", "github", "linkedin"]:
             if not data[cls]:
                 data[cls] = txt
-        else:
+        elif cls in data:  # Only append if key exists in data dict
             if txt not in data[cls]:
                 data[cls].append(txt)
     
@@ -104,4 +105,7 @@ async def parse_resume(text: str) -> dict:
         "projects": structured_projects if structured_projects else None,
         "certifications": data["certifications"] if data["certifications"] else None,
         "achievements": data["achievements"] if data["achievements"] else None,
+        # NEW: Extracted entity names for verification
+        "university": data["university"] if data["university"] else None,
+        "company": data["company"] if data["company"] else None,
     }

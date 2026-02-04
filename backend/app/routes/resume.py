@@ -91,7 +91,10 @@ async def _parse_and_store(filename: str, candidate_id: str):
             "linkedin_url": extract_linkedin_url(linkedin_url),
             # Store education and experience for verification
             "education": education,
-            "experience_companies": experience_companies
+            "experience_companies": experience_companies,
+            # NEW: Extracted entity names for verification
+            "universities": parsed.get("university") or [],
+            "companies": parsed.get("company") or []
         }
         await db.candidates.insert_one(candidate_doc)
         

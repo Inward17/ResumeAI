@@ -386,15 +386,15 @@ class UnifiedVerificationService:
                 results=[WebSearchResult(
                     profile_url=ws.get("profile_url"),
                     education=EducationVerification(
-                        average_score=ws.get("education", {}).get("average_score", 0),
-                        overall_tag=ws.get("education", {}).get("overall_tag"),
+                        average_score=ws.get("university", {}).get("average_score", 0),
+                        overall_tag=ws.get("university", {}).get("overall_tag"),
                         details=edu_details
-                    ) if ws.get("education") else None,
+                    ) if ws.get("university") else None,
                     experience=ExperienceVerification(
-                        average_score=ws.get("experience", {}).get("average_score", 0),
-                        overall_tag=ws.get("experience", {}).get("overall_tag"),
+                        average_score=ws.get("company", {}).get("average_score", 0),
+                        overall_tag=ws.get("company", {}).get("overall_tag"),
                         details=exp_details
-                    ) if ws.get("experience") else None
+                    ) if ws.get("company") else None
                 )]
             )
         elif cached.get("webSearch"):
