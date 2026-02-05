@@ -1,20 +1,45 @@
-import React, { useState, useRef } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
-import { mockJobPostings } from '../mock';
 import { useToast } from '../hooks/use-toast';
+import { getJobs, transformJobFromAPI } from '../services/jobService';
 
 const Dashboard = () => {
+  const [jobs, setJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
   const [selectedJobId, setSelectedJobId] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
   const { toast } = useToast();
+
+  // Fetch jobs on mount
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  const fetchJobs = async () => {
+    try {
+      setJobsLoading(true);
+      const data = await getJobs();
+      const transformedJobs = data.map(transformJobFromAPI);
+      setJobs(transformedJobs);
+    } catch (err) {
+      console.error('Error fetching jobs:', err);
+      toast({
+        title: "Error loading jobs",
+        description: "Could not load job postings. Please refresh the page.",
+        variant: "destructive"
+      });
+    } finally {
+      setJobsLoading(false);
+    }
+  };
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -40,11 +65,11 @@ const Dashboard = () => {
 
   const handleFiles = (files) => {
     const validFiles = files.filter(file => {
-      const isValidType = file.type === 'application/pdf' || 
-                         file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                         file.type === 'application/msword';
+      const isValidType = file.type === 'application/pdf' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.type === 'application/msword';
       const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB limit
-      
+
       if (!isValidType) {
         toast({
           title: "Invalid file type",
@@ -53,7 +78,7 @@ const Dashboard = () => {
         });
         return false;
       }
-      
+
       if (!isValidSize) {
         toast({
           title: "File too large",
@@ -62,7 +87,7 @@ const Dashboard = () => {
         });
         return false;
       }
-      
+
       return true;
     });
 
@@ -85,7 +110,7 @@ const Dashboard = () => {
 
   const simulateUploadProgress = (fileId) => {
     const interval = setInterval(() => {
-      setUploadedFiles(prev => 
+      setUploadedFiles(prev =>
         prev.map(file => {
           if (file.id === fileId) {
             const newProgress = Math.min(file.progress + Math.random() * 30, 100);
@@ -149,7 +174,7 @@ const Dashboard = () => {
         title: "Screening initiated!",
         description: `${completedFiles.length} resumes have been submitted for AI screening.`
       });
-      
+
       // Reset form
       setUploadedFiles([]);
       setSelectedJobId('');
@@ -159,9 +184,10 @@ const Dashboard = () => {
     }, 2000);
   };
 
-  const selectedJob = mockJobPostings.find(job => job.id === selectedJobId);
+  const selectedJob = jobs.find(job => job.id === selectedJobId);
   const completedFiles = uploadedFiles.filter(file => file.status === 'completed');
   const uploadingFiles = uploadedFiles.filter(file => file.status === 'uploading');
+  const activeJobs = jobs.filter(job => job.status === 'Active');
 
   return (
     <div className="p-8">
@@ -184,19 +210,30 @@ const Dashboard = () => {
               <label className="block text-sm font-medium text-slate-900 mb-2">
                 Select Job Posting
               </label>
-              <Select value={selectedJobId} onValueChange={setSelectedJobId}>
+              <Select value={selectedJobId} onValueChange={setSelectedJobId} disabled={jobsLoading}>
                 <SelectTrigger className="w-full border-slate-300">
-                  <SelectValue placeholder="Choose a job posting..." />
+                  <SelectValue placeholder={jobsLoading ? "Loading jobs..." : "Choose a job posting..."} />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockJobPostings.filter(job => job.status === 'Active').map((job) => (
-                    <SelectItem key={job.id} value={job.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{job.title}</span>
-                        <Badge className="ml-2 bg-green-100 text-green-800">{job.status}</Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {jobsLoading ? (
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
+                      <span className="ml-2 text-slate-500">Loading...</span>
+                    </div>
+                  ) : activeJobs.length === 0 ? (
+                    <div className="p-4 text-center text-slate-500">
+                      No active job postings. Create one first.
+                    </div>
+                  ) : (
+                    activeJobs.map((job) => (
+                      <SelectItem key={job.id} value={job.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{job.title}</span>
+                          <Badge className="ml-2 bg-green-100 text-green-800">{job.status}</Badge>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               {selectedJob && (
@@ -212,11 +249,10 @@ const Dashboard = () => {
                 Upload Resume Files
               </label>
               <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${
-                  isDragOver 
-                    ? 'border-blue-400 bg-blue-50' 
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${isDragOver
+                    ? 'border-blue-400 bg-blue-50'
                     : 'border-slate-300 hover:border-slate-400'
-                }`}
+                  }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -228,8 +264,8 @@ const Dashboard = () => {
                 <p className="text-slate-600 mb-4">
                   or click below to browse files
                 </p>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                   className="border-slate-300 text-slate-700 hover:bg-slate-50"
                 >

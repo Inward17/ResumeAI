@@ -116,26 +116,18 @@ const JobModal = ({ isOpen, onClose, job = null, onSave }) => {
 
     setIsSaving(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const jobData = {
-        ...formData,
-        id: job?.id || `job-${Date.now()}`,
-        totalCandidates: job?.totalCandidates || 0,
-        screened: job?.screened || 0,
-        shortlisted: job?.shortlisted || 0
-      };
-
-      onSave(jobData);
-      setIsSaving(false);
-      
+    try {
+      // Pass data to parent for API call
+      await onSave(formData);
+    } catch (error) {
       toast({
-        title: job ? "Job updated successfully" : "Job created successfully",
-        description: `${formData.title} has been ${job ? 'updated' : 'created'}.`
+        title: "Error saving job",
+        description: error.message || "Please try again.",
+        variant: "destructive"
       });
-      
-      onClose();
-    }, 1000);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!isOpen) return null;
