@@ -1,4 +1,5 @@
 import os
+import asyncio
 import uuid
 import random
 from bson import ObjectId
@@ -9,6 +10,11 @@ from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
 from app.utils.file_utils import read_file
+
+
+# Global semaphore to limit concurrent resume parsing to 1 at a time
+# This prevents Gemini rate limits and "stuck" requests
+parsing_semaphore = asyncio.Semaphore(1)
 
 
 router = APIRouter(prefix="/jobs", tags=["resume"])
@@ -46,14 +52,21 @@ async def _parse_and_store(filename: str, candidate_id: str):
     """Background task to parse resume and store in candidates collection"""
     try:
         filepath = os.path.join(RESUMES_DIR, filename)
-        with open(filepath, "rb") as f:
-            content = f.read()
+        filepath = os.path.join(RESUMES_DIR, filename)
         
-        text = read_file(filename, content)
+        # Read file in thread to avoid blocking event loop
+        with open(filepath, "rb") as f:
+            content = await asyncio.to_thread(f.read)
+        
+        text = await asyncio.to_thread(read_file, filename, content)
         if not text:
             raise ValueError("Empty file")
         
-        parsed = await parse_resume(text)
+        # Serialize parsing to avoid rate limits/hanging
+        async with parsing_semaphore:
+            print(f"Parsing resume for {candidate_id}...")
+            parsed = await parse_resume(text)
+            print(f"Parsing completed for {candidate_id}")
         
         # Extract personal info for verification
         personal_info = parsed.get("personal_info", {})
@@ -78,6 +91,11 @@ async def _parse_and_store(filename: str, candidate_id: str):
                 else:
                     experience_companies.append(exp.split(",")[0].strip())
         
+        # Generate skills embedding for JD matching
+        from app.services.embedding_service import generate_embedding
+        skills_text = parsed.get("skills", "") or ""
+        skills_embedding = generate_embedding(skills_text)
+        
         # Store in candidates collection
         candidate_doc = {
             "candidate_id": candidate_id,
@@ -96,7 +114,9 @@ async def _parse_and_store(filename: str, candidate_id: str):
             "experience_companies": experience_companies,
             # NEW: Extracted entity names for verification
             "universities": parsed.get("university") or [],
-            "companies": parsed.get("company") or []
+            "companies": parsed.get("company") or [],
+            # NEW: Skills embedding for JD matching
+            "skills_embedding": skills_embedding
         }
         await db.candidates.insert_one(candidate_doc)
         
@@ -205,6 +225,18 @@ async def _create_application(candidate_id: str, job_id: str):
             if status.get("webCheck") == "verified":
                 verification_bonus += 5
         
+        # Get GitHub verification score from githubData (0-100 scale)
+        github_verification_score = 0
+        if verification and verification.get("githubData"):
+            github_verification_score = verification["githubData"].get("score", 0)
+        
+        # Calculate JD match score using vector similarity (0-5 marks)
+        from app.services.jd_matching_service import calculate_jd_match, save_evaluation
+        jd_match = await calculate_jd_match(candidate_id, job_id)
+        
+        # Save JD match evaluation to evaluations collection
+        await save_evaluation(candidate_id, job_id, jd_match)
+        
         # Use real scores or mock if not available
         match_score = verification.get("matchScore", {}) if verification else {}
         
@@ -215,15 +247,23 @@ async def _create_application(candidate_id: str, job_id: str):
             "status": "Under Review",
             "score_details": {
                 "overall_score": match_score.get("overallCredibility", random.randint(60, 90)),
-                "skills_match_score": match_score.get("skillsMatch", random.randint(30, 50)),
+                "skills_match_score": github_verification_score,  # GitHub score (0-100)
                 "experience_match_score": match_score.get("experienceMatch", random.randint(20, 35)),
-                "verification_bonus": verification_bonus
+                "verification_bonus": verification_bonus,
+                # JD match breakdown (vector similarity based)
+                "jd_match": {
+                    "resume_match": jd_match["resume_match"],       # 0-2 marks
+                    "github_match": jd_match["github_match"],       # 0-3 marks
+                    "total": jd_match["total"],                     # 0-5 marks
+                },
+                # Separate JD match total for easy access
+                "jd_match_score": jd_match["total"]  # 0-5 marks
             },
             "recruiter_notes": ""
         }
         
         await db.applications.insert_one(application_doc)
-        print(f"Created application for candidate {candidate_id} to job {job_id}")
+        print(f"Created application for candidate {candidate_id} to job {job_id} with Skills: {github_verification_score}%, JD: {jd_match['total']}/5")
         
     except Exception as e:
         print(f"Failed to create application for {candidate_id}: {e}")

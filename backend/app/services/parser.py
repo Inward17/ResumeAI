@@ -56,15 +56,22 @@ async def parse_resume(text: str) -> dict:
     # Get API key from env
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     
-    # Run langextract in thread (blocking call)
-    result = await asyncio.to_thread(
-        lx.extract,
-        text_or_documents=text,
-        prompt_description=PARSER_PROMPT,
-        examples=EXAMPLES,
-        model_id="gemini-2.5-flash",
-        api_key=GEMINI_API_KEY,
-    )
+    # Run langextract in thread (blocking call) with timeout
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                lx.extract,
+                text_or_documents=text,
+                prompt_description=PARSER_PROMPT,
+                examples=EXAMPLES,
+                model_id="gemini-2.5-flash",
+                api_key=GEMINI_API_KEY,
+            ),
+            timeout=60.0
+        )
+    except asyncio.TimeoutError:
+        print("Resume parsing timed out after 60s")
+        raise ValueError("Resume parsing timed out")
     
     # Group extractions
     data = {

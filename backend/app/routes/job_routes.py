@@ -96,11 +96,19 @@ async def get_job(job_id: str):
 @router.post("", response_model=JobResponse)
 async def create_job(job: JobCreate):
     """Create a new job posting"""
+    from app.services.embedding_service import generate_embedding
+    
     job_data = job.model_dump()
     job_data["posted_at"] = datetime.utcnow()
     job_data["total_candidates"] = 0
     job_data["screened"] = 0
     job_data["shortlisted"] = 0
+    
+    # Generate JD embedding for skills matching
+    jd_text = f"{job.job_title} {job.job_description} " + \
+              f"required skills: {', '.join(job.required_skills)} " + \
+              f"preferred skills: {', '.join(job.preferred_skills or [])}"
+    job_data["jd_embedding"] = generate_embedding(jd_text)
     
     result = await db.jobs.insert_one(job_data)
     
