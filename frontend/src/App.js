@@ -19,6 +19,7 @@ function AppLayout() {
   const [activeView, setActiveView] = useState('dashboard');
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleViewCandidates = (job) => {
     setSelectedJob(job);
@@ -38,6 +39,10 @@ function AppLayout() {
     setSelectedCandidate(null);
   };
 
+  const handleStatusUpdate = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
   const renderMainContent = () => {
     switch (activeView) {
       case 'dashboard':
@@ -47,6 +52,7 @@ function AppLayout() {
       case 'candidates':
         return selectedJob ? (
           <CandidateDetails
+            key={refreshKey}
             job={selectedJob}
             onBack={handleBackToJobs}
             onViewCandidate={handleViewCandidate}
@@ -75,6 +81,7 @@ function AppLayout() {
           candidate={selectedCandidate}
           job={selectedJob}
           onClose={handleCloseModal}
+          onStatusUpdate={handleStatusUpdate}
         />
       )}
 

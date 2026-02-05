@@ -1,6 +1,7 @@
 import os
 import uuid
 import random
+from bson import ObjectId
 from typing import List
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, BackgroundTasks, HTTPException
@@ -283,6 +284,24 @@ async def upload_resumes(
     return {"status": "accepted", "saved": saved}
 
 
+@router.put("/{job_id}/candidates/{candidate_id}/status")
+async def update_candidate_status(job_id: str, candidate_id: str, status_update: dict):
+    """Update candidate application status"""
+    new_status = status_update.get("status")
+    if not new_status:
+        raise HTTPException(400, "Status is required")
+        
+    result = await db.applications.update_one(
+        {"job_id": job_id, "candidate_id": candidate_id},
+        {"$set": {"status": new_status, "updated_at": datetime.utcnow()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(404, "Application not found")
+        
+    return {"status": "success", "new_status": new_status}
+
+
 @router.get("/{job_id}/candidates")
 async def get_job_candidates(job_id: str):
     """Get all candidates for a job from applications collection"""
@@ -300,9 +319,31 @@ async def get_job_candidates(job_id: str):
         # Get verification data for additional info
         verification = await db.verification_data.find_one({"candidateId": candidate_id})
         
+        # Get job for skills comparison
+        job = await db.jobs.find_one({"_id": ObjectId(job_id)})
+        required_skills = job.get("required_skills", []) if job else []
+        
+        # Calculate real skill matches
+        candidate_skills = parsed.get("skills", "")
+        if isinstance(candidate_skills, list):
+            candidate_skills = ", ".join(candidate_skills)
+        candidate_skills = candidate_skills.lower() if candidate_skills else ""
+        
+        skill_matches = []
+        for skill in required_skills:
+            skill_lower = skill.lower()
+            found = skill_lower in candidate_skills
+            # Simple scoring: 10 if found, 0 if not (can be improved with fuzzy match)
+            score = 10 if found else 0
+            skill_matches.append({
+                "skill": skill,
+                "score": score,
+                "found": found
+            })
+
         result.append({
             "candidate_id": candidate_id,
-            "name": personal_info.get("name", "Unknown"),
+            "name": personal_info.get("full_name", "Unknown"),
             "email": personal_info.get("email", ""),
             "phone": personal_info.get("phone", ""),
             "status": app.get("status", "Under Review"),
@@ -311,7 +352,8 @@ async def get_job_candidates(job_id: str):
             "jd_match_score": app.get("score_details", {}).get("skills_match_score", 0),
             "verification_score": app.get("score_details", {}).get("overall_score", 0),
             "filename": candidate.get("filename") if candidate else None,
-            "verification_status": verification.get("verificationStatus") if verification else None
+            "verification_status": verification.get("verificationStatus") if verification else None,
+            "skill_matches": skill_matches  # NEW: Real skill matches
         })
     
     return {"job_id": job_id, "candidates": result}

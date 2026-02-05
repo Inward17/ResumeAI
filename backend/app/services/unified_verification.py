@@ -454,8 +454,8 @@ class UnifiedVerificationService:
         weights = 0
         
         if github_data and github_data.success:
-            overall += github_data.score * 0.3
-            weights += 0.3
+            overall += github_data.score * 0.5
+            weights += 0.5
         
         if linkedin_data and linkedin_data.profileId:
             overall += 100 * 0.2  # Full score for valid LinkedIn
@@ -463,8 +463,8 @@ class UnifiedVerificationService:
         
         if web_search_data and web_search_data.results:
             avg_web = experience_match
-            overall += avg_web * 0.5
-            weights += 0.5
+            overall += avg_web * 0.3
+            weights += 0.3
         
         overall_credibility = round(overall / weights, 2) if weights > 0 else 0
         
