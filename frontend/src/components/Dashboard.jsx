@@ -8,6 +8,8 @@ import { Badge } from './ui/badge';
 import { useToast } from '../hooks/use-toast';
 import { getJobs, transformJobFromAPI } from '../services/jobService';
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const Dashboard = () => {
   const [jobs, setJobs] = useState([]);
   const [jobsLoading, setJobsLoading] = useState(true);
@@ -97,7 +99,8 @@ const Dashboard = () => {
       size: file.size,
       type: file.type,
       progress: 0,
-      status: 'pending' // pending, uploading, completed, error
+      status: 'pending', // pending, uploading, completed, error
+      originalFile: file  // Store original File object for upload
     }));
 
     setUploadedFiles(prev => [...prev, ...newFiles]);
@@ -167,12 +170,33 @@ const Dashboard = () => {
 
     setIsUploading(true);
 
-    // Simulate screening process
-    setTimeout(() => {
-      setIsUploading(false);
+    try {
+      // Create FormData with all completed files
+      const formData = new FormData();
+      completedFiles.forEach(file => {
+        if (file.originalFile) {
+          formData.append('files', file.originalFile);
+        }
+      });
+
+      // Upload to backend API
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/jobs/${selectedJobId}/upload`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const result = await response.json();
+
       toast({
         title: "Screening initiated!",
-        description: `${completedFiles.length} resumes have been submitted for AI screening.`
+        description: `${result.saved.length} resumes have been submitted for AI screening.`
       });
 
       // Reset form
@@ -181,7 +205,16 @@ const Dashboard = () => {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-    }, 2000);
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: "There was an error uploading the files. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const selectedJob = jobs.find(job => job.id === selectedJobId);
@@ -250,8 +283,8 @@ const Dashboard = () => {
               </label>
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${isDragOver
-                    ? 'border-blue-400 bg-blue-50'
-                    : 'border-slate-300 hover:border-slate-400'
+                  ? 'border-blue-400 bg-blue-50'
+                  : 'border-slate-300 hover:border-slate-400'
                   }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}

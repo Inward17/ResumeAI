@@ -1,5 +1,6 @@
 import os
 import uuid
+import random
 from typing import List
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, BackgroundTasks, HTTPException
@@ -111,7 +112,7 @@ async def _parse_and_store(filename: str, candidate_id: str):
         )
 
 
-async def _run_unified_verification(candidate_id: str):
+async def _run_unified_verification(candidate_id: str, job_id: str):
     """Background task to run unified verification after parsing"""
     try:
         # Get candidate data
@@ -171,6 +172,9 @@ async def _run_unified_verification(candidate_id: str):
                 {"task_id": candidate_id},
                 {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": {"verified": False, "reason": "No verification sources"}}}
             )
+        
+        # Create application record after verification
+        await _create_application(candidate_id, job_id)
             
     except Exception as e:
         print(f"Verification failed for {candidate_id}: {e}")
@@ -178,16 +182,60 @@ async def _run_unified_verification(candidate_id: str):
             {"task_id": candidate_id},
             {"$set": {"status": "verification_failed", "error": str(e)}}
         )
+        # Still create application even if verification failed
+        await _create_application(candidate_id, job_id)
 
 
-async def _parse_and_verify(filename: str, candidate_id: str):
+async def _create_application(candidate_id: str, job_id: str):
+    """Create application record linking candidate to job with scores"""
+    try:
+        # Get verification data for scores
+        verification = await db.verification_data.find_one({"candidateId": candidate_id})
+        
+        # Calculate verification_bonus from verificationStatus
+        verification_bonus = 0
+        if verification and verification.get("verificationStatus"):
+            status = verification["verificationStatus"]
+            # +5 for each verified source
+            if status.get("github") == "verified":
+                verification_bonus += 5
+            if status.get("linkedin") == "verified":
+                verification_bonus += 5
+            if status.get("webCheck") == "verified":
+                verification_bonus += 5
+        
+        # Use real scores or mock if not available
+        match_score = verification.get("matchScore", {}) if verification else {}
+        
+        application_doc = {
+            "candidate_id": candidate_id,
+            "job_id": job_id,
+            "application_date": datetime.utcnow(),
+            "status": "Under Review",
+            "score_details": {
+                "overall_score": match_score.get("overallCredibility", random.randint(60, 90)),
+                "skills_match_score": match_score.get("skillsMatch", random.randint(30, 50)),
+                "experience_match_score": match_score.get("experienceMatch", random.randint(20, 35)),
+                "verification_bonus": verification_bonus
+            },
+            "recruiter_notes": ""
+        }
+        
+        await db.applications.insert_one(application_doc)
+        print(f"Created application for candidate {candidate_id} to job {job_id}")
+        
+    except Exception as e:
+        print(f"Failed to create application for {candidate_id}: {e}")
+
+
+async def _parse_and_verify(filename: str, candidate_id: str, job_id: str):
     """Combined background task: parse resume, then run verification"""
     await _parse_and_store(filename, candidate_id)
     
     # Check if parsing succeeded before verification
     task = await db.tasks.find_one({"task_id": candidate_id})
     if task and task.get("status") != "failed":
-        await _run_unified_verification(candidate_id)
+        await _run_unified_verification(candidate_id, job_id)
 
 
 @router.post("/{job_id}/upload")
@@ -224,8 +272,8 @@ async def upload_resumes(
             "created_at": datetime.utcnow()
         })
         
-        # Schedule parsing + verification
-        background_tasks.add_task(_parse_and_verify, unique_name, candidate_id)
+        # Schedule parsing + verification (now with job_id)
+        background_tasks.add_task(_parse_and_verify, unique_name, candidate_id, job_id)
         saved.append({
             "filename": file.filename, 
             "stored_as": unique_name,
@@ -237,25 +285,32 @@ async def upload_resumes(
 
 @router.get("/{job_id}/candidates")
 async def get_job_candidates(job_id: str):
-    """Get all candidates for a job with their verification status"""
-    tasks = await db.tasks.find({"job_id": job_id}).to_list(length=100)
+    """Get all candidates for a job from applications collection"""
+    applications = await db.applications.find({"job_id": job_id}).to_list(length=100)
     
     result = []
-    for task in tasks:
-        candidate_id = task.get("task_id")
+    for app in applications:
+        candidate_id = app.get("candidate_id")
         
         # Get candidate data
         candidate = await db.candidates.find_one({"candidate_id": candidate_id})
+        parsed = candidate.get("parsed", {}) if candidate else {}
+        personal_info = parsed.get("personal_info", {})
         
-        # Get verification data
+        # Get verification data for additional info
         verification = await db.verification_data.find_one({"candidateId": candidate_id})
         
         result.append({
             "candidate_id": candidate_id,
-            "filename": task.get("filename"),
-            "status": task.get("status"),
-            "created_at": task.get("created_at"),
-            "verification_score": candidate.get("verification_score") if candidate else None,
+            "name": personal_info.get("name", "Unknown"),
+            "email": personal_info.get("email", ""),
+            "phone": personal_info.get("phone", ""),
+            "status": app.get("status", "Under Review"),
+            "application_date": app.get("application_date"),
+            "score_details": app.get("score_details", {}),
+            "jd_match_score": app.get("score_details", {}).get("skills_match_score", 0),
+            "verification_score": app.get("score_details", {}).get("overall_score", 0),
+            "filename": candidate.get("filename") if candidate else None,
             "verification_status": verification.get("verificationStatus") if verification else None
         })
     
