@@ -12,7 +12,7 @@ from ..ml.config.ml_config import (
     MAX_DEEP_ANALYSIS_REPOS
 )
 from ..utils.date_utils import analyze_commit_spread
-from ..utils.branch_utils import aggregate_branch_commits, analyze_branch_strategy
+from ..utils.branch_utils import analyze_branch_strategy
 
 
 class DeepRepoAnalyzer:
@@ -46,17 +46,13 @@ class DeepRepoAnalyzer:
         
         # 1. Branch-aware commit analysis
         if ENABLE_BRANCH_AWARE_COMMITS:
+            # Get branches
+            branches = self.client.get_repo_branches(owner, repo_name)
+            
+            # Get commits (all branches)
             commits = self.client.get_repo_commits(
                 owner, repo_name, username, all_branches=True
             )
-            
-            # Assuming client returns flat list for all_branches=True currently
-            # To leverage branch_utils properly, we would need per-branch commits.
-            # For now, we simulate the structure to use the utility:
-            
-            # Group commits by branch (simulated or real if client supported it)
-            # Since get_repo_commits returns a flat list of unique commits when all_branches=True,
-            # we can analyze the spread directly but we'll use the strategy analyzer for metadata
             
             commit_dates = [
                 c["commit"]["author"]["date"] 
@@ -65,12 +61,35 @@ class DeepRepoAnalyzer:
             
             spread = analyze_commit_spread(commit_dates)
             
+            # Analyze branch strategy
+            # Create simple branch_commits structure for strategy analysis
+            branch_commits = {}
+            for branch in branches[:10]:  # Limit to 10 branches
+                branch_name = branch["name"]
+                # Get commits for this specific branch
+                branch_specific_commits = self.client.get_repo_commits(
+                    owner, repo_name, username, 
+                    all_branches=False  # Single branch
+                )
+                branch_commits[branch_name] = branch_specific_commits
+            
+            strategy = analyze_branch_strategy(branch_commits) if branch_commits else {
+                "strategy": "single_branch",
+                "num_branches": len(branches)
+            }
+            
             result["commit_stats"] = {
                 "total_commits": len(commits),
                 "unique_days": spread["unique_days"],
                 "is_dump_pattern": spread["is_dump_pattern"],
-                "date_range_days": spread.get("date_range_days", 0),
-                "branch_strategy": "single_branch" # Placeholder until client supports granular branch fetching
+                "date_range_days": spread.get("date_range_days", 0)
+            }
+            
+            result["branch_stats"] = {
+                "total_branches": len(branches),
+                "strategy": strategy.get("strategy", "unknown"),
+                "has_develop": strategy.get("has_develop", False),
+                "has_feature_branches": strategy.get("has_feature_branches", False)
             }
         
         # 2. README clone detection
@@ -138,3 +157,54 @@ class DeepRepoAnalyzer:
             total_penalty += penalty
         
         return total_penalty
+
+    def deep_analyze_matched_repos(
+        self,
+        matched_repos: List[Dict],
+        all_repo_data: List[Dict] = None
+    ) -> List[Dict]:
+        """
+        Analyze matched repos and return results with clone_penalty and deep_red_flags.
+        This is the method called by github_routes.py and github_routes_phase2.py.
+        
+        Args:
+            matched_repos: List of matched project-repo pairs from ProjectRepoMatching
+            all_repo_data: Optional full repo data for README lookup
+            
+        Returns:
+            List of deep analysis results, each containing clone_penalty and deep_red_flags
+        """
+        # Extract repo info from matched projects
+        repos_to_analyze = []
+        for match in matched_repos:
+            repo_info = match.get("repository", match)
+            # Try to find full repo data for README
+            readme = None
+            if all_repo_data:
+                for repo_data in all_repo_data:
+                    if repo_data.get("name") == repo_info.get("name"):
+                        readme = repo_data.get("readme")
+                        break
+            
+            repos_to_analyze.append({
+                "owner": repo_info.get("owner", repo_info.get("full_name", "/").split("/")[0]),
+                "name": repo_info.get("name"),
+                "readme": readme
+            })
+        
+        # Run deep analysis
+        # We need a username; extract from owner of first repo
+        username = repos_to_analyze[0]["owner"] if repos_to_analyze else ""
+        deep_results = self.analyze_repos_deep(repos_to_analyze, username)
+        
+        # Enrich each result with clone_penalty and deep_red_flags
+        from ..ml.inference.similarity_engine import SimilarityEngine
+        engine = SimilarityEngine()
+        
+        for result in deep_results:
+            clone_detection = result.get("clone_detection", {})
+            similarity = clone_detection.get("similarity", 0.0)
+            result["clone_penalty"] = engine.get_penalty(similarity)
+            result["deep_red_flags"] = result.get("red_flags", [])
+        
+        return deep_results

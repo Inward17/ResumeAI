@@ -2,17 +2,15 @@
 Project-Repo Matching Pipeline
 Matches resume projects to GitHub repositories using embeddings
 """
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import numpy as np
 from ..embeddings.embedding_model import EmbeddingModel
 from ..embeddings.embedding_cache import EmbeddingCache
 from ..config.ml_config import (
+    USE_EMBEDDING_CACHE,
     PROJECT_MATCH_THRESHOLD_HIGH,
     PROJECT_MATCH_THRESHOLD_MEDIUM,
-    PROJECT_MATCH_THRESHOLD_LOW,
-    EMBEDDING_MODEL_NAME,
-    USE_EMBEDDING_CACHE,
-    EMBEDDING_CACHE_TTL_HOURS
+    PROJECT_MATCH_THRESHOLD_LOW
 )
 
 
@@ -21,8 +19,8 @@ class ProjectRepoMatching:
     
     def __init__(self):
         """Initialize project matching pipeline"""
-        self.embedding_model = EmbeddingModel(EMBEDDING_MODEL_NAME)
-        self.cache = EmbeddingCache(EMBEDDING_CACHE_TTL_HOURS) if USE_EMBEDDING_CACHE else None
+        self.embedding_model = EmbeddingModel()  # No args - lazy loads internally
+        self.cache = EmbeddingCache() if USE_EMBEDDING_CACHE else None  # Uses default cache_dir
     
     def match_projects_to_repos(
         self,
@@ -80,10 +78,10 @@ class ProjectRepoMatching:
         repo_embeddings = self._get_batch_embeddings(repo_texts)
         
         # Calculate similarities
-        similarities = self.embedding_model.batch_cosine_similarity(
-            project_embedding,
-            repo_embeddings
-        )
+        similarities = [
+            self._compute_cosine_similarity(project_embedding, repo_emb)
+            for repo_emb in repo_embeddings
+        ]
         
         # Find best match
         max_idx = np.argmax(similarities)
@@ -154,7 +152,7 @@ class ProjectRepoMatching:
             if cached is not None:
                 return cached
         
-        embedding = self.embedding_model.encode_single(text)
+        embedding = self.embedding_model.encode(text)  # Returns single embedding for single text
         
         if self.cache:
             self.cache.set(text, embedding)
@@ -172,7 +170,7 @@ class ProjectRepoMatching:
                     embeddings.append(cached)
                     continue
             
-            embedding = self.embedding_model.encode_single(text)
+            embedding = self.embedding_model.encode(text)  # Returns single embedding
             
             if self.cache:
                 self.cache.set(text, embedding)
@@ -180,6 +178,10 @@ class ProjectRepoMatching:
             embeddings.append(embedding)
         
         return np.array(embeddings)
+    
+    def _compute_cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """Compute cosine similarity between two vectors"""
+        return float(np.dot(vec1, vec2))  # Already normalized in embedding_model
     
     def _determine_match_strength(self, similarity: float) -> str:
         """Determine match strength based on similarity"""

@@ -1,10 +1,5 @@
 """
-⚠️ DEPRECATED — This file is the legacy Phase-1 route.
-Use github_routes_phase2.py for production (Phase-2 architecture).
-
-This file is retained only for backward compatibility with auxiliary scripts
-(example_usage.py, fastapi_integration.py, check_rate_limit.py, etc.).
-Known issue: clone_penalty at L212 passes Phase-1 penalty instead of total_clone_penalty.
+GitHub Routes - API entry point for GitHub analysis (Phase-1 + Phase-2)
 """
 import os
 import re
@@ -14,12 +9,13 @@ from ..services.repo_analyzer import RepoAnalyzer
 from ..services.readme_analyzer import ReadmeAnalyzer
 from ..services.score_engine import ScoreEngine
 from ..persistence.github_writer import GitHubWriter
-from ..persistence.clone_verdict_writer import CloneVerdictWriter
 
 # Phase-2 imports (optional - only if dependencies installed)
 try:
     from ..ml.pipelines.project_repo_matching import ProjectRepoMatching
     from ..services.deep_repo_analyzer import DeepRepoAnalyzer
+    from ..persistence.clone_verdict_writer import CloneVerdictWriter
+    from ..utils.repo_filter_utils import apply_quality_filters, get_top_repos
     from ..ml.config.ml_config import (
         ENABLE_PROJECT_MATCHING,
         DEEP_ANALYZE_MATCHED_REPOS_ONLY,
@@ -56,15 +52,16 @@ class GitHubAnalysisService:
         self.readme_analyzer = ReadmeAnalyzer(self.github_client)
         self.score_engine = ScoreEngine()
         self.writer = GitHubWriter(db_client)
-        self.clone_writer = CloneVerdictWriter(db_client)
         
         # Phase-2 components (only if dependencies installed)
         if PHASE_2_AVAILABLE:
             self.project_matcher = ProjectRepoMatching()
             self.deep_analyzer = DeepRepoAnalyzer(self.github_client)
+            self.clone_writer = CloneVerdictWriter(db_client)
         else:
             self.project_matcher = None
             self.deep_analyzer = None
+            self.clone_writer = None
     
     @staticmethod
     def extract_username_from_url(github_url: str) -> str:
@@ -171,8 +168,21 @@ class GitHubAnalysisService:
                 
                 # Deep analyze matched repos only
                 if matched_projects and DEEP_ANALYZE_MATCHED_REPOS_ONLY:
-                    # Limit to max deep analyzed repos
-                    repos_to_analyze = matched_projects[:MAX_DEEP_ANALYZED_REPOS]
+                    # Pre-filter: remove trivial/low-quality repos before expensive deep analysis
+                    # Extract repository data from matched projects
+                    matched_repo_data = [
+                        m.get("repository", m) for m in matched_projects
+                    ]
+                    
+                    # Apply quality filters (remove trivial, low-commit, no-README repos)
+                    filtered_repos = apply_quality_filters(matched_repo_data)
+                    
+                    # Get top N repos by commit count
+                    repos_to_analyze = get_top_repos(
+                        filtered_repos, 
+                        limit=MAX_DEEP_ANALYZED_REPOS,
+                        sort_by="commit_count"
+                    )
                     
                     deep_analysis_results = self.deep_analyzer.deep_analyze_matched_repos(
                         matched_repos=repos_to_analyze,
@@ -196,6 +206,15 @@ class GitHubAnalysisService:
                         score_result["redFlags"].extend(
                             deep_result.get("deep_red_flags", [])
                         )
+                    
+                    # Persist Phase-2 deep analysis (if user_id provided)
+                    if user_id and self.clone_writer:
+                        self.clone_writer.write_deep_analysis(
+                            user_id=user_id,
+                            username=username,
+                            deep_results=deep_analysis_results,
+                            clone_penalty=total_clone_penalty  # ✅ CORRECT: Use total_clone_penalty, NOT score_result["components"]["penalty"]
+                        )
             
             # Step 5: Persist to database (if user_id provided)
             github_data = None
@@ -207,15 +226,6 @@ class GitHubAnalysisService:
                     repo_analysis=repo_analysis,
                     readme_analysis=readme_analysis
                 )
-                
-                # Persist Phase-2 deep analysis if available
-                if deep_analysis_results:
-                    self.clone_writer.write_deep_analysis(
-                        user_id=user_id,
-                        username=username,
-                        deep_results=deep_analysis_results,
-                        clone_penalty=score_result["components"].get("penalty", 0) # Using total penalty as approx
-                    )
             
             # Return complete results
             result = {

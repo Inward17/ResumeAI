@@ -4,6 +4,8 @@ Uses GitHub Search API safely with caching
 """
 import json
 import os
+import tempfile
+import hashlib
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from .github_client import GitHubClient
@@ -18,22 +20,24 @@ from ..ml.config.ml_config import (
 class PopularRepoFetcher:
     """Fetch top GitHub repos for comparison"""
     
-    def __init__(self, github_client: GitHubClient, cache_dir: str = "/tmp/popular_repos_cache"):
+    def __init__(self, github_client: GitHubClient, cache_dir: Optional[str] = None):
         """
         Initialize popular repo fetcher
         
         Args:
             github_client: GitHub API client
-            cache_dir: Directory for caching popular repos
+            cache_dir: Directory for caching popular repos (default: cross-platform temp dir)
         """
         self.client = github_client
+        if cache_dir is None:
+            cache_dir = os.path.join(tempfile.gettempdir(), "popular_repos_cache")
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
     
     def _get_cache_path(self, query: str) -> str:
         """Get cache file path for query"""
-        import hashlib
-        query_hash = hashlib.md5(query.encode()).hexdigest()
+        # Use SHA256 for consistent hashing (Issue #10 fix)
+        query_hash = hashlib.sha256(query.encode()).hexdigest()
         return os.path.join(self.cache_dir, f"{query_hash}.json")
     
     def _load_from_cache(self, query: str) -> Optional[List[Dict]]:

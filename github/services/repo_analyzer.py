@@ -8,7 +8,8 @@ from ..utils.constants import (
     MIN_COMMITS_PER_REPO,
     MIN_OSS_COMMITS,
     OSS_ALLOWLIST,
-    TRIVIAL_REPO_PATTERNS
+    TRIVIAL_REPO_PATTERNS,
+    ANALYZE_ALL_BRANCHES
 )
 from ..utils.text_utils import is_trivial_repo_name
 from ..utils.date_utils import analyze_commit_spread, get_most_recent_commit_date
@@ -75,12 +76,18 @@ class RepoAnalyzer:
         overall_spread = analyze_commit_spread(all_commit_dates)
         most_recent_commit = get_most_recent_commit_date(all_commit_dates)
         
+        # Aggregate Layer 1 enhancements (template/parent detection)
+        templates_count = sum(1 for repo in enriched_repos if repo.get("is_template", False))
+        has_parent_count = sum(1 for repo in enriched_repos if repo.get("has_parent", False))
+        
         return {
             "repositoryStats": {
                 "total": total_repos,
                 "original": original_repos,
                 "forked": forked_repos,
                 "original_ratio": original_repos / total_repos if total_repos > 0 else 0.0,
+                "templates": templates_count,  # NEW: Template count
+                "has_parent_source": has_parent_count,  # NEW: Parent/source count
             },
             "commitStats": {
                 "total": total_commits,
@@ -109,9 +116,21 @@ class RepoAnalyzer:
         repo_name = repo["name"]
         owner = repo["owner"]["login"]
         is_fork = repo.get("fork", False)
+        is_template = repo.get("is_template", False)  # NEW: Template detection
         
-        # Fetch commits by user
-        commits = self.client.get_repo_commits(owner, repo_name, username)
+        # NEW: Check if parent/source exists (additional fork indicator)
+        has_parent = "parent" in repo or "source" in repo
+        parent_repo = None
+        if has_parent:
+            if "parent" in repo:
+                parent_repo = repo["parent"].get("full_name", "")
+            elif "source" in repo:
+                parent_repo = repo["source"].get("full_name", "")
+        
+        # Fetch commits by user (branch-aware)
+        commits = self.client.get_repo_commits(
+            owner, repo_name, username, all_branches=ANALYZE_ALL_BRANCHES
+        )
         commit_count = len(commits)
         
         # Extract commit dates
@@ -138,6 +157,9 @@ class RepoAnalyzer:
             "full_name": repo["full_name"],
             "owner": owner,
             "is_fork": is_fork,
+            "is_template": is_template,  # NEW
+            "has_parent": has_parent,  # NEW
+            "parent_repo": parent_repo,  # NEW
             "is_original": is_original,
             "is_oss_contribution": is_oss_contribution,
             "commit_count": commit_count,

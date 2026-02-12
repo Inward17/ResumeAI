@@ -19,4 +19,4 @@ verify_*.py
 
 test_*.py
 
-
+!test_phase2_deterministic.py

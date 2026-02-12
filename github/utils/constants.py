@@ -132,14 +132,14 @@ RED_FLAGS = {
     "missing_readme": "Many repositories missing README",
     "tech_stack_mismatch": "README tech stack doesn't match repository languages",
     "trivial_repos": "Multiple trivial/tutorial repositories",
+    "template_repos": "Many repositories are templates (not original work)",  # NEW
+    "parent_source": "Repository derived from another source",  # NEW
 }
 
 # ============================================
 # API CONFIGURATION
 # ============================================
 MAX_COMMITS_PER_REPO = 100  # Maximum commits to fetch per repo
+MAX_BRANCHES_TO_ANALYZE = 10  # Maximum branches to analyze per repo
+ANALYZE_ALL_BRANCHES = True  # If True, analyze commits from all branches (more accurate but slower)
 REQUEST_TIMEOUT = 30  # seconds
-
-# Analyze all branches (Phase-2)
-ANALYZE_ALL_BRANCHES = True
-MAX_BRANCHES_TO_ANALYZE = 10

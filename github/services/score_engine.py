@@ -199,6 +199,16 @@ class ScoreEngine:
         if total_repos > 0 and (trivial_repos / total_repos) > 0.4:
             flags.append(RED_FLAGS["trivial_repos"])
         
+        # Flag 7: Many template repos (Layer 1 enhancement)
+        templates = repo_stats.get("templates", 0)
+        if total_repos > 0 and (templates / total_repos) > 0.5:
+            flags.append(RED_FLAGS["template_repos"])
+        
+        # Flag 8: Repos with parent/source (disguised forks - Layer 1 enhancement)
+        parent_source = repo_stats.get("has_parent_source", 0)
+        if parent_source > 0:
+            flags.append(f"{parent_source} {RED_FLAGS['parent_source']}")
+        
         return flags
     
     def _calculate_penalty(self, red_flags: List[str]) -> float:

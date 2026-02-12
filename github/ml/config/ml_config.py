@@ -2,6 +2,8 @@
 ML Configuration for Phase-2 Clone Detection
 Centralized config for model selection, thresholds, and caching
 """
+import tempfile
+import os
 
 # ============================================
 # EMBEDDING MODEL CONFIGURATION
@@ -25,9 +27,9 @@ EMBEDDING_DIM = 384
 # ============================================
 
 # README clone detection thresholds (defensible)
-SIMILARITY_VERY_HIGH = 0.90  # Very likely copied
-SIMILARITY_HIGH = 0.80       # Template-based
-SIMILARITY_NORMAL = 0.80     # Below this = unique
+SIMILARITY_VERY_HIGH = 0.90  # Very likely copied (≥ 0.90 → COPIED verdict)
+SIMILARITY_HIGH = 0.80       # Template-based (0.80-0.89 → TEMPLATE verdict)
+# Below SIMILARITY_HIGH (< 0.80) → ORIGINAL verdict
 
 # Scoring penalties based on similarity
 PENALTY_VERY_HIGH_SIMILARITY = 25  # ≥ 0.90
@@ -47,6 +49,15 @@ GITHUB_SEARCH_ORDER = "desc"
 
 # Cache TTL for popular repos (hours)
 POPULAR_REPO_CACHE_TTL_HOURS = 48
+
+# ============================================
+# PROJECT MATCHING THRESHOLDS
+# ============================================
+
+# Thresholds for matching resume projects to GitHub repos
+PROJECT_MATCH_THRESHOLD_HIGH = 0.75    # Strong match
+PROJECT_MATCH_THRESHOLD_MEDIUM = 0.60  # Moderate match
+PROJECT_MATCH_THRESHOLD_LOW = 0.50     # Minimum to consider
 
 # ============================================
 # PROCESSING LIMITS
@@ -84,8 +95,8 @@ RED_FLAG_MESSAGES = {
 # Enable embedding caching
 ENABLE_EMBEDDING_CACHE = True
 
-# Cache directory
-EMBEDDING_CACHE_DIR = "/tmp/github_embeddings_cache"
+# Cache directory (cross-platform - works on Windows, Linux, macOS)
+EMBEDDING_CACHE_DIR = os.path.join(tempfile.gettempdir(), "github_embeddings_cache")
 
 # Cache TTL (hours)
 EMBEDDING_CACHE_TTL_HOURS = 72
@@ -98,6 +109,19 @@ EMBEDDING_CACHE_TTL_HOURS = 72
 ENABLE_README_CLONE_DETECTION = True
 ENABLE_BRANCH_AWARE_COMMITS = True
 ENABLE_POPULAR_REPO_COMPARISON = True
+
+# Enable project-repo matching (for resume-based analysis)
+ENABLE_PROJECT_MATCHING = True
+
+# Only deep analyze matched repos (not all repos)
+DEEP_ANALYZE_MATCHED_REPOS_ONLY = True
+
+# Maximum repos to deep analyze when matching is enabled
+# Alias to MAX_DEEP_ANALYSIS_REPOS for consistency (Issue #4 fix)
+MAX_DEEP_ANALYZED_REPOS = MAX_DEEP_ANALYSIS_REPOS
+
+# Alias for embedding cache (used by project_repo_matching.py)
+USE_EMBEDDING_CACHE = ENABLE_EMBEDDING_CACHE
 
 # ============================================
 # INFERENCE SETTINGS
