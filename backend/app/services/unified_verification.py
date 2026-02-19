@@ -7,7 +7,7 @@ from typing import Dict, Optional, Any
 from datetime import datetime
 
 from app.database import db
-from app.services.scraper import scrape_linkedin_profiles
+from app.services.linkedinScraper import scrape_linkedin_profiles
 from app.services.verifier import verify_profile
 from app.services.github_services import (
     GitHubClient,
