@@ -95,3 +95,5 @@ android-sdk/ -e
 # Environment files
 *.env
 *.env.*
+
+backend/resumes

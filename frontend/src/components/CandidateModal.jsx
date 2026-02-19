@@ -6,7 +6,9 @@ import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Separator } from './ui/separator';
 
-const CandidateModal = ({ candidate, job, onClose }) => {
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
   if (!candidate) return null;
 
   // Derive AI recommendation from scores
@@ -55,11 +57,37 @@ const CandidateModal = ({ candidate, job, onClose }) => {
   };
 
   // Generate skill matches from job requirements or use existing
-  const skillMatches = candidate.skillMatches || (job?.requirements || []).map(skill => ({
+  // Generate skill matches from job requirements or use existing
+  const skillMatches = candidate.skill_matches || candidate.skillMatches || (job?.requirements || []).map(skill => ({
     skill,
     score: Math.floor(Math.random() * 4) + 6,
     found: Math.random() > 0.2
   }));
+
+  const updateStatus = async (newStatus) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/jobs/${job.id}/candidates/${candidate.id || candidate.candidate_id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      const result = await response.json();
+      if (onStatusUpdate) {
+        onStatusUpdate();
+      }
+      onClose();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      // Ideally show a toast notification here
+    }
+  };
 
   const getScoreColor = (score) => {
     if (score >= 8) return 'text-green-600';
@@ -180,13 +208,24 @@ const CandidateModal = ({ candidate, job, onClose }) => {
 
             {/* Action Buttons */}
             <div className="flex space-x-3">
-              <Button className="flex-1 bg-green-600 hover:bg-green-700 transition-colors duration-200">
+              <Button 
+                onClick={() => updateStatus('Shortlisted')}
+                className="flex-1 bg-green-600 hover:bg-green-700 transition-colors duration-200"
+              >
                 Shortlist
               </Button>
-              <Button variant="outline" className="flex-1 border-red-200 text-red-700 hover:bg-red-50">
+              <Button 
+                variant="outline" 
+                onClick={() => updateStatus('Rejected')}
+                className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
+              >
                 Reject
               </Button>
-              <Button variant="outline" className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50">
+              <Button 
+                variant="outline" 
+                onClick={() => updateStatus('On Hold')}
+                className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
+              >
                 Keep on Hold
               </Button>
             </div>

@@ -189,6 +189,14 @@ class UnifiedVerificationService:
             )
             score_result = self.score_engine.compute_score(repo_analysis, readme_analysis)
             
+            # Extract all technologies from projects for JD matching
+            all_technologies = set()
+            for repo in repo_analysis.get("enrichedRepositories", []):
+                languages = repo.get("languages", {})
+                if languages:
+                    all_technologies.update(languages.keys())
+            technologies_combined = " ".join(sorted(all_technologies)) if all_technologies else ""
+            
             return {
                 "success": True,
                 "username": username,
@@ -198,7 +206,8 @@ class UnifiedVerificationService:
                 "breakdown": score_result["breakdown"],
                 "repositoryStats": repo_analysis["repositoryStats"],
                 "commitStats": repo_analysis["commitStats"],
-                "readmeStats": readme_analysis["readmeStats"]
+                "readmeStats": readme_analysis["readmeStats"],
+                "technologies_combined": technologies_combined  # NEW: For JD matching
             }
             
         except ValueError as e:
@@ -253,6 +262,12 @@ class UnifiedVerificationService:
             gh = cached["github"]
             if gh.get("success"):
                 github_status = "verified"
+                
+                # Generate projects embedding for JD matching
+                from app.services.embedding_service import generate_embedding
+                technologies_combined = gh.get("technologies_combined", "")
+                projects_embedding = generate_embedding(technologies_combined) if technologies_combined else None
+                
                 github_data = GitHubDataModel(
                     username=gh.get("username"),
                     success=True,
@@ -263,7 +278,10 @@ class UnifiedVerificationService:
                     repositoryStats=GitHubRepositoryStats(**gh["repositoryStats"]) if gh.get("repositoryStats") else None,
                     commitStats=GitHubCommitStats(**gh["commitStats"]) if gh.get("commitStats") else None,
                     readmeStats=GitHubReadmeStats(**gh["readmeStats"]) if gh.get("readmeStats") else None,
-                    verifiedAt=now
+                    verifiedAt=now,
+                    # NEW: For JD matching
+                    projects_embedding=projects_embedding,
+                    technologies_combined=technologies_combined
                 )
             else:
                 github_status = "unverified"
@@ -454,8 +472,8 @@ class UnifiedVerificationService:
         weights = 0
         
         if github_data and github_data.success:
-            overall += github_data.score * 0.3
-            weights += 0.3
+            overall += github_data.score * 0.5
+            weights += 0.5
         
         if linkedin_data and linkedin_data.profileId:
             overall += 100 * 0.2  # Full score for valid LinkedIn
@@ -463,8 +481,8 @@ class UnifiedVerificationService:
         
         if web_search_data and web_search_data.results:
             avg_web = experience_match
-            overall += avg_web * 0.5
-            weights += 0.5
+            overall += avg_web * 0.3
+            weights += 0.3
         
         overall_credibility = round(overall / weights, 2) if weights > 0 else 0
         

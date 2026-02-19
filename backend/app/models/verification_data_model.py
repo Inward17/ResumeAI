@@ -55,6 +55,9 @@ class GitHubDataModel(BaseModel):
     commitStats: Optional[GitHubCommitStats] = None
     readmeStats: Optional[GitHubReadmeStats] = None
     verifiedAt: Optional[datetime] = None
+    # NEW: For JD matching
+    projects_embedding: Optional[List[float]] = None
+    technologies_combined: Optional[str] = None
 
 
 # --- Web Search Data Models ---
