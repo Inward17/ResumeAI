@@ -1,0 +1,166 @@
+{
+  "timestamp": "2026-02-20T19:46:01.117371",
+  "query": "movie-recommendation-system",
+  "results": [
+    {
+      "name": "AJAX-Movie-Recommendation-System-with-Sentiment-Analysis",
+      "owner": "kishan0725",
+      "full_name": "kishan0725/AJAX-Movie-Recommendation-System-with-Sentiment-Analysis",
+      "description": "A content-based recommender system that recommends movies similar to the movie the user likes and analyses the sentiments of the reviews given by the user",
+      "stars": 600,
+      "html_url": "https://github.com/kishan0725/AJAX-Movie-Recommendation-System-with-Sentiment-Analysis",
+      "topics": [
+        "ajax",
+        "api",
+        "machine-learning",
+        "movie-recommendation",
+        "movie-recommendation-system",
+        "movie-recommender",
+        "nlp",
+        "python",
+        "recommendation-system",
+        "sentiment-analysis"
+      ]
+    },
+    {
+      "name": "The-Movie-Cinema",
+      "owner": "kishan0725",
+      "full_name": "kishan0725/The-Movie-Cinema",
+      "description": "The Movie Database for all language movies",
+      "stars": 232,
+      "html_url": "https://github.com/kishan0725/The-Movie-Cinema",
+      "topics": [
+        "movie",
+        "movie-cinema",
+        "movie-recommendation",
+        "movie-recommendation-system",
+        "movies-dataset",
+        "recommendation-system",
+        "recommender-system"
+      ]
+    },
+    {
+      "name": "DoubanMovieRecommendationSystem",
+      "owner": "Giyn",
+      "full_name": "Giyn/DoubanMovieRecommendationSystem",
+      "description": ":movie_camera: \u8c46\u74e3\u7535\u5f71\u63a8\u8350\u7cfb\u7edf\uff08Douban Movie Recommendation System\uff09\u6839\u636e\u8c46\u74e3\u7535\u5f71\u6570\u636e\u4ee5\u53ca\u8c46\u74e3\u7528\u6237\u7684\u89c2\u5f71\u548c\u5f71\u8bc4\u6570\u636e\uff0c\u4f7f\u7528\u57fa\u4e8e\u7269\u54c1\u7684\u534f\u540c\u8fc7\u6ee4\u7b97\u6cd5\u5bf9\u7528\u6237\u8fdb\u884c\u4e2a\u6027\u5316\u63a8\u8350\uff0c\u5e76\u8bbe\u8ba1GUI\u8fdb\u884c\u7528\u6237\u4ea4\u4e92\u3002",
+      "stars": 231,
+      "html_url": "https://github.com/Giyn/DoubanMovieRecommendationSystem",
+      "topics": []
+    },
+    {
+      "name": "Movie-Recommender-System",
+      "owner": "asif536",
+      "full_name": "asif536/Movie-Recommender-System",
+      "description": "Basic Movie Recommendation Web Application using user-item collaborative filtering.",
+      "stars": 223,
+      "html_url": "https://github.com/asif536/Movie-Recommender-System",
+      "topics": [
+        "collaborative-filtering",
+        "machine-learning",
+        "movie-recommendation",
+        "movie-recommendation-engine",
+        "movie-recommendation-system",
+        "movie-recommender",
+        "rate",
+        "recommendation-algorithms",
+        "recommendation-engine",
+        "recommendation-system",
+        "recommendation-web-application",
+        "recommender-system"
+      ]
+    },
+    {
+      "name": "Movie-Recommendation-System",
+      "owner": "inboxpraveen",
+      "full_name": "inboxpraveen/Movie-Recommendation-System",
+      "description": "Movie Recommendation System with Complete End-to-End Pipeline, Model Integration & Web Application Hosted.",
+      "stars": 193,
+      "html_url": "https://github.com/inboxpraveen/Movie-Recommendation-System",
+      "topics": [
+        "ai-ml",
+        "ai-project",
+        "django",
+        "herokuapp",
+        "machine-learning-projects",
+        "machinel-learning",
+        "movie",
+        "movie-recommendation",
+        "praveen-kumar-github",
+        "project",
+        "python",
+        "python-flask",
+        "python-flask-application",
+        "python3",
+        "recommendation-system",
+        "recommender-system",
+        "tmdb",
+        "tmdb-movie-search",
+        "web-application",
+        "webapp"
+      ]
+    },
+    {
+      "name": "RL-movie-recommender",
+      "owner": "PierreGe",
+      "full_name": "PierreGe/RL-movie-recommender",
+      "description": "The purpose of our research is to study reinforcement learning approaches to building a movie recommender system. We formulate the problem of interactive recommendation as a contextual multi-armed bandit.",
+      "stars": 120,
+      "html_url": "https://github.com/PierreGe/RL-movie-recommender",
+      "topics": [
+        "movie-recommendation",
+        "reinforcement-learning"
+      ]
+    },
+    {
+      "name": "CollaborativeFiltering",
+      "owner": "ma-xu",
+      "full_name": "ma-xu/CollaborativeFiltering",
+      "description": "matlab, collaborative filtering, MovieLens dataset\uff0cThe movie recommendation system",
+      "stars": 109,
+      "html_url": "https://github.com/ma-xu/CollaborativeFiltering",
+      "topics": []
+    },
+    {
+      "name": "Movie-Recommendation-System-Using-Python-and-Pandas",
+      "owner": "rudrajikadra",
+      "full_name": "rudrajikadra/Movie-Recommendation-System-Using-Python-and-Pandas",
+      "description": "This is a python project where using Pandas library we will find correlation and give the best recommendation for movies.",
+      "stars": 106,
+      "html_url": "https://github.com/rudrajikadra/Movie-Recommendation-System-Using-Python-and-Pandas",
+      "topics": [
+        "movie-recommendation-system",
+        "movielens-dataset",
+        "python",
+        "python-project",
+        "recommendation-system"
+      ]
+    },
+    {
+      "name": "Movie-Recommendation-System-with-Sentiment-Analysis",
+      "owner": "kishan0725",
+      "full_name": "kishan0725/Movie-Recommendation-System-with-Sentiment-Analysis",
+      "description": "Content based movie recommendation system with sentiment analysis",
+      "stars": 99,
+      "html_url": "https://github.com/kishan0725/Movie-Recommendation-System-with-Sentiment-Analysis",
+      "topics": [
+        "api",
+        "flask",
+        "movie-recommendation",
+        "movie-recommendation-system",
+        "python3",
+        "sentiment-analysis",
+        "web-scraping"
+      ]
+    },
+    {
+      "name": "create-movie_recommendation_system-from-0",
+      "owner": "stacyhaha",
+      "full_name": "stacyhaha/create-movie_recommendation_system-from-0",
+      "description": "use mysql python create a GUI movie recommendation system",
+      "stars": 89,
+      "html_url": "https://github.com/stacyhaha/create-movie_recommendation_system-from-0",
+      "topics": []
+    }
+  ]
+}

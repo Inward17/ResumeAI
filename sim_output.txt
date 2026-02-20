@@ -1,0 +1,618 @@
+﻿python : INFO | httpx | HTTP Request: GET h
+ttps://api.github.com/users/octocat/repos?p
+er_page=100&page=1&type=all "HTTP/1.1 200 
+OK"
+At line:1 char:1
++ python simulate_verification.py 2>&1 | 
+Out-File -FilePath sim_output. ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified 
+   : (INFO | httpx | ...TTP/1.1 200 OK":S  
+  tring) [], RemoteException
+    + FullyQualifiedErrorId : NativeComman 
+   dError
+ 
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/users/octocat/repos?per_page=1
+00&page=2&type=all "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/users/octocat/repos?per_page=1
+00&page=3&type=all "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Spoon-Knife/read
+me "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/Deshan555/Spoon_Knife/re
+adme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/elisaschroeder/Spoon-Kni
+fe-Fork/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/Hamza-Mobeen/Spoon-Knife
+/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/HenriqueFurtado-Dev/Spoo
+n-Knife/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/robodobdob/Spoon-Knife/r
+eadme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/ratcliffeg/Spoon-Knife-F
+ork/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/Hullgj/Spoon-Knife/readm
+e "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/domusicman/Spoon-Knife/r
+eadme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/mzhangly/Spoon-Knife/rea
+dme "HTTP/1.1 200 OK"
+WARNING | services.github_services.analysis
+.readme_similarity | README embedding 
+failed for Spoon-Knife: No module named 
+'transformers'
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Hello-World/read
+me "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/download/readme 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/apify/crawlee-python/rea
+dme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/apify/crawlee/readme 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/lefterisloukas/edgar-cra
+wler/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/zszszszsz/.config/readme
+ "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/molyswu/hand_detection/r
+eadme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/clr2of8/SlackExtract/rea
+dme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/nytimes/svg-crowbar/read
+me "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/Unpackerr/unpackerr/read
+me "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/OpenNaja/cobra-tools/rea
+dme "HTTP/1.1 200 OK"
+WARNING | services.github_services.analysis
+.readme_similarity | README embedding 
+failed for download: No module named 
+'transformers'
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Spoon-Knife 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Spoon-Knife/git/
+trees/main?recursive=1 "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Hello-World 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Hello-World/git/
+trees/master?recursive=1 "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/download 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/download/git/trees
+/master?recursive=1 "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/download/contents/
+index.js "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/download/contents/
+test.js "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Spoon-Knife/comm
+its?author=octocat&per_page=100 "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/octocat/Hello-World/comm
+its?author=octocat&per_page=100 "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/download/commits?a
+uthor=octocat&per_page=100 "HTTP/1.1 200 
+OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/bRuNoLeVeRmAnZoR/downloa
+d/commits?author=octocat&per_page=5 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/digideskio/First-Repo/co
+mmits?author=octocat&per_page=5 "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/ansi-styles/commit
+s?author=octocat&per_page=5 "HTTP/1.1 200 
+OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/node-browserify/co
+mmits?author=octocat&per_page=5 "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/node-libs-browser/
+commits?author=octocat&per_page=5 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/kevva/wrap-ansi/commits?
+author=octocat&per_page=5 "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/users/POPPz07/repos?per_page=1
+00&page=1&type=all "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/Code-Vulnerabili
+ty/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/mauroservienti/all-our-a
+ggregates-are-wrong-demos/readme "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/vaxad/DealDex/readme 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/justas-b/ecommerce-dashb
+oard/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/bitsenzes/Building-an-Ec
+ommerce-Website-in-7-Effortless-Steps/readm
+e "HTTP/1.1 404 Not Found"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/yudafatah/NetCore-Reacti
+ve-Microservice-gRPC/readme "HTTP/1.1 200 
+OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/suchithh/goshop/readme 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/Aliozzaim/medusa-plugin-
+product-reviews/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/bitsenzes/Building-an-Ec
+ommerce-Website-in-7-Effortless-Steps./read
+me "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/rashedrahat/GadTo-UI/rea
+dme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/rfeinberg3/ecomAssistant
+/readme "HTTP/1.1 200 OK"
+WARNING | services.github_services.analysis
+.readme_similarity | README embedding 
+failed for E-commerce-aggregator: No 
+module named 'transformers'
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/readme "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/Code-Vulnerabili
+ty "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/Code-Vulnerabili
+ty/git/trees/main?recursive=1 "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/git/trees/main?recursive=1 "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/app/__init__.py "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/app/forms.py "HTTP/1.1 200 
+OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/app/models.py "HTTP/1.1 200 
+OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/app/routes.py "HTTP/1.1 200 
+OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/config.py "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/migrations/env.py "HTTP/1.1 
+200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/contents/migrations/versions/37a396a4
+7a87_users_table.py "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/git/trees/main?recursive=1 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecb/backend.py 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecf/eslint.confi
+g.js "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecf/postcss.conf
+ig.js "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecf/src/types/in
+dex.ts "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecf/src/vite-env
+.d.ts "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecf/tailwind.con
+fig.js "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/contents/movierecf/vite.config.
+ts "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/Code-Vulnerabili
+ty/commits?author=POPPz07&per_page=100 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/E-commerce-aggre
+gator/commits?author=POPPz07&per_page=100 
+"HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/POPPz07/movie-recommenda
+tion-system/commits?author=POPPz07&per_page
+=100 "HTTP/1.1 200 OK"
+INFO | httpx | HTTP Request: GET https://ap
+i.github.com/repos/Inward17/misinformation-
+combating-tool/commits?author=POPPz07&per_p
+age=5 "HTTP/1.1 200 OK"
+======================================================================
+TEST CASE 1: octocat -- No projects in resume
+======================================================================
+
+Success:          True
+Username:         octocat
+Score (0-100):    60.04
+Score (0-40):     24
+Confidence:       LOW
+Red Flags:        ['Less than half of claimed projects found on GitHub', 'Commit burst pattern detected ù majority of commits in 1û2 days']
+Repos Total:      203
+  Original:       195
+  Forked:         8
+  Trivial:        5
+  RepoAuth:       0.5801
+Resume Claimed:   0
+  Matched:        0
+  Not Found:      0
+  Consistency:    0.0
+Signals:          RC=0.0, RA=0.5801, RO=1.0, CO=1.0, BA=0.5625, OSS=0.5
+
+--- Mongo Document ---
+{
+  "username": "octocat",
+  "analyzedAt": "2026-02-20T14:18:29.645906+00:00",
+  "score100": 60.04,
+  "score40": 24,
+  "confidenceLevel": "LOW",
+  "redFlags": [
+    "Less than half of claimed projects found on GitHub",
+    "Commit burst pattern detected \u2014 majority of commits in 1\u20132 days"
+  ],
+  "authenticity": {
+    "probability": 0.6004,
+    "score100": 60.04,
+    "score40": 24,
+    "cloneRiskProbability": 0.0,
+    "confidenceLevel": "LOW"
+  },
+  "resumeVerification": {
+    "projectsClaimed": 0,
+    "projectsMatched": 0,
+    "projectsNotFound": 0,
+    "resumeConsistency": 0.0,
+    "matches": []
+  },
+  "cloneAnalysis": {
+    "readmeSimilarityMax": 0.0,
+    "readmeVerdict": "ORIGINAL",
+    "readmeMatchedRepo": null,
+    "readmeOriginality": 1.0,
+    "codeSimilarityMax": 0.0,
+    "codeVerdict": "ORIGINAL",
+    "codeMatchedRepo": null,
+    "codeOriginality": 1.0,
+    "repoDetails": [
+      {
+        "repo": "Spoon-Knife",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "Embedding error: No module named 'transformers'"
+      },
+      {
+        "repo": "Hello-World",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "README missing or too short"
+      },
+      {
+        "repo": "download",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "Embedding error: No module named 'transformers'"
+      },
+      {
+        "repo": "Spoon-Knife",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No code files found"
+      },
+      {
+        "repo": "Hello-World",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No code files found"
+      },
+      {
+        "repo": "download",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No module named 'transformers'"
+      }
+    ]
+  },
+  "behavioralAnalysis": {
+    "commitConsistency": 1.0,
+    "burstRisk": 0.75,
+    "messageQuality": 1.0,
+    "fileDiversity": 0.0,
+    "behavioralAuthenticity": 0.5625,
+    "ossContributionScore": 0.5,
+    "ossDetails": {
+      "external_contributions": 1,
+      "distinct_external_orgs": 1,
+      "external_org_list": [
+        "digideskio"
+      ]
+    }
+  },
+  "repositoryStats": {
+    "total": 203,
+    "original": 195,
+    "forked": 8,
+    "originalRatio": 0.9606,
+    "trivial": 5,
+    "nonTrivialRatio": 0.9754,
+    "avgCommitsPerRepo": 0.15,
+    "lastCommitDate": "2024-08-21T15:25:42Z",
+    "repositoryAuthenticity": 0.5801
+  },
+  "signals": {
+    "ResumeConsistency": 0.0,
+    "RepositoryAuthenticity": 0.5801,
+    "ReadmeOriginality": 1.0,
+    "CodeOriginality": 1.0,
+    "BehavioralAuthenticity": 0.5625,
+    "OSSContribution": 0.5
+  }
+}
+
+======================================================================
+TEST CASE 2: POPPz07 -- 3 resume projects
+======================================================================
+
+Success:          True
+Username:         POPPz07
+Score (0-100):    80.35
+Score (0-40):     32
+Confidence:       MEDIUM
+Red Flags:        ['Commit burst pattern detected ù majority of commits in 1û2 days']
+Repos Total:      27
+  Original:       19
+  Forked:         8
+  Trivial:        1
+  RepoAuth:       0.6258
+Resume Claimed:   3
+  Matched:        3
+  Not Found:      0
+  Consistency:    1.0
+    - Code Vulnerability Detection System <-> Code-Vulnerability (sim=1.0, stage=FUZZY, strength=STRONG)
+    - E-commerce Aggregator Web App <-> E-commerce-aggregator (sim=1.0, stage=FUZZY, strength=STRONG)
+    - Hybrid Movie Recommendation System <-> movie-recommendation-system (sim=1.0, stage=FUZZY, strength=STRONG)
+Clone Analysis:
+  README sim max: 0.0 (ORIGINAL)
+  Code sim max:   0.0 (ORIGINAL)
+  README orig:    1.0
+  Code orig:      1.0
+Behavioral:
+  Consistency:    0.875
+  Burst Risk:     0.625
+  Msg Quality:    0.8383
+  File Diversity: 0.0
+  Auth Score:     0.5221
+  OSS Score:      0.5
+Signals:          RC=1.0, RA=0.6258, RO=1.0, CO=1.0, BA=0.5221, OSS=0.5
+
+--- Mongo Document ---
+{
+  "username": "POPPz07",
+  "analyzedAt": "2026-02-20T14:18:44.851155+00:00",
+  "score100": 80.35,
+  "score40": 32,
+  "confidenceLevel": "MEDIUM",
+  "redFlags": [
+    "Commit burst pattern detected \u2014 majority of commits in 1\u20132 days"
+  ],
+  "authenticity": {
+    "probability": 0.8035,
+    "score100": 80.35,
+    "score40": 32,
+    "cloneRiskProbability": 0.0,
+    "confidenceLevel": "MEDIUM"
+  },
+  "resumeVerification": {
+    "projectsClaimed": 3,
+    "projectsMatched": 3,
+    "projectsNotFound": 0,
+    "resumeConsistency": 1.0,
+    "matches": [
+      {
+        "projectName": "Code Vulnerability Detection System",
+        "repoName": "Code-Vulnerability",
+        "repoFullName": "POPPz07/Code-Vulnerability",
+        "similarity": 1.0,
+        "matchStage": "FUZZY",
+        "matchStrength": "STRONG"
+      },
+      {
+        "projectName": "E-commerce Aggregator Web App",
+        "repoName": "E-commerce-aggregator",
+        "repoFullName": "POPPz07/E-commerce-aggregator",
+        "similarity": 1.0,
+        "matchStage": "FUZZY",
+        "matchStrength": "STRONG"
+      },
+      {
+        "projectName": "Hybrid Movie Recommendation System",
+        "repoName": "movie-recommendation-system",
+        "repoFullName": "POPPz07/movie-recommendation-system",
+        "similarity": 1.0,
+        "matchStage": "FUZZY",
+        "matchStrength": "STRONG"
+      }
+    ]
+  },
+  "cloneAnalysis": {
+    "readmeSimilarityMax": 0.0,
+    "readmeVerdict": "ORIGINAL",
+    "readmeMatchedRepo": null,
+    "readmeOriginality": 1.0,
+    "codeSimilarityMax": 0.0,
+    "codeVerdict": "ORIGINAL",
+    "codeMatchedRepo": null,
+    "codeOriginality": 1.0,
+    "repoDetails": [
+      {
+        "repo": "Code-Vulnerability",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "README missing or too short"
+      },
+      {
+        "repo": "E-commerce-aggregator",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "Embedding error: No module named 'transformers'"
+      },
+      {
+        "repo": "movie-recommendation-system",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "README missing or too short"
+      },
+      {
+        "repo": "Code-Vulnerability",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No code files found"
+      },
+      {
+        "repo": "E-commerce-aggregator",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No module named 'transformers'"
+      },
+      {
+        "repo": "movie-recommendation-system",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No module named 'transformers'"
+      }
+    ]
+  },
+  "behavioralAnalysis": {
+    "commitConsistency": 0.875,
+    "burstRisk": 0.625,
+    "messageQuality": 0.8383,
+    "fileDiversity": 0.0,
+    "behavioralAuthenticity": 0.5221,
+    "ossContributionScore": 0.5,
+    "ossDetails": {
+      "external_contributions": 1,
+      "distinct_external_orgs": 1,
+      "external_org_list": [
+        "Inward17"
+      ]
+    }
+  },
+  "repositoryStats": {
+    "total": 27,
+    "original": 19,
+    "forked": 8,
+    "originalRatio": 0.7037,
+    "trivial": 1,
+    "nonTrivialRatio": 0.963,
+    "avgCommitsPerRepo": 0.35,
+    "lastCommitDate": "2026-02-19T13:21:29Z",
+    "repositoryAuthenticity": 0.6258
+  },
+  "signals": {
+    "ResumeConsistency": 1.0,
+    "RepositoryAuthenticity": 0.6258,
+    "ReadmeOriginality": 1.0,
+    "CodeOriginality": 1.0,
+    "BehavioralAuthenticity": 0.5221,
+    "OSSContribution": 0.5
+  }
+}
+
+======================================================================
+SIMULATION COMPLETE
+======================================================================
