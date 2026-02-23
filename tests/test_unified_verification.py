@@ -5,6 +5,7 @@ All sub-verifications (GitHub, LinkedIn, web search) are mocked.
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from datetime import datetime
+from dataclasses import dataclass
 
 from app.services.unified_verification import (
     UnifiedVerificationService,
@@ -83,41 +84,24 @@ class TestUnifiedVerificationService:
             service.db = mock_db
             service.github_token = "fake-token"
             service.cache = VerificationCache()
-            service.github_client = MagicMock()
-            service.repo_analyzer = MagicMock()
-            service.readme_analyzer = MagicMock()
-            service.score_engine = MagicMock()
             return service
 
     @patch("app.services.unified_verification.scrape_linkedin_profiles", new_callable=AsyncMock)
     @patch("app.services.unified_verification.verify_profile", new_callable=AsyncMock)
-    async def test_github_only_verification(self, mock_verify, mock_scrape, mock_db):
+    @patch("app.services.unified_verification.verify_github", new_callable=AsyncMock)
+    async def test_github_only_verification(self, mock_gh_verify, mock_verify, mock_scrape, mock_db):
         service = self._make_service(mock_db)
 
-        # Mock GitHub analysis
-        service.score_engine.compute_score.return_value = {
-            "score": 85,
-            "redFlags": [],
-            "components": {"original_ratio": 24, "commit_depth": 20, "readme_presence": 12, "language_match": 15, "oss_bonus": 5, "penalty": 0},
-            "breakdown": {"raw_score": 85, "total_penalty": 0, "final_score": 85},
-        }
-        service.github_client.get_user_repos.return_value = [
-            {"name": "repo1", "owner": {"login": "testuser"}, "fork": False}
-        ]
-        service.repo_analyzer.analyze_repos.return_value = {
-            "repositoryStats": {"total": 1, "original": 1, "forked": 0, "original_ratio": 1.0},
-            "commitStats": {"total": 50, "average_per_repo": 50, "repos_with_low_commits": 0, "lastCommitDate": None},
-            "commitSpread": {"is_dump_pattern": False},
-            "ossContributions": 0,
-            "trivialRepos": 0,
-            "reposDumpPattern": 0,
-            "enrichedRepositories": [],
-        }
-        service.readme_analyzer.analyze_readmes.return_value = {
-            "readmeStats": {"repos_with_readme": 1, "repos_without_readme": 0, "repos_with_short_readme": 0, "readme_presence_ratio": 1.0},
-            "languageMatchStats": {"repos_with_mismatch": 0, "has_global_mismatch": False},
-            "enhancedRepositories": [],
-        }
+        # Mock the new verify_github to return a GitHubVerificationResult-like object
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.username = "testuser"
+        mock_result.score100 = 85.0
+        mock_result.score40 = 34.0
+        mock_result.confidenceLevel = "HIGH"
+        mock_result.redFlags = []
+        mock_result.to_mongo_dict.return_value = {"username": "testuser", "score100": 85.0}
+        mock_gh_verify.return_value = mock_result
 
         result = await service.run_unified_verification(
             candidate_id="cand-github",
@@ -247,8 +231,8 @@ class TestCalculateMatchScores:
         )
 
         result = service._calculate_match_scores(github_data, linkedin_data, web_data)
-        # Weighted: GitHub(30%) + LinkedIn(20%) + Web(50%)
-        expected = (85 * 0.3 + 100 * 0.2 + 80 * 0.5) / 1.0
+        # Weighted: GitHub(50%) + LinkedIn(20%) + Web(30%)
+        expected = (85 * 0.5 + 100 * 0.2 + 80 * 0.3) / 1.0
         assert abs(result.overallCredibility - expected) < 1.0
 
     def test_no_sources_score(self):

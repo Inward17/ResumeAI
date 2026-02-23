@@ -48,6 +48,11 @@ class GitHubDataModel(BaseModel):
     username: Optional[str] = None
     success: bool = False
     score: float = 0
+    # --- V2 fields ---
+    score100: Optional[float] = None
+    score40: Optional[float] = None
+    confidenceLevel: Optional[str] = None  # HIGH / MEDIUM / LOW
+    # --- End V2 fields ---
     redFlags: List[str] = Field(default_factory=list)
     components: Optional[GitHubScoreComponents] = None
     breakdown: Optional[GitHubScoreBreakdown] = None
@@ -58,6 +63,8 @@ class GitHubDataModel(BaseModel):
     # NEW: For JD matching
     projects_embedding: Optional[List[float]] = None
     technologies_combined: Optional[str] = None
+    # Full V2 result dict for rich data storage
+    github_v2_data: Optional[dict] = None
 
 
 # --- Web Search Data Models ---

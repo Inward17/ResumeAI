@@ -1,151 +1,128 @@
 """
-GitHub Routes - FastAPI endpoints for GitHub profile analysis
+GitHub Routes - FastAPI endpoints for GitHub profile analysis (V2 – async pipeline)
 """
 import os
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.services.github_services import (
-    GitHubClient,
-    RepoAnalyzer,
-    ReadmeAnalyzer,
-    ScoreEngine
-)
-from app.models.github_writer import GitHubWriter
+from app.services.github_services_v2 import verify_github, GitHubVerificationResult
 from app.database import db
 
 
 router = APIRouter(prefix="/github", tags=["github"])
 
 
+# ── Request / Response models ────────────────────────────────────────────────
+
 class AnalyzeRequest(BaseModel):
     """Request model for GitHub analysis"""
     username: str
-    user_id: Optional[str] = None
+    candidate_id: Optional[str] = None
+    # Optional resume data — enables project matching + richer analysis
+    projects: Optional[List[dict]] = None
+    skills: Optional[str] = None
 
 
-class GitHubAnalysisService:
-    """Service orchestrating GitHub ownership analysis"""
-    
-    def __init__(self, github_token: Optional[str] = None, db_client=None):
-        self.github_client = GitHubClient(github_token)
-        self.repo_analyzer = RepoAnalyzer(self.github_client)
-        self.readme_analyzer = ReadmeAnalyzer(self.github_client)
-        self.score_engine = ScoreEngine()
-        self.writer = GitHubWriter(db_client)
-    
-    def analyze_github_profile(self, username: str, user_id: Optional[str] = None) -> dict:
-        """Complete GitHub profile analysis pipeline"""
-        try:
-            # Step 1: Fetch repositories
-            repos = self.github_client.get_user_repos(username)
-            
-            if not repos:
-                return {
-                    "success": False,
-                    "error": f"No repositories found for user '{username}'",
-                    "score": 0,
-                    "redFlags": ["No repositories found"],
-                }
-            
-            # Step 2: Analyze repositories
-            repo_analysis = self.repo_analyzer.analyze_repos(username, repos)
-            
-            # Step 3: Analyze READMEs
-            readme_analysis = self.readme_analyzer.analyze_readmes(
-                repo_analysis["enrichedRepositories"]
-            )
-            
-            # Step 4: Compute score
-            score_result = self.score_engine.compute_score(repo_analysis, readme_analysis)
-            
-            # Step 5: Persist (if user_id provided)
-            github_data = None
-            if user_id:
-                github_data = self.writer.write_github_data(
-                    user_id=user_id,
-                    username=username,
-                    score_result=score_result,
-                    repo_analysis=repo_analysis,
-                    readme_analysis=readme_analysis
-                )
-            
-            return {
-                "success": True,
-                "username": username,
-                "score": score_result["score"],
-                "redFlags": score_result["redFlags"],
-                "components": score_result["components"],
-                "breakdown": score_result["breakdown"],
-                "repositoryStats": repo_analysis["repositoryStats"],
-                "commitStats": repo_analysis["commitStats"],
-                "readmeStats": readme_analysis["readmeStats"],
-                "githubData": github_data,
-            }
-            
-        except ValueError as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "score": 0,
-                "redFlags": ["User not found"],
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": f"Analysis failed: {str(e)}",
-                "score": 0,
-                "redFlags": ["Analysis error"],
-            }
-    
-    def get_rate_limit_status(self) -> dict:
-        """Check GitHub API rate limit status"""
-        return self.github_client.check_rate_limit()
-
-
-# Initialize service with token from environment
-github_service = GitHubAnalysisService(
-    github_token=os.getenv("GITHUB_TOKEN"),
-    db_client=db
-)
-
+# ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.post("/analyze")
 async def analyze_github(request: AnalyzeRequest):
     """
-    Analyze a GitHub profile for ownership verification
-    
-    - **username**: GitHub username to analyze
-    - **user_id**: Optional user ID for persistence
+    Analyze a GitHub profile using the V2 NLP pipeline.
+
+    **POST body (JSON):**
+    ```json
+    {
+        "username": "octocat",
+        "candidate_id": "optional-candidate-id",
+        "projects": [
+            {
+                "name": "My Project",
+                "technologies": ["Python", "FastAPI"],
+                "description": "A cool web app"
+            }
+        ],
+        "skills": "Python, FastAPI, React"
+    }
+    ```
+
+    The `projects` and `skills` fields are optional but enable deeper
+    resume-to-repo matching and richer analysis.
     """
-    result = github_service.analyze_github_profile(
-        username=request.username,
-        user_id=request.user_id
-    )
-    
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=result["error"])
-    
-    return result
+    # Build the parsed_resume dict expected by verify_github
+    parsed_resume = {
+        "github_username": request.username,
+        "personal_info": {
+            "github": f"github.com/{request.username}",
+        },
+    }
+    if request.projects:
+        parsed_resume["projects"] = request.projects
+    if request.skills:
+        parsed_resume["skills"] = request.skills
+
+    candidate_id = request.candidate_id or request.username
+
+    try:
+        result: GitHubVerificationResult = await verify_github(
+            candidate_id=candidate_id,
+            parsed_resume=parsed_resume,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+    if not result.success:
+        raise HTTPException(
+            status_code=400,
+            detail=result.error or "GitHub analysis failed",
+        )
+
+    return result.to_mongo_dict()
 
 
 @router.get("/analyze/{username}")
 async def analyze_github_get(username: str):
     """
-    Analyze a GitHub profile (GET endpoint for quick testing)
-    
-    - **username**: GitHub username to analyze
+    Quick-test endpoint — analyze a GitHub profile by username (GET).
+
+    No resume data is attached, so project matching will be skipped
+    but repo analysis, clone detection, and behavioral analysis still run.
     """
-    result = github_service.analyze_github_profile(username=username)
-    
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=result["error"])
-    
-    return result
+    parsed_resume = {
+        "github_username": username,
+        "personal_info": {"github": f"github.com/{username}"},
+    }
+
+    try:
+        result: GitHubVerificationResult = await verify_github(
+            candidate_id=username,
+            parsed_resume=parsed_resume,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+    if not result.success:
+        raise HTTPException(
+            status_code=400,
+            detail=result.error or "GitHub analysis failed",
+        )
+
+    return result.to_mongo_dict()
 
 
 @router.get("/rate-limit")
 async def get_rate_limit():
     """Check GitHub API rate limit status"""
-    return github_service.get_rate_limit_status()
+    import httpx
+
+    token = os.getenv("GITHUB_TOKEN", "")
+    headers = {"Accept": "application/vnd.github.v3+json"}
+    if token:
+        headers["Authorization"] = f"token {token}"
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get("https://api.github.com/rate_limit", headers=headers)
+        if resp.status_code == 200:
+            return resp.json()
+        return {"error": f"GitHub API error: {resp.status_code}"}

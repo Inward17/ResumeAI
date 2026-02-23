@@ -9,20 +9,10 @@ from datetime import datetime
 from app.database import db
 from app.services.linkedinScraper import scrape_linkedin_profiles
 from app.services.verifier import verify_profile
-from app.services.github_services import (
-    GitHubClient,
-    RepoAnalyzer,
-    ReadmeAnalyzer,
-    ScoreEngine
-)
+from app.services.github_services_v2 import verify_github, GitHubVerificationResult
 from app.models.verification_data_model import (
     VerificationDataModel,
     GitHubDataModel,
-    GitHubScoreComponents,
-    GitHubScoreBreakdown,
-    GitHubRepositoryStats,
-    GitHubCommitStats,
-    GitHubReadmeStats,
     LinkedInDataModel,
     LinkedInPosition,
     LinkedInEducation,
@@ -82,12 +72,6 @@ class UnifiedVerificationService:
         self.db = db_client or db
         self.github_token = github_token or os.getenv("GITHUB_TOKEN")
         self.cache = VerificationCache()
-        
-        # Initialize GitHub client
-        self.github_client = GitHubClient(self.github_token)
-        self.repo_analyzer = RepoAnalyzer(self.github_client)
-        self.readme_analyzer = ReadmeAnalyzer(self.github_client)
-        self.score_engine = ScoreEngine()
     
     async def run_unified_verification(
         self,
@@ -114,7 +98,7 @@ class UnifiedVerificationService:
         task_names = []
         
         if github_username:
-            tasks.append(self._verify_github(candidate_id, github_username))
+            tasks.append(self._verify_github(candidate_id, github_username, profile_data))
             task_names.append("github")
         else:
             self.cache.set(candidate_id, "github", None)
@@ -148,15 +132,22 @@ class UnifiedVerificationService:
         
         return verification_data
     
-    async def _verify_github(self, candidate_id: str, username: str) -> dict:
-        """Run GitHub verification in thread (blocking API calls)"""
+    async def _verify_github(self, candidate_id: str, username: str, parsed_resume: Optional[dict] = None) -> dict:
+        """Run GitHub verification using the new async pipeline"""
         try:
-            # Run blocking GitHub API calls in thread pool
-            result = await asyncio.to_thread(
-                self._github_analysis_sync, username
+            # Build a parsed_resume dict suitable for verify_github
+            resume_for_github = parsed_resume or {}
+            # Ensure github_username is present in the resume data
+            if "github_username" not in resume_for_github:
+                resume_for_github = {**resume_for_github, "github_username": username}
+            
+            # Run the async verification pipeline directly
+            result: GitHubVerificationResult = await verify_github(
+                candidate_id=candidate_id,
+                parsed_resume=resume_for_github,
             )
             
-            # Cache result
+            # Cache the result object
             self.cache.set(candidate_id, "github", result)
             return result
             
@@ -169,54 +160,6 @@ class UnifiedVerificationService:
             }
             self.cache.set(candidate_id, "github", error_result)
             return error_result
-    
-    def _github_analysis_sync(self, username: str) -> dict:
-        """Synchronous GitHub analysis"""
-        try:
-            repos = self.github_client.get_user_repos(username)
-            
-            if not repos:
-                return {
-                    "success": False,
-                    "error": f"No repositories found for '{username}'",
-                    "score": 0,
-                    "redFlags": ["No repositories found"]
-                }
-            
-            repo_analysis = self.repo_analyzer.analyze_repos(username, repos)
-            readme_analysis = self.readme_analyzer.analyze_readmes(
-                repo_analysis["enrichedRepositories"]
-            )
-            score_result = self.score_engine.compute_score(repo_analysis, readme_analysis)
-            
-            # Extract all technologies from projects for JD matching
-            all_technologies = set()
-            for repo in repo_analysis.get("enrichedRepositories", []):
-                languages = repo.get("languages", {})
-                if languages:
-                    all_technologies.update(languages.keys())
-            technologies_combined = " ".join(sorted(all_technologies)) if all_technologies else ""
-            
-            return {
-                "success": True,
-                "username": username,
-                "score": score_result["score"],
-                "redFlags": score_result["redFlags"],
-                "components": score_result["components"],
-                "breakdown": score_result["breakdown"],
-                "repositoryStats": repo_analysis["repositoryStats"],
-                "commitStats": repo_analysis["commitStats"],
-                "readmeStats": readme_analysis["readmeStats"],
-                "technologies_combined": technologies_combined  # NEW: For JD matching
-            }
-            
-        except ValueError as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "score": 0,
-                "redFlags": ["User not found"]
-            }
     
     async def _verify_linkedin(self, candidate_id: str, linkedin_url: str) -> dict:
         """Run LinkedIn scraping"""
@@ -258,38 +201,52 @@ class UnifiedVerificationService:
         # Build GitHub data model
         github_data = None
         github_status = "pending"
-        if cached.get("github"):
-            gh = cached["github"]
-            if gh.get("success"):
-                github_status = "verified"
-                
-                # Generate projects embedding for JD matching
-                from app.services.embedding_service import generate_embedding
-                technologies_combined = gh.get("technologies_combined", "")
-                projects_embedding = generate_embedding(technologies_combined) if technologies_combined else None
-                
-                github_data = GitHubDataModel(
-                    username=gh.get("username"),
-                    success=True,
-                    score=gh.get("score", 0),
-                    redFlags=gh.get("redFlags", []),
-                    components=GitHubScoreComponents(**gh["components"]) if gh.get("components") else None,
-                    breakdown=GitHubScoreBreakdown(**gh["breakdown"]) if gh.get("breakdown") else None,
-                    repositoryStats=GitHubRepositoryStats(**gh["repositoryStats"]) if gh.get("repositoryStats") else None,
-                    commitStats=GitHubCommitStats(**gh["commitStats"]) if gh.get("commitStats") else None,
-                    readmeStats=GitHubReadmeStats(**gh["readmeStats"]) if gh.get("readmeStats") else None,
-                    verifiedAt=now,
-                    # NEW: For JD matching
-                    projects_embedding=projects_embedding,
-                    technologies_combined=technologies_combined
-                )
-            else:
-                github_status = "unverified"
-                github_data = GitHubDataModel(
-                    success=False,
-                    redFlags=gh.get("redFlags", []),
-                    verifiedAt=now
-                )
+        gh_cached = cached.get("github")
+        if gh_cached is not None:
+            # Handle new GitHubVerificationResult object (duck-type check)
+            if hasattr(gh_cached, 'to_mongo_dict'):
+                gh = gh_cached
+                if gh.success:
+                    github_status = "verified"
+                    
+                    github_data = GitHubDataModel(
+                        username=gh.username,
+                        success=True,
+                        score=gh.score100,
+                        score100=gh.score100,
+                        score40=gh.score40,
+                        confidenceLevel=gh.confidenceLevel,
+                        redFlags=gh.redFlags or [],
+                        verifiedAt=now,
+                        # Store the full v2 result as a dict for rich data
+                        github_v2_data=gh.to_mongo_dict(),
+                    )
+                else:
+                    github_status = "unverified"
+                    github_data = GitHubDataModel(
+                        success=False,
+                        redFlags=gh.redFlags or [],
+                        verifiedAt=now
+                    )
+            # Handle legacy dict format (from error path)
+            elif isinstance(gh_cached, dict):
+                gh = gh_cached
+                if gh.get("success"):
+                    github_status = "verified"
+                    github_data = GitHubDataModel(
+                        username=gh.get("username"),
+                        success=True,
+                        score=gh.get("score", 0),
+                        redFlags=gh.get("redFlags", []),
+                        verifiedAt=now,
+                    )
+                else:
+                    github_status = "unverified"
+                    github_data = GitHubDataModel(
+                        success=False,
+                        redFlags=gh.get("redFlags", []),
+                        verifiedAt=now
+                    )
         
         # Build LinkedIn data model
         linkedin_data = None
@@ -464,15 +421,16 @@ class UnifiedVerificationService:
         
         # Skills credibility from GitHub score
         if github_data and github_data.success:
-            skills_match = github_data.score
+            skills_match = github_data.score100 if github_data.score100 else github_data.score
         
         # Overall credibility is weighted average
-        # GitHub (30%) + LinkedIn presence (20%) + Web verification (50%)
+        # GitHub (50%) + LinkedIn presence (20%) + Web verification (30%)
         overall = 0
         weights = 0
         
+        github_score = github_data.score100 if (github_data and github_data.score100) else (github_data.score if github_data else 0)
         if github_data and github_data.success:
-            overall += github_data.score * 0.5
+            overall += github_score * 0.5
             weights += 0.5
         
         if linkedin_data and linkedin_data.profileId:
