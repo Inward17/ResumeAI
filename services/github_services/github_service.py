@@ -11,6 +11,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+import re
+
 from .config import (
     CODE_SIMILARITY_SUSPICIOUS,
     CODE_SIMILARITY_COPIED,
@@ -22,7 +24,8 @@ from .config import (
     REPO_AUTH_NON_TRIVIAL_WEIGHT,
     REPO_AUTH_ORIGINAL_RATIO_WEIGHT,
     REPO_AUTH_RECENCY_WEIGHT,
-    TRIVIAL_REPO_PATTERNS,
+    TRIVIAL_EXCLUSION_COMPOUNDS,
+    TRIVIAL_REPO_TOKENS,
 )
 from .github_client import GitHubClient
 from .models import (
@@ -280,8 +283,11 @@ def _compute_repo_stats(
             original += 1
 
         name_lower = r.get("name", "").lower()
-        if any(pat in name_lower for pat in TRIVIAL_REPO_PATTERNS):
-            trivial += 1
+        # Word-boundary trivial detection with compound exclusions
+        if not any(compound in name_lower for compound in TRIVIAL_EXCLUSION_COMPOUNDS):
+            tokens = set(re.split(r"[-_.]", name_lower))
+            if tokens & TRIVIAL_REPO_TOKENS:
+                trivial += 1
 
         total_size += r.get("size", 0)
 

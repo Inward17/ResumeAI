@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-20T11:39:02.501454",
+  "timestamp": "2026-02-22T11:51:28.951087",
   "query": "download Download and extract files",
   "results": [
     {
@@ -7,7 +7,7 @@
       "owner": "apify",
       "full_name": "apify/crawlee",
       "description": "Crawlee\u2014A web scraping and browser automation library for Node.js to build reliable crawlers. In JavaScript and TypeScript. Extract data for AI, LLMs, RAG, or GPTs. Download HTML, PDF, JPG, PNG, and other files from websites. Works with Puppeteer, Playwright, Cheerio, JSDOM, and raw HTTP. Both headful and headless mode. With proxy rotation.",
-      "stars": 21762,
+      "stars": 21799,
       "html_url": "https://github.com/apify/crawlee",
       "topics": [
         "apify",
@@ -34,7 +34,7 @@
       "owner": "apify",
       "full_name": "apify/crawlee-python",
       "description": "Crawlee\u2014A web scraping and browser automation library for Python to build reliable crawlers. Extract data for AI, LLMs, RAG, or GPTs. Download HTML, PDF, JPG, PNG, and other files from websites. Works with BeautifulSoup, Playwright, and raw HTTP. Both headful and headless mode. With proxy rotation.",
-      "stars": 8090,
+      "stars": 8097,
       "html_url": "https://github.com/apify/crawlee-python",
       "topics": [
         "apify",
@@ -60,7 +60,7 @@
       "owner": "Unpackerr",
       "full_name": "Unpackerr/unpackerr",
       "description": "Extracts downloads for Radarr, Sonarr, Lidarr, Readarr, and/or a Watch folder - Deletes extracted files after import",
-      "stars": 1340,
+      "stars": 1342,
       "html_url": "https://github.com/Unpackerr/unpackerr",
       "topics": [
         "deluge",

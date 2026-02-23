@@ -1,0 +1,325 @@
+﻿======================================================================
+TEST CASE 1: octocat -- No projects in resume
+======================================================================
+
+[TIMING] TC1 elapsed: 55.09s
+
+Success:          True
+Username:         octocat
+Score (0-100):    46.1
+Score (0-40):     18
+Confidence:       LOW
+Red Flags:        ['Less than half of claimed projects found on GitHub', 'README content highly similar to external repositories']
+Repos Total:      203
+  Original:       195
+  Forked:         8
+  Trivial:        3
+  RepoAuth:       0.582
+Resume Claimed:   0
+  Matched:        0
+  Not Found:      0
+  Consistency:    0.0
+Signals:          RC=0.0, RA=0.582, RO=0.0, CO=1.0, BA=0.6305, OSS=0.5
+
+--- Mongo Document ---
+{
+  "username": "octocat",
+  "analyzedAt": "2026-02-22T06:23:21.709906+00:00",
+  "score100": 46.1,
+  "score40": 18,
+  "confidenceLevel": "LOW",
+  "redFlags": [
+    "Less than half of claimed projects found on GitHub",
+    "README content highly similar to external repositories"
+  ],
+  "authenticity": {
+    "probability": 0.461,
+    "score100": 46.1,
+    "score40": 18,
+    "cloneRiskProbability": 1.0,
+    "confidenceLevel": "LOW"
+  },
+  "resumeVerification": {
+    "projectsClaimed": 0,
+    "projectsMatched": 0,
+    "projectsNotFound": 0,
+    "resumeConsistency": 0.0,
+    "matches": []
+  },
+  "cloneAnalysis": {
+    "readmeSimilarityMax": 1.0,
+    "readmeVerdict": "COPIED",
+    "readmeMatchedRepo": "domusicman/Spoon-Knife",
+    "readmeOriginality": 0.0,
+    "codeSimilarityMax": 0.0,
+    "codeVerdict": "ORIGINAL",
+    "codeMatchedRepo": null,
+    "codeOriginality": 1.0,
+    "repoDetails": [
+      {
+        "repo": "Spoon-Knife",
+        "similarity": 1.0,
+        "verdict": "COPIED",
+        "matchedRepo": "domusicman/Spoon-Knife",
+        "skipped": false
+      },
+      {
+        "repo": "Hello-World",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "README missing or too short"
+      },
+      {
+        "repo": "download",
+        "similarity": 0.6604,
+        "verdict": "ORIGINAL",
+        "matchedRepo": "OpenNaja/cobra-tools",
+        "skipped": false
+      },
+      {
+        "repo": "Spoon-Knife",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No code files found"
+      },
+      {
+        "repo": "Hello-World",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No code files found"
+      },
+      {
+        "repo": "download",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": false
+      }
+    ]
+  },
+  "behavioralAnalysis": {
+    "commitConsistency": 1.0,
+    "burstRisk": 0.375,
+    "messageQuality": 0.8969,
+    "fileDiversity": 0.0,
+    "behavioralAuthenticity": 0.6305,
+    "ossContributionScore": 0.5,
+    "ossDetails": {
+      "external_contributions": 1,
+      "distinct_external_orgs": 1,
+      "external_org_list": [
+        "digideskio"
+      ]
+    }
+  },
+  "repositoryStats": {
+    "total": 203,
+    "original": 195,
+    "forked": 8,
+    "originalRatio": 0.9606,
+    "trivial": 3,
+    "nonTrivialRatio": 0.9852,
+    "avgCommitsPerRepo": 0.15,
+    "lastCommitDate": "2024-08-21T15:25:42Z",
+    "repositoryAuthenticity": 0.582
+  },
+  "signals": {
+    "ResumeConsistency": 0.0,
+    "RepositoryAuthenticity": 0.582,
+    "ReadmeOriginality": 0.0,
+    "CodeOriginality": 1.0,
+    "BehavioralAuthenticity": 0.6305,
+    "OSSContribution": 0.5
+  }
+}
+
+======================================================================
+TEST CASE 2: POPPz07 -- 3 resume projects
+======================================================================
+
+[TIMING] TC2 elapsed: 48.54s
+
+Success:          True
+Username:         POPPz07
+Score (0-100):    72.88
+Score (0-40):     29
+Confidence:       MEDIUM
+Red Flags:        []
+Repos Total:      27
+  Original:       19
+  Forked:         8
+  Trivial:        0
+  RepoAuth:       0.6332
+Resume Claimed:   3
+  Matched:        3
+  Not Found:      0
+  Consistency:    1.0
+    - Code Vulnerability Detection System <-> Code-Vulnerability (sim=1.0, stage=FUZZY, strength=STRONG)
+    - E-commerce Aggregator Web App <-> E-commerce-aggregator (sim=1.0, stage=FUZZY, strength=STRONG)
+    - Hybrid Movie Recommendation System <-> movie-recommendation-system (sim=1.0, stage=FUZZY, strength=STRONG)
+Clone Analysis:
+  README sim max: 0.5453 (ORIGINAL)
+  Code sim max:   0.0 (ORIGINAL)
+  README orig:    0.4547
+  Code orig:      1.0
+Behavioral:
+  Consistency:    0.7647
+  Burst Risk:     0.3529
+  Msg Quality:    0.8276
+  File Diversity: 0.0
+  Auth Score:     0.5598
+  OSS Score:      0.5
+Signals:          RC=1.0, RA=0.6332, RO=0.4547, CO=1.0, BA=0.5598, OSS=0.5
+
+--- Mongo Document ---
+{
+  "username": "POPPz07",
+  "analyzedAt": "2026-02-22T06:24:16.795927+00:00",
+  "score100": 72.88,
+  "score40": 29,
+  "confidenceLevel": "MEDIUM",
+  "redFlags": [],
+  "authenticity": {
+    "probability": 0.7288,
+    "score100": 72.88,
+    "score40": 29,
+    "cloneRiskProbability": 0.5453,
+    "confidenceLevel": "MEDIUM"
+  },
+  "resumeVerification": {
+    "projectsClaimed": 3,
+    "projectsMatched": 3,
+    "projectsNotFound": 0,
+    "resumeConsistency": 1.0,
+    "matches": [
+      {
+        "projectName": "Code Vulnerability Detection System",
+        "repoName": "Code-Vulnerability",
+        "repoFullName": "POPPz07/Code-Vulnerability",
+        "similarity": 1.0,
+        "matchStage": "FUZZY",
+        "matchStrength": "STRONG"
+      },
+      {
+        "projectName": "E-commerce Aggregator Web App",
+        "repoName": "E-commerce-aggregator",
+        "repoFullName": "POPPz07/E-commerce-aggregator",
+        "similarity": 1.0,
+        "matchStage": "FUZZY",
+        "matchStrength": "STRONG"
+      },
+      {
+        "projectName": "Hybrid Movie Recommendation System",
+        "repoName": "movie-recommendation-system",
+        "repoFullName": "POPPz07/movie-recommendation-system",
+        "similarity": 1.0,
+        "matchStage": "FUZZY",
+        "matchStrength": "STRONG"
+      }
+    ]
+  },
+  "cloneAnalysis": {
+    "readmeSimilarityMax": 0.5453,
+    "readmeVerdict": "ORIGINAL",
+    "readmeMatchedRepo": "justas-b/ecommerce-dashboard",
+    "readmeOriginality": 0.4547,
+    "codeSimilarityMax": 0.0,
+    "codeVerdict": "ORIGINAL",
+    "codeMatchedRepo": null,
+    "codeOriginality": 1.0,
+    "repoDetails": [
+      {
+        "repo": "Code-Vulnerability",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "README missing or too short"
+      },
+      {
+        "repo": "E-commerce-aggregator",
+        "similarity": 0.5453,
+        "verdict": "ORIGINAL",
+        "matchedRepo": "justas-b/ecommerce-dashboard",
+        "skipped": false
+      },
+      {
+        "repo": "movie-recommendation-system",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "README missing or too short"
+      },
+      {
+        "repo": "Code-Vulnerability",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "No code files found"
+      },
+      {
+        "repo": "E-commerce-aggregator",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": true,
+        "reason": "Timeout exceeded"
+      },
+      {
+        "repo": "movie-recommendation-system",
+        "similarity": 0.0,
+        "verdict": "ORIGINAL",
+        "matchedRepo": null,
+        "skipped": false
+      }
+    ]
+  },
+  "behavioralAnalysis": {
+    "commitConsistency": 0.7647,
+    "burstRisk": 0.3529,
+    "messageQuality": 0.8276,
+    "fileDiversity": 0.0,
+    "behavioralAuthenticity": 0.5598,
+    "ossContributionScore": 0.5,
+    "ossDetails": {
+      "external_contributions": 1,
+      "distinct_external_orgs": 1,
+      "external_org_list": [
+        "Inward17"
+      ]
+    }
+  },
+  "repositoryStats": {
+    "total": 27,
+    "original": 19,
+    "forked": 8,
+    "originalRatio": 0.7037,
+    "trivial": 0,
+    "nonTrivialRatio": 1.0,
+    "avgCommitsPerRepo": 0.35,
+    "lastCommitDate": "2026-02-20T16:40:35Z",
+    "repositoryAuthenticity": 0.6332
+  },
+  "signals": {
+    "ResumeConsistency": 1.0,
+    "RepositoryAuthenticity": 0.6332,
+    "ReadmeOriginality": 0.4547,
+    "CodeOriginality": 1.0,
+    "BehavioralAuthenticity": 0.5598,
+    "OSSContribution": 0.5
+  }
+}
+
+======================================================================
+SIMULATION COMPLETE  (total: 103.62s)
+  TC1 octocat: 55.09s
+  TC2 POPPz07: 48.54s
+======================================================================

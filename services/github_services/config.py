@@ -141,7 +141,7 @@ MAX_CODE_FILE_SIZE_BYTES: int = 200_000        # 200 KB
 MAX_TOTAL_CODE_SIZE_BYTES: int = 1_500_000     # 1.5 MB
 MAX_DEEP_ANALYSIS_REPOS: int = 3
 MAX_EXTERNAL_REPOS: int = 10
-DEEP_ANALYSIS_TIMEOUT_SECONDS: int = 15
+DEEP_ANALYSIS_TIMEOUT_SECONDS: int = 60
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -149,8 +149,11 @@ DEEP_ANALYSIS_TIMEOUT_SECONDS: int = 15
 # ═══════════════════════════════════════════════════════════════════
 
 SUPPORTED_CODE_EXTENSIONS: tuple = (
-    ".py", ".js", ".ts", ".java", ".cpp",
-    ".c", ".go", ".cs", ".php", ".rb",
+    ".py", ".js", ".ts", ".jsx", ".tsx",
+    ".java", ".cpp", ".c", ".h", ".hpp",
+    ".go", ".cs", ".php", ".rb", ".rs",
+    ".kt", ".swift", ".scala", ".dart",
+    ".vue", ".lua", ".r", ".sh",
 )
 
 EXCLUDED_DIRECTORIES: tuple = (
@@ -216,13 +219,22 @@ RED_FLAG_RULES: dict = {
 
 
 # ═══════════════════════════════════════════════════════════════════
-# TRIVIAL REPO PATTERNS
+# TRIVIAL REPO DETECTION
 # ═══════════════════════════════════════════════════════════════════
 
-TRIVIAL_REPO_PATTERNS: list = [
+# Word-level tokens — repo name is split on [-_.] and checked for exact token matches
+TRIVIAL_REPO_TOKENS: set = {
     "todo", "clone", "calculator", "test", "demo",
     "practice", "tutorial", "learning", "sample",
-    "example", "hello-world", "hello_world", "helloworld",
+    "example", "helloworld",
+}
+
+# Compound patterns that OVERRIDE trivial detection — if the repo name contains
+# any of these substrings, it is NOT marked trivial regardless of token matches
+TRIVIAL_EXCLUSION_COMPOUNDS: list = [
+    "machine-learning", "deep-learning", "reinforcement-learning",
+    "machine_learning", "deep_learning", "reinforcement_learning",
+    "hackathon", "competition", "challenge",
 ]
 
 # ═══════════════════════════════════════════════════════════════════

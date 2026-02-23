@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-20T11:39:06.494420",
+  "timestamp": "2026-02-22T11:51:45.778554",
   "query": "download",
   "results": [
     {
@@ -7,7 +7,7 @@
       "owner": "ytdl-org",
       "full_name": "ytdl-org/youtube-dl",
       "description": "Command-line program to download videos from YouTube.com and other video sites",
-      "stars": 139680,
+      "stars": 139696,
       "html_url": "https://github.com/ytdl-org/youtube-dl",
       "topics": []
     },
@@ -16,7 +16,7 @@
       "owner": "agalwood",
       "full_name": "agalwood/Motrix",
       "description": "A full-featured download manager.",
-      "stars": 50809,
+      "stars": 50870,
       "html_url": "https://github.com/agalwood/Motrix",
       "topics": [
         "aria2",
@@ -39,7 +39,7 @@
       "owner": "logseq",
       "full_name": "logseq/logseq",
       "description": "A privacy-first, open-source platform for knowledge management and collaboration. Download link:  http://github.com/logseq/logseq/releases. roadmap: https://discuss.logseq.com/t/logseq-product-roadmap/34267",
-      "stars": 41120,
+      "stars": 41151,
       "html_url": "https://github.com/logseq/logseq",
       "topics": [
         "clojure",
@@ -60,7 +60,7 @@
       "owner": "aria2",
       "full_name": "aria2/aria2",
       "description": "aria2 is a lightweight multi-protocol & multi-source, cross platform download utility operated in command-line. It supports HTTP/HTTPS, FTP, SFTP, BitTorrent and Metalink.",
-      "stars": 40068,
+      "stars": 40081,
       "html_url": "https://github.com/aria2/aria2",
       "topics": [
         "bittorrent",
@@ -78,7 +78,7 @@
       "owner": "httpie",
       "full_name": "httpie/cli",
       "description": "\ud83e\udd67 HTTPie CLI  \u2014 modern, user-friendly command-line HTTP client for the API era. JSON support, colors, sessions, downloads, plugins & more.",
-      "stars": 37574,
+      "stars": 37582,
       "html_url": "https://github.com/httpie/cli",
       "topics": [
         "api",
@@ -108,7 +108,7 @@
       "owner": "iawia002",
       "full_name": "iawia002/lux",
       "description": "\ud83d\udc7e Fast and simple video download library and CLI tool written in Go",
-      "stars": 30904,
+      "stars": 30906,
       "html_url": "https://github.com/iawia002/lux",
       "topics": [
         "bilibili",
@@ -131,7 +131,7 @@
       "owner": "hehonghui",
       "full_name": "hehonghui/awesome-english-ebooks",
       "description": "\u7ecf\u6d4e\u5b66\u4eba(\u542b\u97f3\u9891)\u3001\u7ebd\u7ea6\u5ba2\u3001\u536b\u62a5\u3001\u8fde\u7ebf\u3001\u5927\u897f\u6d0b\u6708\u520a\u7b49\u82f1\u8bed\u6742\u5fd7\u514d\u8d39\u4e0b\u8f7d,\u652f\u6301epub\u3001mobi\u3001pdf\u683c\u5f0f, \u6bcf\u5468\u66f4\u65b0",
-      "stars": 29116,
+      "stars": 29140,
       "html_url": "https://github.com/hehonghui/awesome-english-ebooks",
       "topics": [
         "download",
@@ -147,7 +147,7 @@
       "owner": "KurtBestor",
       "full_name": "KurtBestor/Hitomi-Downloader",
       "description": ":cake: Desktop utility to download images/videos/music/text from various websites, and more.",
-      "stars": 27465,
+      "stars": 27479,
       "html_url": "https://github.com/KurtBestor/Hitomi-Downloader",
       "topics": [
         "bilibili",
@@ -172,7 +172,7 @@
       "owner": "spotDL",
       "full_name": "spotDL/spotify-downloader",
       "description": "Download your Spotify playlists and songs along with album art and metadata (from YouTube if a match is found).",
-      "stars": 23975,
+      "stars": 23999,
       "html_url": "https://github.com/spotDL/spotify-downloader",
       "topics": [
         "download-music",
@@ -194,7 +194,7 @@
       "owner": "GopeedLab",
       "full_name": "GopeedLab/gopeed",
       "description": "A modern download manager that supports all platforms.  Built with Golang and Flutter.",
-      "stars": 22738,
+      "stars": 22755,
       "html_url": "https://github.com/GopeedLab/gopeed",
       "topics": [
         "android",

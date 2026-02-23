@@ -212,14 +212,41 @@ async def analyse_behavior(
     """
     import asyncio
 
-    # Gather commits for the deep-analysed repos
+    # Gather commits for the deep-analysed repos — from ALL branches
     all_commits: List[Dict[str, Any]] = []
+    repo_owner_map: Dict[str, str] = {}  # repo_name -> owner_login
     for repo in repos:
         owner = repo.get("owner", {})
         owner_login = owner.get("login", owner) if isinstance(owner, dict) else str(owner)
         repo_name = repo.get("name", "")
-        commits = await client.get_repo_commits(owner_login, repo_name, username)
+        repo_owner_map[repo_name] = owner_login
+        commits = await client.get_repo_commits_all_branches(owner_login, repo_name, username)
+        # Tag each commit with its repo for the detail-fetch step
+        for c in commits:
+            c["_repo_name"] = repo_name
         all_commits.extend(commits)
+
+    # ── Enrich commits with file details ────────────────────────
+    # The list-commits endpoint does NOT include files[].
+    # Fetch individual commit details (capped at 30 to limit API calls).
+    MAX_DETAIL_FETCHES = 30
+    commits_to_enrich = all_commits[:MAX_DETAIL_FETCHES]
+
+    async def _enrich_commit(c: Dict[str, Any]) -> None:
+        sha = c.get("sha", "")
+        rname = c.get("_repo_name", "")
+        oname = repo_owner_map.get(rname, "")
+        if not sha or not rname or not oname:
+            return
+        detail = await client.get_commit_detail(oname, rname, sha)
+        if detail and "files" in detail:
+            c["files"] = detail["files"]
+
+    if commits_to_enrich:
+        await asyncio.gather(
+            *[_enrich_commit(c) for c in commits_to_enrich],
+            return_exceptions=True,
+        )
 
     stats = _extract_commit_stats(all_commits)
 

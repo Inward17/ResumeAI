@@ -8,6 +8,7 @@ import asyncio
 import json
 import sys
 import os
+import time
 import logging
 
 # Add project root to path
@@ -18,7 +19,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dotenv import load_dotenv
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
+# Only show our service logs at WARNING+ to suppress httpx/model noise
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s | %(name)s | %(message)s")
+# But keep our service at INFO
+logging.getLogger("services.github_services").setLevel(logging.INFO)
 
 from services.github_services import verify_github
 
@@ -34,6 +38,8 @@ def pretty(obj) -> str:
 
 
 async def main():
+    overall_start = time.perf_counter()
+
     # ===========================================================
     # TEST CASE 1 -- octocat: GitHub username only, NO projects
     # ===========================================================
@@ -47,7 +53,11 @@ async def main():
         "projects": [],
     }
 
+    t1_start = time.perf_counter()
     result1 = await verify_github(candidate_id="SIM-001", parsed_resume=resume_octocat)
+    t1_elapsed = time.perf_counter() - t1_start
+    print(f"[TIMING] TC1 elapsed: {t1_elapsed:.2f}s")
+    print()
 
     print(f"Success:          {result1.success}")
     print(f"Username:         {result1.username}")
@@ -106,7 +116,11 @@ async def main():
         ],
     }
 
+    t2_start = time.perf_counter()
     result2 = await verify_github(candidate_id="SIM-002", parsed_resume=resume_poppz07)
+    t2_elapsed = time.perf_counter() - t2_start
+    print(f"[TIMING] TC2 elapsed: {t2_elapsed:.2f}s")
+    print()
 
     print(f"Success:          {result2.success}")
     print(f"Username:         {result2.username}")
@@ -160,8 +174,11 @@ async def main():
     print(pretty(result2))
 
     print()
+    overall_elapsed = time.perf_counter() - overall_start
     print("=" * 70)
-    print("SIMULATION COMPLETE")
+    print(f"SIMULATION COMPLETE  (total: {overall_elapsed:.2f}s)")
+    print(f"  TC1 octocat: {t1_elapsed:.2f}s")
+    print(f"  TC2 POPPz07: {t2_elapsed:.2f}s")
     print("=" * 70)
 
 

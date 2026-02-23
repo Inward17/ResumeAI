@@ -180,15 +180,87 @@ class GitHubClient:
         repo: str,
         username: str,
         max_commits: int = 100,
+        branch: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Fetch commits by *username* in *owner/repo* (single page)."""
+        """Fetch commits by *username* in *owner/repo* (single page, single branch)."""
+        params: Dict[str, Any] = {"author": username, "per_page": max_commits}
+        if branch:
+            params["sha"] = branch
         resp = await self._request(
             "GET",
             f"/repos/{owner}/{repo}/commits",
-            params={"author": username, "per_page": max_commits},
+            params=params,
         )
         if resp is None:
             return []
+        return resp.json()
+
+    async def get_repo_branches(
+        self,
+        owner: str,
+        repo: str,
+    ) -> List[str]:
+        """List all branch names for *owner/repo*."""
+        resp = await self._request(
+            "GET",
+            f"/repos/{owner}/{repo}/branches",
+            params={"per_page": 100},
+        )
+        if resp is None:
+            return []
+        return [b.get("name", "") for b in resp.json() if b.get("name")]
+
+    async def get_repo_commits_all_branches(
+        self,
+        owner: str,
+        repo: str,
+        username: str,
+        max_commits_per_branch: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch commits by *username* across ALL branches, deduplicated by SHA.
+
+        1. List branches via ``get_repo_branches``.
+        2. Fetch commits per branch with ``?sha={branch}&author={username}``.
+        3. Deduplicate by commit SHA so merged commits aren't counted twice.
+        """
+        branches = await self.get_repo_branches(owner, repo)
+
+        if not branches:
+            # Fallback: fetch from default branch only
+            return await self.get_repo_commits(owner, repo, username, max_commits_per_branch)
+
+        seen_shas: set = set()
+        unique_commits: List[Dict[str, Any]] = []
+
+        for branch_name in branches:
+            commits = await self.get_repo_commits(
+                owner, repo, username, max_commits_per_branch, branch=branch_name,
+            )
+            for c in commits:
+                sha = c.get("sha", "")
+                if sha and sha not in seen_shas:
+                    seen_shas.add(sha)
+                    unique_commits.append(c)
+
+        return unique_commits
+
+    async def get_commit_detail(
+        self,
+        owner: str,
+        repo: str,
+        sha: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch full detail for a single commit (includes ``files[]``).
+
+        The list-commits endpoint does NOT include per-file changes.
+        This endpoint (``GET /repos/{owner}/{repo}/commits/{sha}``)
+        returns the full commit object with ``files``, ``stats``, etc.
+        """
+        resp = await self._request("GET", f"/repos/{owner}/{repo}/commits/{sha}")
+        if resp is None:
+            return None
         return resp.json()
 
     async def get_repo_tree(
