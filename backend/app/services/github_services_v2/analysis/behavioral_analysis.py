@@ -26,6 +26,7 @@ from ..config import (
     COMMIT_MESSAGE_LENGTH_CAP,
     FILE_DIVERSITY_HIGH,
     FILE_DIVERSITY_LOW,
+    MAX_COMMIT_DETAIL_FETCHES,
     OSS_HIGH_THRESHOLD,
     OSS_LOW_THRESHOLD,
 )
@@ -229,8 +230,7 @@ async def analyse_behavior(
     # ── Enrich commits with file details ────────────────────────
     # The list-commits endpoint does NOT include files[].
     # Fetch individual commit details (capped at 30 to limit API calls).
-    MAX_DETAIL_FETCHES = 30
-    commits_to_enrich = all_commits[:MAX_DETAIL_FETCHES]
+    commits_to_enrich = all_commits[:MAX_COMMIT_DETAIL_FETCHES]
 
     async def _enrich_commit(c: Dict[str, Any]) -> None:
         sha = c.get("sha", "")

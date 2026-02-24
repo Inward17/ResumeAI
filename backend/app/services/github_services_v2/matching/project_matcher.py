@@ -136,11 +136,14 @@ async def match_projects_to_repos(
     """
     claimed = len(projects)
     if claimed == 0:
+        # No projects in resume → skip signal entirely (return None, not 0.0)
+        # 0.0 would penalise candidates whose resume has no projects section,
+        # triggering a false red flag and a -20pt drag on the final score.
         return ResumeVerificationResult(
             projectsClaimed=0,
             projectsMatched=0,
             projectsNotFound=0,
-            resumeConsistency=0.0,
+            resumeConsistency=None,
         )
 
     matches: List[MatchedProject] = []

@@ -168,7 +168,8 @@ async def _run_unified_verification(candidate_id: str, job_id: str):
                 candidate_id=candidate_id,
                 github_username=github_username,
                 linkedin_url=linkedin_url,
-                profile_data=profile_data
+                profile_data=profile_data,
+                parsed_resume=parsed,  # ← pass full parsed resume for project→repo matching
             )
             
             # Update candidate with verification score

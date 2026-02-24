@@ -112,6 +112,7 @@ MIN_SIGNALS_FOR_CONFIDENCE: int = 3     # fewer → LOW regardless
 COMMIT_MESSAGE_LENGTH_CAP: int = 40  # avg ≥ 40 chars → sub-signal = 1.0
 FILE_DIVERSITY_HIGH: float = 0.5     # ≥ 0.5 → 1.0
 FILE_DIVERSITY_LOW: float = 0.1      # ≤ 0.1 → 0.0
+MAX_COMMIT_DETAIL_FETCHES: int = 30  # max commits enriched with per-file details (caps GitHub API calls)
 
 
 # ═══════════════════════════════════════════════════════════════════

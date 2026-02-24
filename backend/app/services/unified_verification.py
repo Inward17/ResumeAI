@@ -78,7 +78,8 @@ class UnifiedVerificationService:
         candidate_id: str,
         github_username: Optional[str] = None,
         linkedin_url: Optional[str] = None,
-        profile_data: Optional[dict] = None
+        profile_data: Optional[dict] = None,
+        parsed_resume: Optional[dict] = None,
     ) -> VerificationDataModel:
         """
         Run all verifications concurrently and store results.
@@ -98,7 +99,9 @@ class UnifiedVerificationService:
         task_names = []
         
         if github_username:
-            tasks.append(self._verify_github(candidate_id, github_username, profile_data))
+            # Pass the full parsed resume (not just the web-search stub)
+            # so that projects reach the resume→repo matching stage.
+            tasks.append(self._verify_github(candidate_id, github_username, parsed_resume))
             task_names.append("github")
         else:
             self.cache.set(candidate_id, "github", None)
