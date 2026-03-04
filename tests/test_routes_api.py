@@ -9,9 +9,11 @@ from unittest.mock import patch, MagicMock, AsyncMock
 # GitHub routes tests
 # ============================================================================
 class TestGitHubRoutes:
-    @patch("app.routes.github_routes.github_service")
-    async def test_analyze_github_post_success(self, mock_service, client):
-        mock_service.analyze_github_profile.return_value = {
+    @patch("app.routes.github_routes.verify_github", new_callable=AsyncMock)
+    async def test_analyze_github_post_success(self, mock_verify, client):
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.to_mongo_dict.return_value = {
             "success": True,
             "username": "testuser",
             "score": 85.0,
@@ -23,6 +25,7 @@ class TestGitHubRoutes:
             "readmeStats": {"repos_with_readme": 8},
             "githubData": None,
         }
+        mock_verify.return_value = mock_result
 
         resp = await client.post(
             "/api/v1/github/analyze",
@@ -33,14 +36,12 @@ class TestGitHubRoutes:
         assert data["success"] is True
         assert data["score"] == 85.0
 
-    @patch("app.routes.github_routes.github_service")
-    async def test_analyze_github_user_not_found(self, mock_service, client):
-        mock_service.analyze_github_profile.return_value = {
-            "success": False,
-            "error": "No repositories found for user 'nonexistent'",
-            "score": 0,
-            "redFlags": ["No repositories found"],
-        }
+    @patch("app.routes.github_routes.verify_github", new_callable=AsyncMock)
+    async def test_analyze_github_user_not_found(self, mock_verify, client):
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.error = "No repositories found for user 'nonexistent'"
+        mock_verify.return_value = mock_result
 
         resp = await client.post(
             "/api/v1/github/analyze",
@@ -48,9 +49,11 @@ class TestGitHubRoutes:
         )
         assert resp.status_code == 400
 
-    @patch("app.routes.github_routes.github_service")
-    async def test_analyze_github_get(self, mock_service, client):
-        mock_service.analyze_github_profile.return_value = {
+    @patch("app.routes.github_routes.verify_github", new_callable=AsyncMock)
+    async def test_analyze_github_get(self, mock_verify, client):
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.to_mongo_dict.return_value = {
             "success": True,
             "username": "testuser",
             "score": 70.0,
@@ -62,15 +65,18 @@ class TestGitHubRoutes:
             "readmeStats": {},
             "githubData": None,
         }
+        mock_verify.return_value = mock_result
 
         resp = await client.get("/api/v1/github/analyze/testuser")
         assert resp.status_code == 200
 
-    @patch("app.routes.github_routes.github_service")
-    async def test_rate_limit(self, mock_service, client):
-        mock_service.get_rate_limit_status.return_value = {
-            "rate": {"remaining": 4999, "limit": 5000}
-        }
+    @patch("httpx.AsyncClient.get", new_callable=AsyncMock)
+    async def test_rate_limit(self, mock_get, client):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"rate": {"remaining": 4999, "limit": 5000}}
+        mock_get.return_value = mock_response
+
         resp = await client.get("/api/v1/github/rate-limit")
         assert resp.status_code == 200
         assert resp.json()["rate"]["remaining"] == 4999

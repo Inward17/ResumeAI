@@ -1,0 +1,389 @@
+# ResumeAI — System Architecture Report
+> For developers onboarding to the project. Covers file purposes, call chains, orchestration layers, ML models, and the full data flow.
+
+---
+
+## Table of Contents
+1. [Tech Stack](#1-tech-stack)
+2. [Repository Layout](#2-repository-layout)
+3. [Entry Points & API Layer](#3-entry-points--api-layer)
+4. [Orchestration: Two-Layer Architecture](#4-orchestration-two-layer-architecture)
+5. [ML Models & Algorithms](#5-ml-models--algorithms)
+6. [File-by-File Reference](#6-file-by-file-reference)
+7. [Full Call Chain Diagram](#7-full-call-chain-diagram)
+8. [Key Design Decisions](#8-key-design-decisions)
+
+---
+
+## 1. Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **API Framework** | FastAPI (Python) |
+| **Database** | MongoDB (via `motor` — async driver) |
+| **Async Runtime** | Python `asyncio` |
+| **LLM (Primary)** | Google Gemini 2.0 Flash / Gemini 2.5 Flash |
+| **LLM (Fallback)** | Groq (OpenAI-compatible API) |
+| **LLM HTTP Client** | `httpx` (raw REST calls — no SDK) |
+| **Code Embeddings** | CodeBERT (`microsoft/codebert-base`) via HuggingFace |
+| **Text Embeddings** | BGE-Large (`BAAI/bge-large-en`) for project matching |
+| **General Embeddings** | `all-MiniLM-L6-v2` via FastEmbed (384-dim) |
+| **Resume Parsing** | [langextract](file:///e:/beproject/ResumeAI-1/backend/server.py#205-215) library + Gemini 2.5 Flash |
+| **Fuzzy Matching** | `rapidfuzz` |
+| **GitHub API** | Direct REST via `httpx` (GitHub Trees API, etc.) |
+| **Frontend** | React (Create React App + CRACO config) |
+| **Orchestration** | Pure Python `asyncio` — **no LangChain/LangGraph** |
+
+> [!IMPORTANT]
+> The system does NOT use LangChain, LangGraph, CrewAI, or any agent framework. All orchestration is hand-rolled using Python's `asyncio.gather()`.
+
+---
+
+## 2. Repository Layout
+
+```
+ResumeAI-1/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                         ← FastAPI app factory, router registration
+│   │   ├── database.py                     ← MongoDB motor client singleton
+│   │   ├── routes/                         ← HTTP route handlers (thin controllers)
+│   │   │   ├── resume.py
+│   │   │   ├── github_routes.py
+│   │   │   ├── unified_verification_routes.py
+│   │   │   ├── job_routes.py
+│   │   │   ├── linkedin.py
+│   │   │   ├── search_routes.py
+│   │   │   └── verification.py
+│   │   ├── services/                       ← All business logic lives here
+│   │   │   ├── unified_verification.py     ← TOP-LEVEL ORCHESTRATOR
+│   │   │   ├── verifier.py                 ← LinkedIn/web entity verifier
+│   │   │   ├── embedding_service.py        ← General-purpose embeddings
+│   │   │   ├── jd_matching_service.py      ← Job description matching
+│   │   │   ├── parser.py                   ← Resume text → structured JSON
+│   │   │   ├── search.py                   ← Web search queries
+│   │   │   ├── linkedinScraper.py          ← LinkedIn scraper
+│   │   │   ├── github_services/            ← Legacy GitHub service (v1)
+│   │   │   └── github_services_v2/         ← Active GitHub verification pipeline
+│   │   │       ├── github_service.py       ← GITHUB ORCHESTRATOR (15-step pipeline)
+│   │   │       ├── github_client.py        ← All GitHub REST API calls
+│   │   │       ├── config.py               ← All constants, thresholds, weights
+│   │   │       ├── models.py               ← Pydantic models for GitHub data
+│   │   │       ├── analysis/
+│   │   │       │   ├── code_similarity.py  ← CodeBERT clone detection
+│   │   │       │   ├── behavioral_analysis.py ← Commit pattern analysis
+│   │   │       │   └── readme_similarity.py   ← README plagiarism detection
+│   │   │       ├── matching/
+│   │   │       │   └── project_matcher.py  ← Resume ↔ Repo matching (3-stage)
+│   │   │       ├── scoring/
+│   │   │       │   └── signal_fusion.py    ← Final score computation
+│   │   │       └── llm/
+│   │   │           └── llm_provider.py     ← Gemini → Groq LLM escalation
+│   │   ├── models/
+│   │   │   ├── verification_data_model.py  ← MongoDB verification schema
+│   │   │   └── github_writer.py            ← Writes GitHub results to MongoDB
+│   │   └── utils/
+│   │       ├── constants.py                ← App-wide constants
+│   │       ├── prompts.py                  ← LLM prompt templates
+│   │       ├── date_utils.py               ← Date parsing helpers
+│   │       ├── text_utils.py               ← Text cleaning helpers
+│   │       └── file_utils.py               ← File reading helpers
+│   ├── server.py                           ← Alternate monolithic entry (legacy)
+│   └── resume_parser.py                    ← Standalone parser script
+├── frontend/                               ← React app
+└── tests/                                  ← Test suites
+```
+
+---
+
+## 3. Entry Points & API Layer
+
+### [app/main.py](file:///e:/beproject/ResumeAI-1/backend/app/main.py) — FastAPI App Factory
+**Who calls it**: `uvicorn` starts this file.
+
+Registers all routers under `/api/v1`:
+
+| Router File | Prefix | Purpose |
+|---|---|---|
+| [routes/resume.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/resume.py) | `/api/v1` | Upload resumes, trigger background parsing |
+| [routes/github_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/github_routes.py) | `/api/v1` | Trigger GitHub verification |
+| [routes/unified_verification_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/unified_verification_routes.py) | `/api/v1` | Run full unified verification |
+| [routes/linkedin.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/linkedin.py) | `/api/v1` | LinkedIn scraping endpoint |
+| [routes/verification.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/verification.py) | `/api/v1` | LinkedIn entity verification |
+| [routes/search_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/search_routes.py) | *(root)* | Web search endpoint |
+| [routes/job_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/job_routes.py) | `/api` | Job description endpoints |
+
+> The routes are **thin controllers** — they validate inputs and immediately delegate to services. No ML logic lives in routes.
+
+### [server.py](file:///e:/beproject/ResumeAI-1/backend/server.py) — Legacy Monolithic Server
+An older, single-file server that duplicates some functionality. Contains its own resume parsing logic using [langextract](file:///e:/beproject/ResumeAI-1/backend/server.py#205-215). Still functional but the `app/` structure is the canonical, production path.
+
+---
+
+## 4. Orchestration: Two-Layer Architecture
+
+> [!NOTE]
+> There is no external orchestration framework. Two Python classes act as orchestrators using `asyncio`.
+
+### Layer 1 — Top-Level Orchestrator: [unified_verification.py](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py)
+
+**Class**: [UnifiedVerificationService](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py#68-465)  
+**Singleton export**: `unified_verification_service`  
+**Called by**: [routes/unified_verification_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/unified_verification_routes.py)
+
+This is the **master controller**. It fires all three verification sources **concurrently** using `asyncio.gather()`:
+
+```
+UnifiedVerificationService.run_unified_verification()
+        │
+        ├── asyncio.gather(
+        │       _verify_github(candidate_id, username, parsed_resume)
+        │       _verify_linkedin(candidate_id, linkedin_url)
+        │       _verify_web_search(candidate_id, profile_data)
+        │   )
+        │
+        ├── _build_and_persist(candidate_id)
+        │       └── _calculate_match_scores(github, linkedin, web)
+        │
+        └── _persist_to_db(verification_data)  → MongoDB
+```
+
+It also manages a **[VerificationCache](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py#33-66)** (in-memory dict) to temporarily store intermediate results from each concurrent branch before merging them into a final `VerificationDataModel`.
+
+---
+
+### Layer 2 — GitHub Orchestrator: [github_services_v2/github_service.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/github_service.py)
+
+**Public function**: [verify_github(candidate_id, parsed_resume)](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/github_service.py#48-82)  
+**Called by**: `UnifiedVerificationService._verify_github()`
+
+This runs a **sequential 15-step async pipeline**. The pipeline is failure-resilient — if any step throws, it is logged and execution continues with available data.
+
+```
+verify_github()
+    └── _run_pipeline()
+            Step 1:  Extract GitHub username from resume
+            Step 2:  Fetch all public repos (github_client.py)
+            Step 3:  Compute repo authenticity stats (_compute_repo_stats)
+            Step 4:  Calculate RepositoryAuthenticity score
+            Step 5:  Match resume projects → GitHub repos (project_matcher.py)
+            Step 6:  Select top repos for deep analysis (_select_deep_repos)
+            Step 7:  Fetch file trees for selected repos (github_client.py)
+            Step 8:  Run code clone detection (code_similarity.py / CodeBERT)
+            Step 9:  Run README plagiarism detection (readme_similarity.py)
+            Step 10: Run behavioral/commit analysis (behavioral_analysis.py)
+            Step 11: [LLM Escalation if needed] (llm_provider.py)
+            Step 12: Fuse all signals into final score (signal_fusion.py)
+            Step 13: Generate red flags (signal_fusion.py)
+            Step 14: Build GitHubVerificationResult
+            Step 15: Persist to MongoDB (github_writer.py)
+```
+
+---
+
+## 5. ML Models & Algorithms
+
+### 5.1 Resume Parsing — Gemini 2.5 Flash
+**File**: [services/parser.py](file:///e:/beproject/ResumeAI-1/backend/app/services/parser.py)  
+**How**: Sends resume text to Gemini via [langextract](file:///e:/beproject/ResumeAI-1/backend/server.py#205-215) + direct API. Extracts structured fields: name, email, skills, experience, education, projects, certifications, achievements.
+
+### 5.2 Project ↔ Repo Matching — 3-Stage Hierarchy
+**File**: [github_services_v2/matching/project_matcher.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/matching/project_matcher.py)  
+**Model**: `BAAI/bge-large-en` (1024-dim embeddings, lazy-loaded, CPU-only)
+
+Uses a 3-stage waterfall — faster stages run first, embedding only when needed:
+
+| Stage | Method | Threshold |
+|---|---|---|
+| **Stage 1** | Exact normalised string match | exact |
+| **Stage 2** | Fuzzy match via `rapidfuzz.token_set_ratio` | ≥ 85 |
+| **Stage 3** | BGE-large embedding cosine similarity | configurable |
+
+### 5.3 Code Clone Detection — CodeBERT
+**File**: [github_services_v2/analysis/code_similarity.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/analysis/code_similarity.py)  
+**Model**: `microsoft/codebert-base` (lazy-loaded, double-check locking)
+
+Pipeline:
+1. Fetch file tree from GitHub Trees API
+2. Filter by language extension, enforce size limits
+3. Normalise code (strip comments, licenses, trailing whitespace)
+4. Chunk code into segments
+5. Embed chunks with CodeBERT
+6. Compute cosine similarity between candidate repo and reference repos
+7. **If similarity is in the "suspicious" zone** (0.75–0.90): escalate to LLM
+
+Has an **LRU + disk embedding cache** (SHA256 key) to avoid re-embedding known code.
+
+### 5.4 LLM Escalation — Gemini → Groq Fallback
+**File**: [github_services_v2/llm/llm_provider.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/llm/llm_provider.py)
+
+Only invoked for **borderline plagiarism cases** (code similarity between `CODE_SIMILARITY_SUSPICIOUS` and `CODE_SIMILARITY_COPIED` thresholds).
+
+```
+escalate_to_llm()
+    └── _call_llm()
+            ├── Try: _call_gemini()  [gemini-2.0-flash via httpx REST]
+            │       Returns: { verdict, reasoning, confidence }
+            └── Fallback: _call_groq()  [Groq OpenAI-compatible API]
+                    Returns: { verdict, reasoning, confidence }
+```
+
+- Temperature = 0.0 (deterministic)
+- Hard timeout: 15 seconds
+- Returns structured JSON verdict: `ORIGINAL | SUSPICIOUS | COPIED`
+
+### 5.5 Signal Fusion Scoring — Weighted Average
+**File**: [github_services_v2/scoring/signal_fusion.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py)
+
+Combines all collected signals into a final authenticity score:
+
+```
+score = Σ(weight_i × signal_i)   for all available signals
+score100 = score × 100
+score40  = score100 × 0.4         (contribution to overall 40-point scale)
+```
+
+Signals include: `RepositoryAuthenticity`, `ResumeConsistency`, `CodeOriginality`, `ReadmeOriginality`, `BehavioralConsistency`.
+
+If a signal is unavailable, its weight is **dynamically redistributed** proportionally among the remaining signals.
+
+**Confidence** is computed from the standard deviation of available signal values:
+- std < 0.15 → `HIGH`
+- std ≤ 0.30 → `MEDIUM`
+- std > 0.30 or < 3 signals → `LOW`
+
+**Red flags** are rule-based (deterministic), NOT LLM-generated.
+
+### 5.6 General Embeddings — all-MiniLM-L6-v2
+**File**: [services/embedding_service.py](file:///e:/beproject/ResumeAI-1/backend/app/services/embedding_service.py)  
+**Library**: `fastembed`  
+**Dimensions**: 384
+
+Used for general text similarity (e.g., job description matching). Lazy-loaded singleton, ~80MB download on first use.
+
+### 5.7 LinkedIn/Web Entity Verification
+**File**: [services/verifier.py](file:///e:/beproject/ResumeAI-1/backend/app/services/verifier.py)
+
+- Generates name variations (abbreviations, permutations) for companies and universities
+- Performs web search via [services/search.py](file:///e:/beproject/ResumeAI-1/backend/app/services/search.py)
+- Scores results with `rapidfuzz` fuzzy matching + domain similarity
+- Returns a confidence score per entity
+
+---
+
+## 6. File-by-File Reference
+
+### Routes (`app/routes/`)
+
+| File | Endpoint(s) | Calls |
+|---|---|---|
+| [resume.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/resume.py) | `POST /resumes/upload` | Schedules [_bg_parse_and_store()](file:///e:/beproject/ResumeAI-1/backend/server.py#363-398) as a background task → [parser.py](file:///e:/beproject/ResumeAI-1/backend/resume_parser.py) |
+| [github_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/github_routes.py) | `POST /github/verify` | `github_service.verify_github()` |
+| [unified_verification_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/unified_verification_routes.py) | `POST /verify/unified` | `unified_verification_service.run_unified_verification()` |
+| [linkedin.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/linkedin.py) | `POST /linkedin/scrape` | [linkedinScraper.py](file:///e:/beproject/ResumeAI-1/backend/app/services/linkedinScraper.py) |
+| [verification.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/verification.py) | `POST /verify/profile` | `verifier.verify_profile()` |
+| [search_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/search_routes.py) | `GET /search` | `search.search_web()` |
+| [job_routes.py](file:///e:/beproject/ResumeAI-1/backend/app/routes/job_routes.py) | `POST /jobs/match` | [jd_matching_service.py](file:///e:/beproject/ResumeAI-1/backend/app/services/jd_matching_service.py) |
+
+### Services (`app/services/`)
+
+| File | Purpose | Key Functions |
+|---|---|---|
+| [unified_verification.py](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py) | **Master orchestrator** — runs all 3 verifications concurrently | [run_unified_verification()](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py#76-137), [_build_and_persist()](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py#199-408), [_calculate_match_scores()](file:///e:/beproject/ResumeAI-1/backend/app/services/unified_verification.py#409-455) |
+| [parser.py](file:///e:/beproject/ResumeAI-1/backend/resume_parser.py) | Resume text → structured JSON using Gemini 2.5 Flash + langextract | [parse_resume()](file:///e:/beproject/ResumeAI-1/backend/server.py#275-360) |
+| [verifier.py](file:///e:/beproject/ResumeAI-1/backend/app/services/verifier.py) | LinkedIn entity verification using web search + fuzzy matching | [verify_profile()](file:///e:/beproject/ResumeAI-1/backend/app/services/verifier.py#338-379), [verify_entity()](file:///e:/beproject/ResumeAI-1/backend/app/services/verifier.py#258-317), [score_result()](file:///e:/beproject/ResumeAI-1/backend/app/services/verifier.py#129-217) |
+| [embedding_service.py](file:///e:/beproject/ResumeAI-1/backend/app/services/embedding_service.py) | General-purpose text embeddings (384-dim, all-MiniLM-L6-v2) | [generate_embedding()](file:///e:/beproject/ResumeAI-1/backend/app/services/embedding_service.py#24-40), [cosine_similarity()](file:///e:/beproject/ResumeAI-1/backend/app/services/embedding_service.py#78-108) |
+| [jd_matching_service.py](file:///e:/beproject/ResumeAI-1/backend/app/services/jd_matching_service.py) | Match candidate to job descriptions by skill/experience | `match_jd()` |
+| [search.py](file:///e:/beproject/ResumeAI-1/backend/app/services/search.py) | Web search wrapper | `search_web()` |
+| [linkedinScraper.py](file:///e:/beproject/ResumeAI-1/backend/app/services/linkedinScraper.py) | Scrape LinkedIn profile data | `scrape_linkedin()` |
+
+### GitHub Services v2 (`github_services_v2/`)
+
+| File | Purpose | Key Functions |
+|---|---|---|
+| [github_service.py](file:///e:/beproject/ResumeAI-1/backend/test_github_service.py) | **GitHub orchestrator** — drives the 15-step pipeline | [verify_github()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/github_service.py#48-82), [_run_pipeline()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/github_service.py#84-244) |
+| [github_client.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services/github_client.py) | All raw GitHub REST API calls (repos, file trees, commits, READMEs) | `get_repos()`, `get_file_tree()`, `get_commit_log()` |
+| [config.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/config.py) | All thresholds, signal weights, model names, timeouts | Constants only — no functions |
+| [models.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/models.py) | Pydantic models: `GitHubVerificationResult`, `SignalScores`, `ResumeVerificationResult`, `AuthenticityResult` | Data classes |
+| [analysis/code_similarity.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/analysis/code_similarity.py) | CodeBERT clone detection | `analyse_code_similarity()` |
+| [analysis/behavioral_analysis.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/analysis/behavioral_analysis.py) | Commit timing, frequency, and message quality analysis | `analyse_behaviour()` |
+| [analysis/readme_similarity.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/analysis/readme_similarity.py) | README plagiarism detection | `analyse_readme_similarity()` |
+| [matching/project_matcher.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/matching/project_matcher.py) | 3-stage resume→repo matching (exact → fuzzy → BGE embedding) | [match_projects_to_repos()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/matching/project_matcher.py#123-171) |
+| [scoring/signal_fusion.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py) | Weighted signal aggregation into final score | [fuse_signals()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py#132-203), [generate_red_flags()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py#101-126), [compute_confidence()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py#75-95) |
+| [llm/llm_provider.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/llm/llm_provider.py) | LLM escalation for borderline plagiarism (Gemini → Groq) | [escalate_to_llm()](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/llm/llm_provider.py#65-111) |
+
+### Models & Utils
+
+| File | Purpose |
+|---|---|
+| [models/verification_data_model.py](file:///e:/beproject/ResumeAI-1/backend/app/models/verification_data_model.py) | MongoDB schema for the full verification document |
+| [models/github_writer.py](file:///e:/beproject/ResumeAI-1/backend/app/models/github_writer.py) | Writes GitHub verification results into MongoDB |
+| [utils/prompts.py](file:///e:/beproject/ResumeAI-1/backend/app/utils/prompts.py) | LLM prompt templates (kept separate from business logic) |
+| [utils/constants.py](file:///e:/beproject/ResumeAI-1/backend/app/utils/constants.py) | App-wide constants (not ML-specific) |
+| [utils/date_utils.py](file:///e:/beproject/ResumeAI-1/backend/app/utils/date_utils.py) | ISO date parsing, relative time helpers |
+| [utils/text_utils.py](file:///e:/beproject/ResumeAI-1/backend/app/utils/text_utils.py) | Text cleaning, normalisation |
+| [utils/file_utils.py](file:///e:/beproject/ResumeAI-1/backend/app/utils/file_utils.py) | PDF/DOCX reading helpers |
+
+---
+
+## 7. Full Call Chain Diagram
+
+```mermaid
+flowchart TD
+    Client([HTTP Client / Frontend])
+    Client -->|POST /api/v1/verify/unified| UVR[unified_verification_routes.py]
+
+    UVR --> UVS[UnifiedVerificationService\nunified_verification.py]
+
+    UVS -->|asyncio.gather| GH[_verify_github]
+    UVS -->|asyncio.gather| LI[_verify_linkedin]
+    UVS -->|asyncio.gather| WS[_verify_web_search]
+
+    GH --> GHS[github_service.py\nverify_github]
+    LI --> LS[linkedinScraper.py]
+    WS --> VF[verifier.py\nverify_profile]
+
+    GHS -->|Step 2| GHC[github_client.py\nFetch repos & file trees]
+    GHS -->|Step 5| PM[project_matcher.py\nBGE-Large embeddings]
+    GHS -->|Step 8| CS[code_similarity.py\nCodeBERT]
+    GHS -->|Step 9| RS[readme_similarity.py]
+    GHS -->|Step 10| BA[behavioral_analysis.py]
+    CS -->|If borderline| LLM[llm_provider.py\nGemini → Groq]
+    GHS -->|Step 12| SF[signal_fusion.py\nWeighted score]
+
+    VF --> SW[search.py\nWeb search]
+
+    GHS --> DB[(MongoDB)]
+    UVS --> DB
+
+    Client2([HTTP Client / Frontend])
+    Client2 -->|POST /api/v1/resumes/upload| RR[resume.py route]
+    RR -->|BackgroundTask| PR[parser.py\nGemini 2.5 Flash]
+    PR --> DB
+```
+
+---
+
+## 8. Key Design Decisions
+
+### No External Agent Framework
+Orchestration is done entirely with `asyncio` — no dependency on LangChain, LangGraph, or similar. This gives full control over timeouts, retries, and error handling and avoids framework version lock-in.
+
+### LLM is a Last Resort
+Gemini is only called in two scenarios:
+1. Resume text parsing (always needed)
+2. Code plagiarism — **only** when similarity falls in the ambiguous 0.75–0.90 range
+
+This keeps API costs low and makes the system predictable.
+
+### Failure Resilience
+The GitHub 15-step pipeline uses try/except around each step. A failure in one step (e.g., CodeBERT times out) does NOT abort the pipeline — the result is computed with available signals via dynamic weight redistribution in [signal_fusion.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py).
+
+### Lazy Model Loading
+All ML models (CodeBERT, BGE-large, MiniLM) are **lazy-loaded on first use** with `asyncio.Lock()` double-check locking to prevent race conditions when multiple requests arrive simultaneously. Models are singletons held in module-level globals.
+
+### Embedding Caching
+CodeBERT embeddings are cached in a **LRU in-memory cache + optional disk cache** keyed by `SHA256(code_text)`. This avoids re-embedding the same code files across repeated verification requests.
+
+### Dynamic Scoring
+Signal weights are not fixed when signals are missing. [signal_fusion.py](file:///e:/beproject/ResumeAI-1/backend/app/services/github_services_v2/scoring/signal_fusion.py) redistributes the missing signal's weight proportionally across remaining signals, so a partial verification (e.g., no README available) still produces a meaningful score.

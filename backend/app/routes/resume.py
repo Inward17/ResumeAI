@@ -3,13 +3,14 @@ import asyncio
 import uuid
 import random
 from bson import ObjectId
-from typing import List
+from typing import List, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, File, UploadFile, BackgroundTasks, HTTPException
 from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
 from app.utils.file_utils import read_file
+from app.services.skill_matching.pipeline import run_unified_skill_scoring
 
 
 # Global semaphore to limit concurrent resume parsing to 1 at a time
@@ -18,6 +19,100 @@ parsing_semaphore = asyncio.Semaphore(1)
 
 
 router = APIRouter(prefix="/jobs", tags=["resume"])
+
+
+def compute_skill_matches(
+    required_skills: List[str],
+    parsed: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Compute a stable 0–10 score for each required skill against the full
+    parsed resume.  Checks multiple sections with decreasing weights so the
+    score reflects *where* the skill appears, not just whether it exists.
+
+    Score table:
+      10 — exact match in skills section
+       8 — fuzzy match (≥85%) in skills section (handles "ReactJS" vs "React")
+       7 — exact match in experience text
+       6 — exact match in project descriptions / names
+       4 — fuzzy match (≥75%) anywhere in the resume
+       0 — not found
+
+    This function is pure and stateless — no DB or network access.
+    """
+    try:
+        from rapidfuzz import fuzz
+    except ImportError:
+        # Graceful degradation: binary scoring if rapidfuzz unavailable
+        fuzz = None
+
+    # ── Build searchable text from each resume section ───────────────────
+    raw_skills = parsed.get("skills", "") or ""
+    if isinstance(raw_skills, list):
+        raw_skills = ", ".join(raw_skills)
+    skills_text = raw_skills.lower()
+
+    exp_entries = parsed.get("experience", []) or []
+    if isinstance(exp_entries, list):
+        exp_text = " ".join(
+            str(e) if isinstance(e, str)
+            else f"{e.get('title','')} {e.get('company','')} {e.get('description','')}"
+            for e in exp_entries
+        ).lower()
+    else:
+        exp_text = str(exp_entries).lower()
+
+    proj_entries = parsed.get("projects", []) or []
+    if isinstance(proj_entries, list):
+        proj_text = " ".join(
+            f"{p.get('name','')} {p.get('description','')} {' '.join(p.get('technologies',[]) or [])}"
+            if isinstance(p, dict) else str(p)
+            for p in proj_entries
+        ).lower()
+    else:
+        proj_text = str(proj_entries).lower()
+
+    full_text = f"{skills_text} {exp_text} {proj_text}"
+
+    results = []
+    for skill in required_skills:
+        skill_lower = skill.lower()
+
+        # ── Priority 1: exact in skills section ──────────────────────────
+        if skill_lower in skills_text:
+            results.append({"skill": skill, "score": 10, "found": True,
+                            "match_location": "skills_section"})
+            continue
+
+        # ── Priority 2: fuzzy in skills section ──────────────────────────
+        if fuzz and fuzz.partial_ratio(skill_lower, skills_text) >= 85:
+            results.append({"skill": skill, "score": 8, "found": True,
+                            "match_location": "skills_section_fuzzy"})
+            continue
+
+        # ── Priority 3: exact in experience ──────────────────────────────
+        if skill_lower in exp_text:
+            results.append({"skill": skill, "score": 7, "found": True,
+                            "match_location": "experience"})
+            continue
+
+        # ── Priority 4: exact in projects ─────────────────────────────────
+        if skill_lower in proj_text:
+            results.append({"skill": skill, "score": 6, "found": True,
+                            "match_location": "projects"})
+            continue
+
+        # ── Priority 5: fuzzy anywhere ────────────────────────────────────
+        if fuzz and fuzz.partial_ratio(skill_lower, full_text) >= 75:
+            results.append({"skill": skill, "score": 4, "found": True,
+                            "match_location": "fuzzy_anywhere"})
+            continue
+
+        # ── Not found ────────────────────────────────────────────────────
+        results.append({"skill": skill, "score": 0, "found": False,
+                        "match_location": "not_found"})
+
+    return results
 
 RESUMES_DIR = os.getenv("RESUMES_DIR", "resumes")
 os.makedirs(RESUMES_DIR, exist_ok=True)
@@ -226,21 +321,35 @@ async def _create_application(candidate_id: str, job_id: str):
             if status.get("webCheck") == "verified":
                 verification_bonus += 5
         
-        # Get GitHub verification score from githubData (0-100 scale)
+        # Get GitHub verification score + github_v2_data for skill evidence
         github_verification_score = 0
+        github_v2_data: Dict[str, Any] = {}
         if verification and verification.get("githubData"):
-            github_verification_score = verification["githubData"].get("score", 0)
-        
-        # Calculate JD match score using vector similarity (0-5 marks)
-        from app.services.jd_matching_service import calculate_jd_match, save_evaluation
-        jd_match = await calculate_jd_match(candidate_id, job_id)
-        
-        # Save JD match evaluation to evaluations collection
-        await save_evaluation(candidate_id, job_id, jd_match)
-        
-        # Use real scores or mock if not available
+            github_data = verification["githubData"]
+            github_verification_score = github_data.get("score", 0)
+            github_v2_data = github_data.get("github_v2_data") or {}
+
+        # ── Load candidate resume + job requirements ───────────────────────
+        candidate_doc = await db.candidates.find_one({"candidate_id": candidate_id})
+        parsed_resume = candidate_doc.get("parsed", {}) if candidate_doc else {}
+        job_doc = await db.jobs.find_one({"_id": ObjectId(job_id)})
+        required_skills = job_doc.get("required_skills", []) if job_doc else []
+
+        # ── Unified skill evidence scoring (replaces three old pipelines) ──
+        #    - compute_skill_matches()          (keyword/fuzzy)
+        #    - ensure_github_projects_embedding()
+        #    - calculate_jd_match()             (document-level embedding)
+        scoring_result = await run_unified_skill_scoring(
+            required_skills=required_skills,
+            parsed=parsed_resume,
+            github_v2_data=github_v2_data,
+        )
+        skill_scores = scoring_result["skill_scores"]
+        jd_match_score = scoring_result["jd_match_score"]   # 0–10
+
+        # Use real verification credibility scores
         match_score = verification.get("matchScore", {}) if verification else {}
-        
+
         application_doc = {
             "candidate_id": candidate_id,
             "job_id": job_id,
@@ -248,23 +357,23 @@ async def _create_application(candidate_id: str, job_id: str):
             "status": "Under Review",
             "score_details": {
                 "overall_score": match_score.get("overallCredibility", random.randint(60, 90)),
-                "skills_match_score": github_verification_score,  # GitHub score (0-100)
+                "skills_match_score": github_verification_score,  # GitHub authenticity 0–100
                 "experience_match_score": match_score.get("experienceMatch", random.randint(20, 35)),
                 "verification_bonus": verification_bonus,
-                # JD match breakdown (vector similarity based)
-                "jd_match": {
-                    "resume_match": jd_match["resume_match"],       # 0-2 marks
-                    "github_match": jd_match["github_match"],       # 0-3 marks
-                    "total": jd_match["total"],                     # 0-5 marks
-                },
-                # Separate JD match total for easy access
-                "jd_match_score": jd_match["total"]  # 0-5 marks
+                # Unified JD match score (0–10) — replaces old resume_match/github_match split
+                "jd_match_score": jd_match_score,
+                # Per-skill evidence breakdown — computed once, stable forever
+                "skill_matches": skill_scores,
             },
             "recruiter_notes": ""
         }
-        
+
         await db.applications.insert_one(application_doc)
-        print(f"Created application for candidate {candidate_id} to job {job_id} with Skills: {github_verification_score}%, JD: {jd_match['total']}/5")
+        print(
+            f"Created application for candidate {candidate_id} to job {job_id} "
+            f"| GitHub: {github_verification_score}% | JD Match: {jd_match_score:.2f}/10"
+        )
+
         
     except Exception as e:
         print(f"Failed to create application for {candidate_id}: {e}")
@@ -360,27 +469,8 @@ async def get_job_candidates(job_id: str):
         # Get verification data for additional info
         verification = await db.verification_data.find_one({"candidateId": candidate_id})
         
-        # Get job for skills comparison
-        job = await db.jobs.find_one({"_id": ObjectId(job_id)})
-        required_skills = job.get("required_skills", []) if job else []
-        
-        # Calculate real skill matches
-        candidate_skills = parsed.get("skills", "")
-        if isinstance(candidate_skills, list):
-            candidate_skills = ", ".join(candidate_skills)
-        candidate_skills = candidate_skills.lower() if candidate_skills else ""
-        
-        skill_matches = []
-        for skill in required_skills:
-            skill_lower = skill.lower()
-            found = skill_lower in candidate_skills
-            # Simple scoring: 10 if found, 0 if not (can be improved with fuzzy match)
-            score = 10 if found else 0
-            skill_matches.append({
-                "skill": skill,
-                "score": score,
-                "found": found
-            })
+        # Read stored skill_matches from application document (computed at upload time)
+        skill_matches = app.get("score_details", {}).get("skill_matches", [])
 
         result.append({
             "candidate_id": candidate_id,

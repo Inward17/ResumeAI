@@ -149,9 +149,21 @@ class TestGetJobCandidates:
 class TestCreateApplication:
     async def test_create_with_verification_data(self, mock_db):
         from app.routes.resume import _create_application
+        from bson import ObjectId
 
         candidate_id = "cand-002"
+        job_id = "a" * 24  # valid 24-char hex ObjectId
 
+        # Insert candidate so db.candidates.find_one succeeds
+        await mock_db.candidates.insert_one({
+            "candidate_id": candidate_id,
+            "parsed": {"skills": "Python", "experience": [], "projects": []},
+        })
+        # Insert job so db.jobs.find_one succeeds
+        await mock_db.jobs.insert_one({
+            "_id": ObjectId(job_id),
+            "required_skills": ["Python"],
+        })
         # Insert verification data
         await mock_db.verification_data.insert_one({
             "candidateId": candidate_id,
@@ -167,20 +179,41 @@ class TestCreateApplication:
             },
         })
 
-        with patch("app.routes.resume.db", mock_db):
-            await _create_application(candidate_id, "job-456")
+        mock_scoring = {"skill_scores": [], "jd_match_score": 5.0}
+        with patch("app.routes.resume.db", mock_db), \
+             patch("app.routes.resume.run_unified_skill_scoring",
+                   new_callable=AsyncMock, return_value=mock_scoring):
+            await _create_application(candidate_id, job_id)
 
         app_doc = await mock_db.applications.find_one({"candidate_id": candidate_id})
         assert app_doc is not None
-        assert app_doc["job_id"] == "job-456"
+        assert app_doc["job_id"] == job_id
         assert app_doc["score_details"]["verification_bonus"] == 10  # github + linkedin
 
     async def test_create_without_verification_data(self, mock_db):
         from app.routes.resume import _create_application
+        from bson import ObjectId
 
-        with patch("app.routes.resume.db", mock_db):
-            await _create_application("cand-003", "job-789")
+        candidate_id = "cand-003"
+        job_id = "b" * 24  # valid 24-char hex ObjectId
 
-        app_doc = await mock_db.applications.find_one({"candidate_id": "cand-003"})
+        # Insert candidate + job so queries succeed
+        await mock_db.candidates.insert_one({
+            "candidate_id": candidate_id,
+            "parsed": {"skills": "", "experience": [], "projects": []},
+        })
+        await mock_db.jobs.insert_one({
+            "_id": ObjectId(job_id),
+            "required_skills": [],
+        })
+
+        mock_scoring = {"skill_scores": [], "jd_match_score": 0.0}
+        with patch("app.routes.resume.db", mock_db), \
+             patch("app.routes.resume.run_unified_skill_scoring",
+                   new_callable=AsyncMock, return_value=mock_scoring):
+            await _create_application(candidate_id, job_id)
+
+        app_doc = await mock_db.applications.find_one({"candidate_id": candidate_id})
         assert app_doc is not None
         assert app_doc["score_details"]["verification_bonus"] == 0
+

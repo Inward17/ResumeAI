@@ -7,6 +7,7 @@ Scoring Scheme:
 - GitHub Projects Match: 0-3 marks  
 - Total: 0-5 marks
 """
+import asyncio
 from typing import Dict, Optional
 from datetime import datetime
 from bson import ObjectId
@@ -155,3 +156,64 @@ async def get_evaluation(candidate_id: str, job_id: str) -> Optional[Dict]:
     except Exception as e:
         print(f"Error getting evaluation: {e}")
         return None
+
+
+async def ensure_github_projects_embedding(candidate_id: str) -> bool:
+    """
+    Guarantee that verification_data.githubData.projects_embedding is populated
+    for *candidate_id* before JD-match scoring runs.
+
+    Behaviour:
+      - Idempotent: if a non-zero embedding already exists, returns True immediately.
+      - Failure-safe: any error is logged; the caller continues uninterrupted.
+      - Single responsibility: only writes projects_embedding — nothing else.
+
+    Returns:
+        True  — embedding present (either pre-existing or freshly generated).
+        False — could not generate (no github data, empty text, or exception).
+    """
+    try:
+        from app.services.embedding_service import (
+            build_github_projects_text,
+            generate_embedding,
+        )
+
+        # ── 1. Read current verification document ──────────────────────────
+        verification = await db.verification_data.find_one({"candidateId": candidate_id})
+        if not verification:
+            print(f"[ensure_github_embedding] No verification_data for {candidate_id}")
+            return False
+
+        github_data = verification.get("githubData") or {}
+
+        # ── 2. Idempotency guard ────────────────────────────────────────────
+        existing = github_data.get("projects_embedding")
+        if existing and any(v != 0 for v in existing):
+            return True  # already computed — nothing to do
+
+        # ── 3. Extract text corpus from the stored v2 result ───────────────
+        github_v2_data = github_data.get("github_v2_data") or {}
+        text = build_github_projects_text(github_v2_data)
+        if not text.strip():
+            print(
+                f"[ensure_github_embedding] No usable github text for {candidate_id} "
+                f"(github_v2_data keys: {list(github_v2_data.keys())})"
+            )
+            return False
+
+        # ── 4. Generate embedding and persist ──────────────────────────────
+        embedding = await asyncio.to_thread(generate_embedding, text)
+
+        await db.verification_data.update_one(
+            {"candidateId": candidate_id},
+            {"$set": {"githubData.projects_embedding": embedding}},
+        )
+        print(
+            f"[ensure_github_embedding] Stored projects_embedding for {candidate_id} "
+            f"(text length: {len(text)} chars)"
+        )
+        return True
+
+    except Exception as exc:
+        print(f"[ensure_github_embedding] Non-fatal error for {candidate_id}: {exc}")
+        return False

@@ -56,13 +56,9 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
     webCheck: 'pending'
   };
 
-  // Generate skill matches from job requirements or use existing
-  // Generate skill matches from job requirements or use existing
-  const skillMatches = candidate.skill_matches || candidate.skillMatches || (job?.requirements || []).map(skill => ({
-    skill,
-    score: Math.floor(Math.random() * 4) + 6,
-    found: Math.random() > 0.2
-  }));
+  // Skill matches are computed once at upload time and stored in the DB.
+  // candidate.skillMatches is set by CandidateDetails.jsx transform (from score_details.skill_matches).
+  const skillMatches = candidate.skillMatches || candidate.skill_matches || [];
 
   const updateStatus = async (newStatus) => {
     try {
@@ -197,9 +193,12 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
                     <h4 className="font-medium text-slate-900 mb-2">Score Breakdown</h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                       <div>Overall: <span className="font-semibold">{candidate.scoreDetails.overall_score}%</span></div>
-                      <div>Skills: <span className="font-semibold">{candidate.scoreDetails.skills_match_score}%</span></div>
+                      <div>GitHub Score: <span className="font-semibold">{candidate.scoreDetails.skills_match_score}%</span></div>
                       <div>Experience: <span className="font-semibold">{candidate.scoreDetails.experience_match_score}%</span></div>
                       <div>Verification Bonus: <span className="font-semibold">+{candidate.scoreDetails.verification_bonus}</span></div>
+                      {candidate.scoreDetails.jd_match_score !== undefined && (
+                        <div className="col-span-2">JD Match: <span className="font-semibold">{candidate.scoreDetails.jd_match_score?.toFixed(1)}/10</span></div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -208,21 +207,21 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
 
             {/* Action Buttons */}
             <div className="flex space-x-3">
-              <Button 
+              <Button
                 onClick={() => updateStatus('Shortlisted')}
                 className="flex-1 bg-green-600 hover:bg-green-700 transition-colors duration-200"
               >
                 Shortlist
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => updateStatus('Rejected')}
                 className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
               >
                 Reject
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => updateStatus('On Hold')}
                 className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
               >
@@ -234,35 +233,114 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
           {/* Right Column */}
           <div className="lg:w-1/2 p-6 overflow-y-auto">
             {/* JD Match Breakdown */}
-            {skillMatches.length > 0 && (
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>JD Match Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {skillMatches.map((skill, index) => (
-                      <div key={index} className="flex justify-between items-center">
-                        <span className="text-sm font-medium text-slate-900">{skill.skill}</span>
-                        {skill.found ? (
-                          <div className="flex items-center space-x-2">
-                            <span className={`text-sm font-semibold ${getScoreColor(skill.score)}`}>
-                              {skill.score}/10
-                            </span>
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-2">
-                            <span className="text-sm text-slate-500">Not Found</span>
-                            <XCircle className="h-4 w-4 text-red-600" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>JD Match Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+
+                {/* ── Unified JD score header ── */}
+                <div className="flex justify-between items-center mb-1">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900">Unified JD Score</span>
+                    <p className="text-xs text-slate-400 mt-0.5">Evidence-weighted across skills, experience, projects &amp; GitHub</p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                  <span className={`text-2xl font-bold ${candidate.scoreDetails?.jd_match_score >= 7 ? 'text-green-600' :
+                      candidate.scoreDetails?.jd_match_score >= 4 ? 'text-amber-600' : 'text-red-500'
+                    }`}>
+                    {candidate.scoreDetails?.jd_match_score != null
+                      ? candidate.scoreDetails.jd_match_score.toFixed(1)
+                      : '—'}
+                    <span className="text-sm font-normal text-slate-400">/10</span>
+                  </span>
+                </div>
+
+                {/* ── Overall score bar ── */}
+                {candidate.scoreDetails?.jd_match_score != null && (
+                  <div className="w-full bg-slate-100 rounded-full h-1.5 mb-5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${candidate.scoreDetails.jd_match_score >= 7 ? 'bg-green-500' :
+                          candidate.scoreDetails.jd_match_score >= 4 ? 'bg-amber-500' : 'bg-red-500'
+                        }`}
+                      style={{ width: `${(candidate.scoreDetails.jd_match_score / 10) * 100}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* ── Per-skill evidence breakdown ── */}
+                {skillMatches.length > 0 ? (
+                  <div className="space-y-4 border-t border-slate-100 pt-4">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Required Skills</p>
+                    {skillMatches.map((skill, index) => {
+                      const ev = skill.evidence || {};
+                      const evidenceSources = [
+                        { key: 'github', label: 'GitHub' },
+                        { key: 'experience', label: 'Exp' },
+                        { key: 'projects', label: 'Projects' },
+                        { key: 'skills', label: 'Skills' },
+                      ];
+                      return (
+                        <div key={index} className="space-y-1.5">
+                          {/* Skill name + score */}
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm font-medium text-slate-900">{skill.skill}</span>
+                              {skill.canonical && skill.canonical !== skill.skill.toLowerCase() && (
+                                <span className="text-xs text-slate-400 italic">({skill.canonical})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-sm font-bold ${getScoreColor(skill.score)}`}>
+                                {typeof skill.score === 'number' ? skill.score.toFixed(1) : '—'}/10
+                              </span>
+                              {skill.found
+                                ? <CheckCircle className="h-4 w-4 text-green-600" />
+                                : <XCircle className="h-4 w-4 text-red-400" />}
+                            </div>
+                          </div>
+                          {/* Mini score bar */}
+                          <div className="w-full bg-slate-100 rounded-full h-1">
+                            <div
+                              className={`h-1 rounded-full transition-all ${skill.score >= 7 ? 'bg-green-500' :
+                                  skill.score >= 4 ? 'bg-amber-500' : 'bg-red-400'
+                                }`}
+                              style={{ width: `${Math.min((skill.score / 10) * 100, 100)}%` }}
+                            />
+                          </div>
+                          {/* Evidence source indicators */}
+                          {Object.keys(ev).length > 0 && (
+                            <div className="flex items-center space-x-3 pl-0.5">
+                              {evidenceSources.map(({ key, label }) => {
+                                const sim = ev[key];
+                                if (sim === undefined) return null;
+                                const strong = sim >= 0.55;
+                                const partial = sim >= 0.40;
+                                return (
+                                  <span
+                                    key={key}
+                                    className={`text-xs flex items-center space-x-0.5 ${strong ? 'text-green-600' : partial ? 'text-amber-500' : 'text-slate-300'
+                                      }`}
+                                    title={`${label}: ${(sim * 100).toFixed(0)}% similarity`}
+                                  >
+                                    <span>{strong ? '✓' : partial ? '~' : '✗'}</span>
+                                    <span>{label}</span>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 border-t border-slate-100 pt-4">
+                    Skill scores not yet available. Re-upload this resume to generate evidence scores.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
 
             {/* Profile Verification */}
             <Card>

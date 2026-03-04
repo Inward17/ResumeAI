@@ -105,3 +105,54 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     similarity = dot_product / (norm1 * norm2)
     # Normalize from [-1, 1] to [0, 1]
     return max(0.0, min(1.0, (similarity + 1) / 2))
+
+
+def build_github_projects_text(github_v2_data: dict) -> str:
+    """
+    Build a single text corpus from stored GitHub verification data,
+    suitable for passing to generate_embedding().
+
+    Pulls from (in priority order):
+      1. resumeVerification.matches  — names of repos matched to resume projects
+      2. repositoryStats             — language / originality signals
+      3. cloneAnalysis               — originality verdicts (as signal words)
+
+    Returns:
+        Concatenated text string, or "" if no usable data found.
+
+    This function is pure and stateless — it has no DB or network dependency.
+    """
+    if not github_v2_data or not isinstance(github_v2_data, dict):
+        return ""
+
+    parts: List[str] = []
+
+    # 1. Matched repo names (highest-value signal: these are confirmed projects)
+    resume_verification = github_v2_data.get("resumeVerification") or {}
+    matches = resume_verification.get("matches") or []
+    for m in matches:
+        if isinstance(m, dict):
+            repo_name = m.get("repoName", "")
+            project_name = m.get("projectName", "")
+            # Both the GitHub repo name and the claimed project name are useful
+            for token in (repo_name, project_name):
+                if token:
+                    # Convert hyphens/underscores to spaces for better tokenisation
+                    parts.append(token.replace("-", " ").replace("_", " "))
+
+    # 2. Repository stats — primary language inferred from the account
+    repo_stats = github_v2_data.get("repositoryStats") or {}
+    total = repo_stats.get("total", 0)
+    original = repo_stats.get("original", 0)
+    if total > 0:
+        parts.append(f"{original} original repositories")
+
+    # 3. Clone-analysis verdicts — lightweight originality signal
+    clone_analysis = github_v2_data.get("cloneAnalysis") or {}
+    for detail in clone_analysis.get("repoDetails") or []:
+        if isinstance(detail, dict) and not detail.get("skipped"):
+            repo = detail.get("repo", "")
+            if repo:
+                parts.append(repo.replace("-", " ").replace("_", " "))
+
+    return " ".join(parts)

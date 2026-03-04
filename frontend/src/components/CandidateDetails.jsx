@@ -35,12 +35,14 @@ const CandidateDetails = ({ job, onBack, onViewCandidate }) => {
           name: candidate.name || 'Unknown',
           email: candidate.email || '',
           phone: candidate.phone || '',
-          jdMatchScore: candidate.jd_match_score || candidate.score_details?.skills_match_score || 0,
+          jdMatchScore: Math.round((candidate.score_details?.jd_match_score / 10) * 100) || 0,
           verificationScore: candidate.verification_score || candidate.score_details?.overall_score || 0,
           status: candidate.status || 'Under Review',
           applicationDate: candidate.application_date,
           scoreDetails: candidate.score_details || {},
-          verificationStatus: candidate.verification_status
+          verificationStatus: candidate.verification_status,
+          // Stable per-skill scores stored in the DB at upload time
+          skillMatches: candidate.skill_matches || [],
         }));
 
         setCandidates(transformedCandidates);
@@ -162,8 +164,8 @@ const CandidateDetails = ({ job, onBack, onViewCandidate }) => {
             variant={statusFilter === status ? "default" : "outline"}
             onClick={() => setStatusFilter(status)}
             className={`transition-all duration-200 ${statusFilter === status
-                ? 'bg-blue-600 hover:bg-blue-700'
-                : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+              ? 'bg-blue-600 hover:bg-blue-700'
+              : 'border-slate-300 text-slate-700 hover:bg-slate-50'
               }`}
           >
             {status} ({statusCounts[status] || 0})
