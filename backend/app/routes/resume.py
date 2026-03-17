@@ -1,7 +1,6 @@
 import os
 import asyncio
 import uuid
-import random
 from bson import ObjectId
 from typing import List, Dict, Any
 from datetime import datetime
@@ -356,10 +355,15 @@ async def _create_application(candidate_id: str, job_id: str):
             "application_date": datetime.utcnow(),
             "status": "Under Review",
             "score_details": {
-                "overall_score": match_score.get("overallCredibility", random.randint(60, 90)),
+                # overall_score: real credibility when verified, 0 when not —
+                # never use random values so recruiters always see honest data.
+                "overall_score": match_score.get("overallCredibility", 0),
                 "skills_match_score": github_verification_score,  # GitHub authenticity 0–100
-                "experience_match_score": match_score.get("experienceMatch", random.randint(20, 35)),
+                # experience_match_score: 0 when web-search verification is unavailable
+                "experience_match_score": match_score.get("experienceMatch", 0),
                 "verification_bonus": verification_bonus,
+                # score_source: lets the frontend indicate whether scores are real or absent
+                "score_source": "verified" if match_score else "unverified",
                 # Unified JD match score (0–10) — replaces old resume_match/github_match split
                 "jd_match_score": jd_match_score,
                 # Per-skill evidence breakdown — computed once, stable forever

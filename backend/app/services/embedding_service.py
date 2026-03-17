@@ -103,8 +103,12 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
         return 0.0
     
     similarity = dot_product / (norm1 * norm2)
-    # Normalize from [-1, 1] to [0, 1]
-    return max(0.0, min(1.0, (similarity + 1) / 2))
+    # Clamp to [0, 1] — do NOT apply (similarity+1)/2 which compresses the
+    # range and inflates weak matches toward 0.5.
+    # MiniLM sentence embeddings produce cosine values in [0, 1] for
+    # semantically related text; negative values only appear for unrelated
+    # content and should simply become 0 (no evidence).
+    return max(0.0, min(1.0, similarity))
 
 
 def build_github_projects_text(github_v2_data: dict) -> str:

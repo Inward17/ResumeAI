@@ -1,11 +1,19 @@
 """
-JD Matching Service - Scores candidates against job requirements
-Uses vector embeddings and cosine similarity for semantic matching
+JD Matching Service
+===================
+⚠️  DEPRECATED — DO NOT IMPORT OR CALL.
 
-Scoring Scheme:
-- Resume Skills Match: 0-2 marks
-- GitHub Projects Match: 0-3 marks  
-- Total: 0-5 marks
+This module has been superseded by:
+    app.services.skill_matching.pipeline.run_unified_skill_scoring
+
+The three functions below (calculate_jd_match, save_evaluation, get_evaluation)
+and the `evaluations` MongoDB collection they write to are no longer used by any
+route, service, or frontend query.  This file is kept dormant for reference only.
+
+To avoid unnecessary DB reads/writes, do NOT import this module from anywhere.
+All scoring that was previously done here is now handled by the skill_matching
+pipeline which produces per-skill evidence scores (0–10) stored directly in
+applications.score_details.jd_match_score and applications.score_details.skill_matches.
 """
 import asyncio
 from typing import Dict, Optional
