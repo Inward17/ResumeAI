@@ -38,6 +38,7 @@ def mock_db():
 @pytest.fixture(autouse=True)
 def _patch_db(mock_db):
     """Auto-patch app.database.db and every module that imports db directly."""
+    import importlib
     from contextlib import ExitStack
 
     targets = [
@@ -48,9 +49,20 @@ def _patch_db(mock_db):
         "app.services.unified_verification.db",
     ]
 
+    # Pre-import every module so patch() can resolve the attribute
+    for target in targets:
+        module_path = target.rsplit(".", 1)[0]
+        try:
+            importlib.import_module(module_path)
+        except Exception:
+            pass  # Module may not be loadable — patch will skip
+
     with ExitStack() as stack:
         for target in targets:
-            stack.enter_context(patch(target, mock_db))
+            try:
+                stack.enter_context(patch(target, mock_db))
+            except (AttributeError, ModuleNotFoundError):
+                pass  # Skip modules that couldn't be imported
         yield
 
 
