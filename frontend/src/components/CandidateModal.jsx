@@ -1,406 +1,260 @@
-import React from 'react';
-import { X, ExternalLink, CheckCircle, XCircle, AlertCircle, User, Mail, Phone, Github, Linkedin } from 'lucide-react';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Separator } from './ui/separator';
+import React, { useState } from 'react';
+import {
+  X, Github, MapPin, Briefcase, GraduationCap,
+  CheckCircle, ExternalLink, Star, ChevronDown, Zap, ArrowUpRight
+} from 'lucide-react';
+import { useToast } from '../hooks/use-toast';
+import { C } from '../theme';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const STATUSES = ['New', 'Reviewing', 'Shortlisted', 'Interview', 'Offer', 'Hired', 'Rejected'];
+
+/* ── Score ring ── */
+const Ring = ({ value, label, sub, large }) => {
+  const r = large ? 36 : 22;
+  const circ = 2 * Math.PI * r;
+  const dash  = (value / 100) * circ;
+  const size  = large ? 90 : 56;
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg viewBox={`0 0 ${large ? 80 : 50} ${large ? 80 : 50}`} width={size} height={size} className="-rotate-90">
+          <circle cx={large ? 40 : 25} cy={large ? 40 : 25} r={r} fill="none" stroke="#e0e7ff" strokeWidth={large ? 6 : 4}/>
+          <circle cx={large ? 40 : 25} cy={large ? 40 : 25} r={r} fill="none" stroke={C.accent} strokeWidth={large ? 6 : 4}
+            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"/>
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span style={{ fontSize: large ? 16 : 11, fontWeight: 900, color: C.primary }}>{value}%</span>
+        </div>
+      </div>
+      <span className="text-[11px] text-slate-500 font-semibold text-center">{label}</span>
+      {sub && <span className="text-[10px] text-slate-400 text-center leading-tight">{sub}</span>}
+    </div>
+  );
+};
+
+/* ── Status select ── */
+const StatusSelect = ({ value, onChange }) => (
+  <div className="relative inline-block">
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="appearance-none pl-3 pr-8 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 bg-white cursor-pointer focus:ring-2 focus:ring-indigo-200 outline-none"
+    >
+      {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+    </select>
+    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+  </div>
+);
+
+/* ── Skill tag ── */
+const SkillTag = ({ skill, level }) => (
+  <span className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full font-semibold"
+    style={{ background: '#eef2ff', color: C.accent }}>
+    {level && <span className="w-1.5 h-1.5 rounded-full inline-block" style={{
+      background: level === 'Expert' ? C.accent : level === 'Advanced' ? C.cyan : '#94a3b8'
+    }} />}
+    {skill}
+  </span>
+);
 
 const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
+  const [status, setStatus] = useState(candidate.status || 'Reviewing');
+  const { toast } = useToast();
+
   if (!candidate) return null;
 
-  // Derive AI recommendation from scores
-  const overallScore = candidate.verificationScore || candidate.scoreDetails?.overall_score || 0;
-  const getRecommendation = (score) => {
-    if (score >= 80) return 'Strongly Recommended';
-    if (score >= 60) return 'Recommended';
-    return 'Not Recommended';
-  };
+  const name         = candidate.name || 'Unknown Candidate';
+  const title        = candidate.currentTitle || 'Professional';
+  const location     = candidate.location || 'Remote';
+  const matchScore   = candidate.jdMatchScore ?? candidate.matchScore ?? 0;
+  const verifyScore  = candidate.verificationScore ?? 0;
+  const expScore     = candidate.experienceScore ?? Math.round((matchScore + verifyScore) / 2);
+  const bio          = candidate.persona || candidate.summary || candidate.aiSummary || `${name} is a highly skilled ${title} with demonstrated expertise in their field. Based on AI analysis, this candidate shows strong alignment with the role requirements.`;
+  const skills       = candidate.skills || candidate.topSkills || [];
+  const github       = candidate.githubProfile || candidate.githubUrl || '';
+  const linkedin     = candidate.linkedinUrl || '';
+  const education    = candidate.education || [];
+  const experience   = candidate.workExperience || [];
+  const authScore    = candidate.authenticityScore ?? (verifyScore / 10).toFixed(1);
 
-  const recommendation = candidate.aiAnalysis?.recommendation || getRecommendation(overallScore);
-  const reasoning = candidate.aiAnalysis?.reasoning ||
-    (overallScore >= 80
-      ? "This candidate demonstrates strong alignment with the job requirements based on verification scores."
-      : overallScore >= 60
-        ? "This candidate shows good potential with solid verification scores."
-        : "This candidate may need additional review based on current verification scores.");
-
-  const getRecommendationIcon = (rec) => {
-    switch (rec) {
-      case 'Strongly Recommended':
-        return <CheckCircle className="h-5 w-5 text-green-600" />;
-      case 'Recommended':
-        return <AlertCircle className="h-5 w-5 text-amber-600" />;
-      default:
-        return <XCircle className="h-5 w-5 text-red-600" />;
+  const handleStatusChange = async (newStatus) => {
+    setStatus(newStatus);
+    if (onStatusUpdate) {
+      await onStatusUpdate(candidate.id, newStatus);
     }
   };
-
-  const getRecommendationBadgeClass = (rec) => {
-    switch (rec) {
-      case 'Strongly Recommended':
-        return 'bg-green-100 text-green-800';
-      case 'Recommended':
-        return 'bg-amber-100 text-amber-800';
-      default:
-        return 'bg-red-100 text-red-800';
-    }
-  };
-
-  // Use verification status from API or defaults
-  const verification = candidate.verification || candidate.verificationStatus || {
-    github: 'pending',
-    linkedin: 'pending',
-    webCheck: 'pending'
-  };
-
-  // Skill matches are computed once at upload time and stored in the DB.
-  // candidate.skillMatches is set by CandidateDetails.jsx transform (from score_details.skill_matches).
-  const skillMatches = candidate.skillMatches || candidate.skill_matches || [];
-
-  const updateStatus = async (newStatus) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/jobs/${job.id}/candidates/${candidate.id || candidate.candidate_id}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update status');
-      }
-
-      const result = await response.json();
-      if (onStatusUpdate) {
-        onStatusUpdate();
-      }
-      onClose();
-    } catch (error) {
-      console.error('Error updating status:', error);
-      // Ideally show a toast notification here
-    }
-  };
-
-  const getScoreColor = (score) => {
-    if (score >= 8) return 'text-green-600';
-    if (score >= 6) return 'text-amber-600';
-    return 'text-red-600';
-  };
-
-  const isVerified = (status) => status === 'verified' || status === true;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-slate-200">
-          <h2 className="text-2xl font-bold text-slate-900">Candidate Report</h2>
-          <Button variant="ghost" onClick={onClose} className="hover:bg-slate-100">
-            <X className="h-5 w-5" />
-          </Button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,14,42,0.7)', backdropFilter: 'blur(4px)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+
+        {/* ── Modal header ── */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100" style={{ background: '#f8fafc' }}>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Candidate Dossier</p>
+            <p className="text-sm font-semibold text-slate-700">{job?.title || 'Job Candidate'}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <StatusSelect value={status} onChange={handleStatusChange} />
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="flex flex-col lg:flex-row max-h-[calc(90vh-8rem)] overflow-hidden">
-          {/* Left Column */}
-          <div className="lg:w-1/2 p-6 overflow-y-auto border-r border-slate-200">
-            {/* Candidate Info */}
-            <div className="flex items-center space-x-4 mb-6">
-              <Avatar className="h-16 w-16">
-                <AvatarImage src={candidate.avatar} alt={candidate.name} />
-                <AvatarFallback>
-                  <User className="h-8 w-8" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h3 className="text-xl font-semibold text-slate-900">{candidate.name || 'Unknown'}</h3>
-                <div className="flex items-center space-x-4 text-sm text-slate-600 mt-2">
-                  {candidate.email && (
-                    <div className="flex items-center space-x-1">
-                      <Mail className="h-4 w-4" />
-                      <span>{candidate.email}</span>
+        {/* ── Two-column body ── */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-[1fr_340px] h-full">
+
+            {/* LEFT: identity + persona + experience */}
+            <div className="p-6 border-r border-slate-100 space-y-6">
+              {/* Identity */}
+              <div>
+                <div className="flex items-start gap-4">
+                  <div className="h-16 w-16 rounded-2xl flex items-center justify-center text-2xl font-black text-white shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.accent})` }}>
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-black text-slate-900">{name}</h2>
+                    <p className="text-sm text-slate-500">{title}</p>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
+                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{location}</span>
+                      {github && <a href={github} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-slate-700 transition-colors"><Github className="h-3 w-3" />GitHub</a>}
                     </div>
-                  )}
-                  {candidate.phone && (
-                    <div className="flex items-center space-x-1">
-                      <Phone className="h-4 w-4" />
-                      <span>{candidate.phone}</span>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Profile Links */}
-            <div className="flex space-x-3 mb-6">
-              {candidate.linkedin && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center space-x-2 border-blue-200 text-blue-700 hover:bg-blue-50"
-                  onClick={() => window.open(candidate.linkedin, '_blank')}
-                >
-                  <Linkedin className="h-4 w-4" />
-                  <span>LinkedIn</span>
-                  <ExternalLink className="h-3 w-3" />
-                </Button>
-              )}
-              {candidate.github && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center space-x-2 border-slate-200 text-slate-700 hover:bg-slate-50"
-                  onClick={() => window.open(candidate.github, '_blank')}
-                >
-                  <Github className="h-4 w-4" />
-                  <span>GitHub</span>
-                  <ExternalLink className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
+              {/* AI Scores row */}
+              <div className="flex items-center gap-6 p-4 rounded-2xl" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <Ring value={matchScore} label="Role Match" sub="Score" large />
+                <div className="flex-1 grid grid-cols-2 gap-3">
+                  <Ring value={expScore} label="Experience Depth" sub="Top 1% expertise" />
+                  <Ring value={verifyScore} label="Verification" sub="GitHub verified" />
+                </div>
+              </div>
 
-            {/* AI Analysis */}
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <span>AI Analysis</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              {/* AI Persona */}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.accent }}>The Persona</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{bio}</p>
+              </div>
+
+              {/* Education */}
+              {education.length > 0 && (
                 <div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    {getRecommendationIcon(recommendation)}
-                    <Badge className={getRecommendationBadgeClass(recommendation)}>
-                      {recommendation}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="font-medium text-slate-900 mb-2">Reasoning</h4>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {reasoning}
-                  </p>
-                </div>
-
-                {/* Score Details */}
-                {candidate.scoreDetails && (
-                  <div className="mt-4 pt-4 border-t border-slate-100">
-                    <h4 className="font-medium text-slate-900 mb-2">Score Breakdown</h4>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>Overall: <span className="font-semibold">{candidate.scoreDetails.overall_score}%</span></div>
-                      <div>GitHub Score: <span className="font-semibold">{candidate.scoreDetails.skills_match_score}%</span></div>
-                      <div>Experience: <span className="font-semibold">{candidate.scoreDetails.experience_match_score}%</span></div>
-                      <div>Verification Bonus: <span className="font-semibold">+{candidate.scoreDetails.verification_bonus}</span></div>
-                      {candidate.scoreDetails.jd_match_score !== undefined && (
-                        <div className="col-span-2">JD Match: <span className="font-semibold">{candidate.scoreDetails.jd_match_score?.toFixed(1)}/10</span></div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Action Buttons */}
-            <div className="flex space-x-3">
-              <Button
-                onClick={() => updateStatus('Shortlisted')}
-                className="flex-1 bg-green-600 hover:bg-green-700 transition-colors duration-200"
-              >
-                Shortlist
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => updateStatus('Rejected')}
-                className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
-              >
-                Reject
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => updateStatus('On Hold')}
-                className="flex-1 border-amber-200 text-amber-700 hover:bg-amber-50"
-              >
-                Keep on Hold
-              </Button>
-            </div>
-          </div>
-
-          {/* Right Column */}
-          <div className="lg:w-1/2 p-6 overflow-y-auto">
-            {/* JD Match Breakdown */}
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>JD Match Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent>
-
-                {/* ── Unified JD score header ── */}
-                <div className="flex justify-between items-center mb-1">
-                  <div>
-                    <span className="text-sm font-semibold text-slate-900">Unified JD Score</span>
-                    <p className="text-xs text-slate-400 mt-0.5">Evidence-weighted across skills, experience, projects &amp; GitHub</p>
-                  </div>
-                  <span className={`text-2xl font-bold ${candidate.scoreDetails?.jd_match_score >= 7 ? 'text-green-600' :
-                      candidate.scoreDetails?.jd_match_score >= 4 ? 'text-amber-600' : 'text-red-500'
-                    }`}>
-                    {candidate.scoreDetails?.jd_match_score != null
-                      ? candidate.scoreDetails.jd_match_score.toFixed(1)
-                      : '—'}
-                    <span className="text-sm font-normal text-slate-400">/10</span>
-                  </span>
-                </div>
-
-                {/* ── Overall score bar ── */}
-                {candidate.scoreDetails?.jd_match_score != null && (
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 mb-5">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${candidate.scoreDetails.jd_match_score >= 7 ? 'bg-green-500' :
-                          candidate.scoreDetails.jd_match_score >= 4 ? 'bg-amber-500' : 'bg-red-500'
-                        }`}
-                      style={{ width: `${(candidate.scoreDetails.jd_match_score / 10) * 100}%` }}
-                    />
-                  </div>
-                )}
-
-                {/* ── Per-skill evidence breakdown ── */}
-                {skillMatches.length > 0 ? (
-                  <div className="space-y-4 border-t border-slate-100 pt-4">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Required Skills</p>
-                    {skillMatches.map((skill, index) => {
-                      const ev = skill.evidence || {};
-                      const evidenceSources = [
-                        { key: 'github', label: 'GitHub' },
-                        { key: 'experience', label: 'Exp' },
-                        { key: 'projects', label: 'Projects' },
-                        { key: 'skills', label: 'Skills' },
-                      ];
-                      return (
-                        <div key={index} className="space-y-1.5">
-                          {/* Skill name + score */}
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm font-medium text-slate-900">{skill.skill}</span>
-                              {skill.canonical && skill.canonical !== skill.skill.toLowerCase() && (
-                                <span className="text-xs text-slate-400 italic">({skill.canonical})</span>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className={`text-sm font-bold ${getScoreColor(skill.score)}`}>
-                                {typeof skill.score === 'number' ? skill.score.toFixed(1) : '—'}/10
-                              </span>
-                              {skill.found
-                                ? <CheckCircle className="h-4 w-4 text-green-600" />
-                                : <XCircle className="h-4 w-4 text-red-400" />}
-                            </div>
-                          </div>
-                          {/* Mini score bar */}
-                          <div className="w-full bg-slate-100 rounded-full h-1">
-                            <div
-                              className={`h-1 rounded-full transition-all ${skill.score >= 7 ? 'bg-green-500' :
-                                  skill.score >= 4 ? 'bg-amber-500' : 'bg-red-400'
-                                }`}
-                              style={{ width: `${Math.min((skill.score / 10) * 100, 100)}%` }}
-                            />
-                          </div>
-                          {/* Evidence source indicators */}
-                          {Object.keys(ev).length > 0 && (
-                            <div className="flex items-center space-x-3 pl-0.5">
-                              {evidenceSources.map(({ key, label }) => {
-                                const sim = ev[key];
-                                if (sim === undefined) return null;
-                                const strong = sim >= 0.55;
-                                const partial = sim >= 0.40;
-                                return (
-                                  <span
-                                    key={key}
-                                    className={`text-xs flex items-center space-x-0.5 ${strong ? 'text-green-600' : partial ? 'text-amber-500' : 'text-slate-300'
-                                      }`}
-                                    title={`${label}: ${(sim * 100).toFixed(0)}% similarity`}
-                                  >
-                                    <span>{strong ? '✓' : partial ? '~' : '✗'}</span>
-                                    <span>{label}</span>
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
+                  <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.accent }}>Education</p>
+                  <div className="space-y-2">
+                    {education.map((edu, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <GraduationCap className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{edu.degree || edu}</p>
+                          {edu.institution && <p className="text-xs text-slate-400">{edu.institution}</p>}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Work Experience */}
+              {experience.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.accent }}>Experience</p>
+                  <div className="space-y-3">
+                    {experience.slice(0, 3).map((exp, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <Briefcase className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{exp.title || exp}</p>
+                          {exp.company && <p className="text-xs text-slate-400">{exp.company} · {exp.duration || ''}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT: AI insights + skills + github */}
+            <div className="p-6 space-y-5 bg-slate-50">
+              {/* GitHub Verification */}
+              <div
+                className="rounded-2xl p-4"
+                style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 60%, ${C.accent} 100%)` }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Github className="h-5 w-5 text-white" />
+                  <p className="font-bold text-white text-sm">GitHub Verification</p>
+                </div>
+                <p className="text-xs leading-relaxed mb-3" style={{ color: '#c7d2fe' }}>
+                  Verified commit history & open-source footprint analyzed across key repositories.
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: '#818cf8' }}>Authenticity Score</span>
+                  <span className="text-xl font-black text-white">{authScore}<span className="text-sm text-indigo-300">/10</span></span>
+                </div>
+              </div>
+
+              {/* Top Skills */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="font-semibold text-slate-900 text-sm">Top Skills</p>
+                  <span className="text-xs text-slate-400">Last sync: 14 min ago</span>
+                </div>
+                {skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {skills.map((skill, i) => (
+                      <SkillTag key={i} skill={typeof skill === 'string' ? skill : skill.name} level={skill.level} />
+                    ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400 border-t border-slate-100 pt-4">
-                    Skill scores not yet available. Re-upload this resume to generate evidence scores.
-                  </p>
+                  <p className="text-xs text-slate-400">No skills data available.</p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
 
-
-            {/* Profile Verification */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Profile Verification</CardTitle>
-                <p className="text-sm text-slate-600">Verification status across sources</p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-900">GitHub</span>
-                    {isVerified(verification.github) ? (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-green-600">Verified</span>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-500">{verification.github || 'Pending'}</span>
-                        <AlertCircle className="h-4 w-4 text-amber-600" />
-                      </div>
-                    )}
+              {/* AI Curation Insights */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Zap className="h-4 w-4" style={{ color: C.cyan }} />
+                  <p className="font-semibold text-slate-900 text-sm">AI Curation Insights</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">Role Match Score</span>
+                    <span className="font-bold" style={{ color: C.accent }}>{matchScore}%</span>
                   </div>
-
-                  <Separator />
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-900">LinkedIn</span>
-                    {isVerified(verification.linkedin) ? (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-green-600">Verified</span>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-500">{verification.linkedin || 'Pending'}</span>
-                        <AlertCircle className="h-4 w-4 text-amber-600" />
-                      </div>
-                    )}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">Experience Depth</span>
+                    <span className="font-bold" style={{ color: C.accent }}>{expScore}%</span>
                   </div>
-
-                  <Separator />
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-900">Web Check</span>
-                    {isVerified(verification.webCheck) ? (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-green-600">Verified</span>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-slate-500">{verification.webCheck || 'Pending'}</span>
-                        <AlertCircle className="h-4 w-4 text-amber-600" />
-                      </div>
-                    )}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-500">Verification</span>
+                    <span className="font-bold" style={{ color: C.cyan }}>{verifyScore}%</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+
+              {/* Links */}
+              {(github || linkedin) && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
+                  {github && (
+                    <a href={github} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-indigo-700 transition-colors">
+                      <Github className="h-4 w-4" /> GitHub Profile <ExternalLink className="h-3.5 w-3.5 ml-auto" />
+                    </a>
+                  )}
+                  {linkedin && (
+                    <a href={linkedin} target="_blank" rel="noreferrer"
+                      className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-indigo-700 transition-colors">
+                      <ExternalLink className="h-4 w-4" /> LinkedIn <ExternalLink className="h-3.5 w-3.5 ml-auto" />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

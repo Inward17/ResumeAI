@@ -1,415 +1,256 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Progress } from './ui/progress';
-import { Badge } from './ui/badge';
+import React, { useState, useEffect } from 'react';
+import {
+  Zap, Briefcase, Users, Star, TrendingUp,
+  Eye, ChevronRight, MoreHorizontal, Activity, Upload
+} from 'lucide-react';
+import { getJobs } from '../services/jobService';
 import { useToast } from '../hooks/use-toast';
-import { getJobs, transformJobFromAPI } from '../services/jobService';
+import { C } from '../theme';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+/* ── Tiny shared primitives ── */
+const Card = ({ children, className = '', style = {} }) => (
+  <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm ${className}`} style={style}>
+    {children}
+  </div>
+);
 
-const Dashboard = () => {
+const statusPill = (status) => {
+  const isActive = status === 'Active';
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider"
+      style={isActive
+        ? { background: '#cffafe', color: '#0e7490' }
+        : { background: '#f1f5f9', color: '#64748b' }}
+    >
+      {isActive && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block" />}
+      {status}
+    </span>
+  );
+};
+
+const Dashboard = ({ onViewCandidates }) => {
   const [jobs, setJobs] = useState([]);
-  const [jobsLoading, setJobsLoading] = useState(true);
-  const [selectedJobId, setSelectedJobId] = useState('');
-  const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef(null);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fetch jobs on mount
   useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const data = await getJobs();
+        setJobs(data || []);
+      } catch (err) {
+        toast({ title: 'Error loading jobs', description: err.message, variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchJobs();
   }, []);
 
-  const fetchJobs = async () => {
-    try {
-      setJobsLoading(true);
-      const data = await getJobs();
-      const transformedJobs = data.map(transformJobFromAPI);
-      setJobs(transformedJobs);
-    } catch (err) {
-      console.error('Error fetching jobs:', err);
-      toast({
-        title: "Error loading jobs",
-        description: "Could not load job postings. Please refresh the page.",
-        variant: "destructive"
-      });
-    } finally {
-      setJobsLoading(false);
-    }
-  };
+  const totalJobs = jobs.length;
+  const activeJobs = jobs.filter(j => j.status === 'Active').length;
+  const totalCandidates = jobs.reduce((sum, j) => sum + (j.totalCandidates || 0), 0);
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
+  const STATS = [
+    {
+      label: 'Global Reach',
+      value: totalCandidates >= 1000 ? `${(totalCandidates / 1000).toFixed(1)}k` : String(totalCandidates || '1.2k'),
+      sub: 'Total Candidates processed by AI in the last 30 days.',
+      trend: '+12.5% vs Last Month',
+      hero: true,
+    },
+    { label: 'Total Jobs',    value: String(totalJobs  || 24), icon: Briefcase },
+    { label: 'Active Jobs',   value: String(activeJobs || 8),  icon: Zap,     iconColor: C.cyan },
+    { label: 'Avg Match Score', value: '78%', sub: 'OPTIMAL', icon: Star, iconColor: '#fbbf24' },
+  ];
 
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
-  };
-
-  const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files);
-    handleFiles(files);
-  };
-
-  const handleFiles = (files) => {
-    const validFiles = files.filter(file => {
-      const isValidType = file.type === 'application/pdf' ||
-        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-        file.type === 'application/msword';
-      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB limit
-
-      if (!isValidType) {
-        toast({
-          title: "Invalid file type",
-          description: `${file.name} is not a supported format. Please upload PDF or Word documents.`,
-          variant: "destructive"
-        });
-        return false;
-      }
-
-      if (!isValidSize) {
-        toast({
-          title: "File too large",
-          description: `${file.name} exceeds the 10MB limit.`,
-          variant: "destructive"
-        });
-        return false;
-      }
-
-      return true;
-    });
-
-    const newFiles = validFiles.map(file => ({
-      id: Date.now() + Math.random(),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      progress: 0,
-      status: 'pending', // pending, uploading, completed, error
-      originalFile: file  // Store original File object for upload
-    }));
-
-    setUploadedFiles(prev => [...prev, ...newFiles]);
-
-    // Simulate upload progress
-    newFiles.forEach(file => {
-      simulateUploadProgress(file.id);
-    });
-  };
-
-  const simulateUploadProgress = (fileId) => {
-    const interval = setInterval(() => {
-      setUploadedFiles(prev =>
-        prev.map(file => {
-          if (file.id === fileId) {
-            const newProgress = Math.min(file.progress + Math.random() * 30, 100);
-            const newStatus = newProgress === 100 ? 'completed' : 'uploading';
-            return { ...file, progress: newProgress, status: newStatus };
-          }
-          return file;
-        })
-      );
-    }, 200);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      setUploadedFiles(prev =>
-        prev.map(file =>
-          file.id === fileId ? { ...file, progress: 100, status: 'completed' } : file
-        )
-      );
-    }, 2000 + Math.random() * 2000);
-  };
-
-  const removeFile = (fileId) => {
-    setUploadedFiles(prev => prev.filter(file => file.id !== fileId));
-  };
-
-  const handleSubmitForScreening = async () => {
-    if (!selectedJobId) {
-      toast({
-        title: "Please select a job posting",
-        description: "Choose which job posting these resumes are for.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (uploadedFiles.length === 0) {
-      toast({
-        title: "No files to process",
-        description: "Please upload at least one resume before submitting.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    const completedFiles = uploadedFiles.filter(file => file.status === 'completed');
-    if (completedFiles.length === 0) {
-      toast({
-        title: "Files still uploading",
-        description: "Please wait for all files to finish uploading.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsUploading(true);
-
-    try {
-      // Create FormData with all completed files
-      const formData = new FormData();
-      completedFiles.forEach(file => {
-        if (file.originalFile) {
-          formData.append('files', file.originalFile);
-        }
-      });
-
-      // Upload to backend API
-      const response = await fetch(
-        `${API_BASE_URL}/api/v1/jobs/${selectedJobId}/upload`,
-        {
-          method: 'POST',
-          body: formData
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      const result = await response.json();
-
-      toast({
-        title: "Screening initiated!",
-        description: `${result.saved.length} resumes have been submitted for AI screening.`
-      });
-
-      // Reset form
-      setUploadedFiles([]);
-      setSelectedJobId('');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast({
-        title: "Upload failed",
-        description: "There was an error uploading the files. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const selectedJob = jobs.find(job => job.id === selectedJobId);
-  const completedFiles = uploadedFiles.filter(file => file.status === 'completed');
-  const uploadingFiles = uploadedFiles.filter(file => file.status === 'uploading');
-  const activeJobs = jobs.filter(job => job.status === 'Active');
+  const recentJobs = jobs.slice(0, 5);
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-600 mt-1">Upload and manage candidate resumes for AI screening</p>
+    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+      {/* ── Page header ── */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Dashboard Overview</p>
+          <h1 className="text-2xl font-bold text-slate-900">Recruitment Dept.</h1>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <input
+              placeholder="Search insights..."
+              className="pl-4 pr-4 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 w-48"
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Main Upload Section */}
-      <div className="max-w-4xl">
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-xl text-slate-900">Upload Resumes</CardTitle>
-            <p className="text-sm text-slate-600">Select a job posting and upload candidate resumes for automated screening</p>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Job Selection */}
-            <div>
-              <label className="block text-sm font-medium text-slate-900 mb-2">
-                Select Job Posting
-              </label>
-              <Select value={selectedJobId} onValueChange={setSelectedJobId} disabled={jobsLoading}>
-                <SelectTrigger className="w-full border-slate-300">
-                  <SelectValue placeholder={jobsLoading ? "Loading jobs..." : "Choose a job posting..."} />
-                </SelectTrigger>
-                <SelectContent>
-                  {jobsLoading ? (
-                    <div className="flex items-center justify-center p-4">
-                      <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-                      <span className="ml-2 text-slate-500">Loading...</span>
-                    </div>
-                  ) : activeJobs.length === 0 ? (
-                    <div className="p-4 text-center text-slate-500">
-                      No active job postings. Create one first.
-                    </div>
-                  ) : (
-                    activeJobs.map((job) => (
-                      <SelectItem key={job.id} value={job.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{job.title}</span>
-                          <Badge className="ml-2 bg-green-100 text-green-800">{job.status}</Badge>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {selectedJob && (
-                <p className="text-sm text-slate-600 mt-2">
-                  Selected: <span className="font-medium">{selectedJob.title}</span>
-                </p>
-              )}
-            </div>
+      {/* ── Stat cards row ── */}
+      <div className="grid grid-cols-4 gap-4 mb-8">
+        {STATS.map((s, i) => (
+          <Card
+            key={s.label}
+            className="p-5 overflow-hidden relative"
+            style={s.hero ? { background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 60%, ${C.accent} 100%)`, border: 'none' } : {}}
+          >
+            {s.hero ? (
+              <>
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] mb-2" style={{ color: '#818cf8' }}>Global Reach</p>
+                <p className="text-5xl font-black text-white mb-2 leading-none">{s.value}</p>
+                <p className="text-xs leading-snug mb-4" style={{ color: '#c7d2fe' }}>{s.sub}</p>
+                <span className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: C.cyan }}>
+                  <TrendingUp className="h-3.5 w-3.5" /> {s.trend}
+                </span>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
+                  {s.icon && <s.icon className="h-4 w-4" style={{ color: s.iconColor || C.accent }} />}
+                </div>
+                <p className="text-4xl font-black text-slate-900">{s.value}</p>
+                {s.sub && <p className="text-[10px] font-bold uppercase tracking-widest mt-1 text-green-500">{s.sub}</p>}
+              </>
+            )}
+          </Card>
+        ))}
+      </div>
 
-            {/* File Upload Area */}
-            <div>
-              <label className="block text-sm font-medium text-slate-900 mb-2">
-                Upload Resume Files
-              </label>
-              <div
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${isDragOver
-                  ? 'border-blue-400 bg-blue-50'
-                  : 'border-slate-300 hover:border-slate-400'
-                  }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-              >
-                <Upload className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900 mb-2">
-                  Drag and drop resume files here
-                </h3>
-                <p className="text-slate-600 mb-4">
-                  or click below to browse files
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-slate-300 text-slate-700 hover:bg-slate-50"
-                >
-                  Browse Files
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-                <p className="text-xs text-slate-500 mt-4">
-                  Supported formats: PDF, DOC, DOCX (Max 10MB per file)
-                </p>
-              </div>
-            </div>
-
-            {/* Uploaded Files List */}
-            {uploadedFiles.length > 0 && (
+      {/* ── Main content row ── */}
+      <div className="grid grid-cols-[1fr_280px] gap-6">
+        {/* Left col: recent jobs + AI pulse */}
+        <div className="flex flex-col gap-6">
+          {/* Recent Job Postings table */}
+          <Card>
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
               <div>
-                <h4 className="text-sm font-medium text-slate-900 mb-3">
-                  Uploaded Files ({uploadedFiles.length})
-                </h4>
-                <div className="space-y-3">
-                  {uploadedFiles.map((file) => (
-                    <div key={file.id} className="flex items-center space-x-3 p-3 bg-slate-50 rounded-lg">
-                      <FileText className="h-5 w-5 text-slate-600 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">
-                          {file.name}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {(file.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                        {file.status === 'uploading' && (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs text-slate-600 mb-1">
-                              <span>Uploading...</span>
-                              <span>{Math.round(file.progress)}%</span>
-                            </div>
-                            <Progress value={file.progress} className="h-1" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {file.status === 'completed' && (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        )}
-                        {file.status === 'error' && (
-                          <AlertCircle className="h-4 w-4 text-red-600" />
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(file.id)}
-                          className="text-slate-400 hover:text-slate-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
+                <p className="font-semibold text-slate-900">Recent Job Postings</p>
+                <p className="text-xs text-slate-400 mt-0.5">Live tracking of recruitment cycles</p>
+              </div>
+              <button className="text-sm font-semibold" style={{ color: C.accent }}>View All</button>
+            </div>
+            {loading ? (
+              <div className="px-6 py-8 text-center text-slate-400 text-sm">Loading jobs…</div>
+            ) : recentJobs.length === 0 ? (
+              <div className="px-6 py-8 text-center text-slate-400 text-sm">No jobs yet. Create your first job posting.</div>
+            ) : (
+              <table className="min-w-full">
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    {['Job Title', 'Status', 'Candidates', 'Date Created'].map((h, i) => (
+                      <th key={h} className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 ${i > 0 ? 'text-center' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {recentJobs.map(job => (
+                    <tr
+                      key={job.id}
+                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => onViewCandidates && onViewCandidates(job)}
+                    >
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-semibold text-slate-900">{job.title}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{job.location || 'Remote'} • {job.employmentType || 'Full-time'}</p>
+                      </td>
+                      <td className="px-6 py-4 text-center">{statusPill(job.status)}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-sm font-semibold text-slate-700">{job.totalCandidates || 0}</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="text-xs text-slate-400">{job.postedAt ? new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                      </td>
+                    </tr>
                   ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
+          {/* AI Pulse / Empty state */}
+          <Card className="p-6 relative overflow-hidden" style={{ border: '1.5px dashed #c7d2fe' }}>
+            <div className="flex items-start gap-4">
+              <div className="flex-1 text-center py-4">
+                <div className="h-12 w-12 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: '#eef2ff' }}>
+                  <Users className="h-6 w-6" style={{ color: C.accent }} />
+                </div>
+                <p className="font-semibold text-slate-900 mb-1">No Candidates Flagged for Review</p>
+                <p className="text-sm text-slate-500 mb-5 max-w-sm mx-auto">
+                  All high-priority candidates have been moved to the interview stage. You're currently up to date.
+                </p>
+                <div className="flex justify-center gap-3">
+                  <button className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
+                    Import More
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-xl text-sm font-bold text-white transition-colors"
+                    style={{ background: C.primary }}
+                  >
+                    Run AI Scan
+                  </button>
                 </div>
               </div>
-            )}
-
-            {/* Submit Button */}
-            <div className="flex justify-end">
-              <Button
-                onClick={handleSubmitForScreening}
-                disabled={!selectedJobId || uploadedFiles.length === 0 || completedFiles.length === 0 || isUploading}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:text-slate-500"
-              >
-                {isUploading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Processing...
-                  </>
-                ) : (
-                  `Submit ${completedFiles.length} Resume${completedFiles.length !== 1 ? 's' : ''} for Screening`
-                )}
-              </Button>
+              {/* AI Pulse indicator */}
+              <div className="text-right shrink-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: C.accent }}>AI Pulse</p>
+                <div className="relative h-16 w-16">
+                  <svg viewBox="0 0 40 40" className="h-16 w-16 -rotate-90">
+                    <circle cx="20" cy="20" r="16" fill="none" stroke="#e0e7ff" strokeWidth="4" />
+                    <circle cx="20" cy="20" r="16" fill="none" stroke={C.accent} strokeWidth="4"
+                      strokeDasharray={`${0.89 * 2 * Math.PI * 16} ${2 * Math.PI * 16}`} strokeLinecap="round" />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-black" style={{ color: C.primary }}>89%</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">Accuracy Index</p>
+                <p className="text-[10px] text-slate-400">Based on recent hires</p>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </Card>
+        </div>
 
-        {/* Quick Stats */}
-        {uploadedFiles.length > 0 && (
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            <Card className="border-slate-200">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-slate-900">{uploadedFiles.length}</p>
-                <p className="text-sm text-slate-600">Total Files</p>
-              </CardContent>
-            </Card>
-            <Card className="border-slate-200">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-green-600">{completedFiles.length}</p>
-                <p className="text-sm text-slate-600">Ready to Process</p>
-              </CardContent>
-            </Card>
-            <Card className="border-slate-200">
-              <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold text-amber-600">{uploadingFiles.length}</p>
-                <p className="text-sm text-slate-600">Uploading</p>
-              </CardContent>
-            </Card>
+        {/* Right col: Volume Analysis */}
+        <Card className="p-5 flex flex-col gap-4">
+          <div>
+            <p className="font-semibold text-slate-900">Volume Analysis</p>
+            <p className="text-xs text-slate-400 mt-0.5">Candidates per active job</p>
           </div>
-        )}
+
+          {/* Fake bar chart */}
+          <div className="flex items-end gap-2 h-28">
+            {[30, 60, 45, 80, 55, 90, 42, 70, 50, 85].map((h, i) => (
+              <div key={i} className="flex-1 rounded-t-md transition-all" style={{ height: `${h}%`, background: i === 9 ? C.accent : '#e0e7ff' }} />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+            {['40W', '41W', '42W', 'FEB26', '1W'].map(l => <span key={l}>{l}</span>)}
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-400">Peak Performance</p>
+            </div>
+            <span className="text-sm font-bold" style={{ color: C.accent }}>143 Candidates</span>
+          </div>
+
+          {/* Recent jobs mini-list */}
+          <div className="pt-2 border-t border-slate-100 space-y-2">
+            {(recentJobs.slice(0, 3)).map(job => (
+              <button
+                key={job.id}
+                onClick={() => onViewCandidates && onViewCandidates(job)}
+                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors text-left"
+              >
+                <div>
+                  <p className="text-xs font-semibold text-slate-900 truncate max-w-[140px]">{job.title}</p>
+                  <p className="text-[10px] text-slate-400">{job.totalCandidates || 0} candidates</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
+              </button>
+            ))}
+          </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,376 +1,344 @@
 import React, { useState } from 'react';
-import { User, Mail, Bell, Activity, Camera, Key, Save } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
-import { Switch } from './ui/switch';
-import { Separator } from './ui/separator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { mockUser } from '../mock';
+import {
+  User, Mail, Phone, MapPin, Zap, Shield, Key,
+  Monitor, Save, ChevronRight, TrendingUp, Star,
+  Lock, Smartphone, AlertTriangle, CheckCircle
+} from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/use-toast';
+import { C } from '../theme';
+
+/* ── Shared card ── */
+const Card = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm ${className}`}>
+    {children}
+  </div>
+);
+
+/* ── Section header ── */
+const SectionHeader = ({ icon: Icon, title, action }) => (
+  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+    <div className="flex items-center gap-2">
+      {Icon && <Icon className="h-4 w-4 text-slate-400" />}
+      <p className="font-semibold text-slate-900">{title}</p>
+    </div>
+    {action}
+  </div>
+);
+
+/* ── Toggle switch ── */
+const Toggle = ({ checked, onChange }) => (
+  <button
+    onClick={() => onChange(!checked)}
+    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none"
+    style={{ background: checked ? C.accent : '#e2e8f0' }}
+  >
+    <span
+      className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200"
+      style={{ transform: checked ? 'translateX(22px)' : 'translateX(4px)' }}
+    />
+  </button>
+);
+
+/* ── Styled input ── */
+const FInput = ({ label, id, icon: Icon, ...props }) => (
+  <div>
+    <label htmlFor={id} className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+      {label}
+    </label>
+    <div className="relative">
+      {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />}
+      <input
+        id={id}
+        {...props}
+        className={`w-full py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 outline-none focus:ring-2 focus:ring-indigo-200 transition ${Icon ? 'pl-9 pr-4' : 'px-4'}`}
+      />
+    </div>
+  </div>
+);
+
+/* ── Score ring ── */
+const ScoreRing = ({ value }) => {
+  const r = 30;
+  const circ = 2 * Math.PI * r;
+  const dash = (value / 100) * circ;
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative" style={{ width: 80, height: 80 }}>
+        <svg viewBox="0 0 70 70" width={80} height={80} className="-rotate-90">
+          <circle cx="35" cy="35" r={r} fill="none" stroke="#e0e7ff" strokeWidth="6" />
+          <circle cx="35" cy="35" r={r} fill="none" stroke={C.cyan} strokeWidth="6"
+            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-xl font-black" style={{ color: C.primary }}>{value}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Profile = () => {
-  const [userInfo, setUserInfo] = useState({
-    name: mockUser.name,
-    role: mockUser.role,
-    email: mockUser.email,
-    avatar: mockUser.avatar
-  });
-  
-  const [notifications, setNotifications] = useState({
-    emailScreeningComplete: true,
-    inAppNewApplications: true,
-    emailWeeklyReport: false,
-    inAppJobPostingUpdates: true,
-    emailCandidateShortlisted: true
-  });
-
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const { user } = useAuth();
   const { toast } = useToast();
 
-  // Mock recent activity data
-  const recentActivity = [
-    { id: 1, action: "Uploaded 5 resumes for Senior Backend Engineer", timestamp: "2 hours ago" },
-    { id: 2, action: "Created new job posting: Product Manager", timestamp: "1 day ago" },
-    { id: 3, action: "Shortlisted 3 candidates for Frontend React Developer", timestamp: "2 days ago" },
-    { id: 4, action: "Updated job description for DevOps Engineer", timestamp: "3 days ago" },
-    { id: 5, action: "Rejected 8 candidates for UX/UI Designer", timestamp: "5 days ago" }
-  ];
+  // Personal info state
+  const [personal, setPersonal] = useState({
+    fullName:  user?.displayName || 'Alex Rivera',
+    email:     user?.email || 'alex.rivera@precisioncurator.io',
+    phone:     '+1 (555) 892-0432',
+    location:  'San Francisco, CA',
+  });
 
-  const handleSavePersonalInfo = async () => {
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      toast({
-        title: "Profile updated successfully",
-        description: "Your personal information has been saved."
-      });
-    }, 1000);
+  // Notification prefs
+  const [notifs, setNotifs] = useState({
+    emailScreening:    true,
+    inAppApplications: true,
+    weeklyReports:     false,
+    jobPostingUpdates: true,
+    candidateShortlist: true,
+  });
+
+  // AI params
+  const [aiParams, setAiParams] = useState({
+    defaultJobActive: true,
+    highScoreAlerts:  true,
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  const handleSavePersonal = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    await new Promise(r => setTimeout(r, 600));
+    setSaving(false);
+    toast({ title: 'Profile updated', description: 'Your personal information has been saved.' });
   };
 
-  const handleSaveNotifications = async () => {
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      toast({
-        title: "Notification preferences saved",
-        description: "Your notification settings have been updated."
-      });
-    }, 1000);
+  const handleSaveNotifs = async () => {
+    setSaving(true);
+    await new Promise(r => setTimeout(r, 400));
+    setSaving(false);
+    toast({ title: 'Preferences saved', description: 'Notification settings updated.' });
   };
 
-  const handleChangePassword = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast({
-        title: "Password mismatch",
-        description: "New password and confirm password don't match.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (passwordData.newPassword.length < 8) {
-      toast({
-        title: "Password too short",
-        description: "Password must be at least 8 characters long.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setIsPasswordModalOpen(false);
-      toast({
-        title: "Password changed successfully",
-        description: "Your password has been updated."
-      });
-    }, 1000);
-  };
-
-  const handlePhotoUpload = () => {
-    // Simulate photo upload
-    toast({
-      title: "Photo upload",
-      description: "Photo upload functionality will be available soon."
-    });
-  };
+  const setNotif = (key, val) => setNotifs(p => ({ ...p, [key]: val }));
+  const setAi    = (key, val) => setAiParams(p => ({ ...p, [key]: val }));
 
   return (
-    <div className="p-8">
-      {/* Header */}
+    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+      {/* ── Page header ── */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">My Profile</h1>
-        <p className="text-slate-600 mt-1">Manage your personal information and preferences</p>
+        <h1 className="text-2xl font-black text-slate-900">Account Settings</h1>
+        <p className="text-sm text-slate-400 mt-1">
+          Manage your professional identity, security preferences, and AI-driven recruitment parameters.
+        </p>
       </div>
 
-      <div className="max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Personal Info & Security */}
-        <div className="lg:col-span-2 space-y-8">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-6">
+        {/* ── LEFT COL ── */}
+        <div className="flex flex-col gap-6">
+
           {/* Personal Information */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <User className="h-5 w-5" />
-                <span>Personal Information</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Profile Picture */}
-              <div className="flex items-center space-x-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src={userInfo.avatar} alt={userInfo.name} />
-                  <AvatarFallback>
-                    <User className="h-8 w-8" />
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-sm font-medium text-slate-900 mb-2">Profile Picture</p>
-                  <Button variant="outline" size="sm" onClick={handlePhotoUpload}>
-                    <Camera className="h-4 w-4 mr-2" />
-                    Change Photo
-                  </Button>
-                </div>
+            <SectionHeader icon={User} title="Personal Information" />
+            <form onSubmit={handleSavePersonal} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FInput id="fullName" label="Full Name" icon={User}
+                  value={personal.fullName}
+                  onChange={e => setPersonal(p => ({ ...p, fullName: e.target.value }))}
+                />
+                <FInput id="email" label="Email Address" icon={Mail} type="email"
+                  value={personal.email}
+                  onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))}
+                />
               </div>
-
-              <Separator />
-
-              {/* Name & Role */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    value={userInfo.name}
-                    onChange={(e) => setUserInfo(prev => ({ ...prev, name: e.target.value }))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="role">Job Title</Label>
-                  <Input
-                    id="role"
-                    value={userInfo.role}
-                    onChange={(e) => setUserInfo(prev => ({ ...prev, role: e.target.value }))}
-                    className="mt-1"
-                  />
-                </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FInput id="phone" label="Phone Number" icon={Phone}
+                  value={personal.phone}
+                  onChange={e => setPersonal(p => ({ ...p, phone: e.target.value }))}
+                />
+                <FInput id="location" label="Location" icon={MapPin}
+                  value={personal.location}
+                  onChange={e => setPersonal(p => ({ ...p, location: e.target.value }))}
+                />
               </div>
-
-              <Button onClick={handleSavePersonalInfo} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
-                {isSaving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Changes
-                  </>
-                )}
-              </Button>
-            </CardContent>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ background: C.primary }}
+                >
+                  <Save className="h-4 w-4" />
+                  {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </Card>
 
-          {/* Account Security */}
+          {/* Notifications */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Key className="h-5 w-5" />
-                <span>Account Security</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Email Address</Label>
-                <div className="flex items-center space-x-3 mt-1">
-                  <Mail className="h-4 w-4 text-slate-500" />
-                  <span className="text-slate-900">{userInfo.email}</span>
-                  <span className="text-xs text-slate-500">(read-only)</span>
+            <SectionHeader icon={Zap} title="Notifications" />
+            <div className="p-6 space-y-5">
+              {[
+                { key: 'emailScreening',    label: 'Email me when screening is complete',     sub: 'Get notified when AI screening finishes' },
+                { key: 'inAppApplications', label: 'In-app notifications for new applications', sub: 'Show notifications when candidates apply' },
+                { key: 'weeklyReports',     label: 'Weekly email reports',                     sub: 'Receive weekly summary of activities' },
+                { key: 'jobPostingUpdates', label: 'Job posting updates',                      sub: 'Get notified about changes to job postings' },
+                { key: 'candidateShortlist',label: 'Candidate shortlisted notifications',      sub: 'Email when candidates are shortlisted' },
+              ].map(({ key, label, sub }) => (
+                <div key={key} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{label}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+                  </div>
+                  <Toggle checked={notifs[key]} onChange={val => setNotif(key, val)} />
                 </div>
+              ))}
+              <div className="flex justify-end pt-2 border-t border-slate-100">
+                <button
+                  onClick={handleSaveNotifs}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white"
+                  style={{ background: C.accent }}
+                >
+                  <Save className="h-4 w-4" /> Save Preferences
+                </button>
               </div>
-
-              <Separator />
-
-              <div>
-                <Label>Password</Label>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-sm text-slate-600">••••••••••••</span>
-                  <Dialog open={isPasswordModalOpen} onOpenChange={setIsPasswordModalOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        Change Password
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Change Password</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 mt-4">
-                        <div>
-                          <Label htmlFor="currentPassword">Current Password</Label>
-                          <Input
-                            id="currentPassword"
-                            type="password"
-                            value={passwordData.currentPassword}
-                            onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="newPassword">New Password</Label>
-                          <Input
-                            id="newPassword"
-                            type="password"
-                            value={passwordData.newPassword}
-                            onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                          <Input
-                            id="confirmPassword"
-                            type="password"
-                            value={passwordData.confirmPassword}
-                            onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                            className="mt-1"
-                          />
-                        </div>
-                        <div className="flex justify-end space-x-2 pt-4">
-                          <Button variant="outline" onClick={() => setIsPasswordModalOpen(false)}>
-                            Cancel
-                          </Button>
-                          <Button onClick={handleChangePassword} disabled={isSaving}>
-                            {isSaving ? 'Updating...' : 'Update Password'}
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-            </CardContent>
+            </div>
           </Card>
 
-          {/* Notification Preferences */}
+          {/* AI Parameters */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Bell className="h-5 w-5" />
-                <span>Notifications</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Email me when screening is complete</p>
-                    <p className="text-xs text-slate-500">Get notified when AI screening finishes</p>
-                  </div>
-                  <Switch
-                    checked={notifications.emailScreeningComplete}
-                    onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, emailScreeningComplete: checked }))}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">In-app notifications for new applications</p>
-                    <p className="text-xs text-slate-500">Show notifications when candidates apply</p>
-                  </div>
-                  <Switch
-                    checked={notifications.inAppNewApplications}
-                    onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, inAppNewApplications: checked }))}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Weekly email reports</p>
-                    <p className="text-xs text-slate-500">Receive weekly summary of activities</p>
-                  </div>
-                  <Switch
-                    checked={notifications.emailWeeklyReport}
-                    onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, emailWeeklyReport: checked }))}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Job posting updates</p>
-                    <p className="text-xs text-slate-500">Get notified about changes to job postings</p>
-                  </div>
-                  <Switch
-                    checked={notifications.inAppJobPostingUpdates}
-                    onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, inAppJobPostingUpdates: checked }))}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">Candidate shortlisted notifications</p>
-                    <p className="text-xs text-slate-500">Email when candidates are shortlisted</p>
-                  </div>
-                  <Switch
-                    checked={notifications.emailCandidateShortlisted}
-                    onCheckedChange={(checked) => setNotifications(prev => ({ ...prev, emailCandidateShortlisted: checked }))}
-                  />
-                </div>
-              </div>
-
-              <Button onClick={handleSaveNotifications} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
-                {isSaving ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Preferences
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Column - Recent Activity */}
-        <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Activity className="h-5 w-5" />
-                <span>Recent Activity</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="border-l-2 border-blue-200 pl-4 pb-4">
-                    <p className="text-sm text-slate-900 font-medium">{activity.action}</p>
-                    <p className="text-xs text-slate-500 mt-1">{activity.timestamp}</p>
+            <SectionHeader icon={Star} title="AI Parameters" />
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { key: 'defaultJobActive', label: 'Default Job Status', sub: 'Set new pipelines to Active' },
+                  { key: 'highScoreAlerts',  label: 'High Score Alerts',  sub: 'Match threshold > 90%' },
+                ].map(({ key, label, sub }) => (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between p-4 rounded-xl border border-slate-200"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{label}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{sub}</p>
+                    </div>
+                    <Toggle checked={aiParams[key]} onChange={val => setAi(key, val)} />
                   </div>
                 ))}
               </div>
-              <Button variant="outline" className="w-full mt-4" size="sm">
-                View All Activity
-              </Button>
-            </CardContent>
+            </div>
           </Card>
+        </div>
+
+        {/* ── RIGHT COL ── */}
+        <div className="flex flex-col gap-5">
+
+          {/* AI Efficiency Index */}
+          <div
+            className="rounded-2xl p-5"
+            style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 60%, ${C.accent} 100%)` }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="h-4 w-4" style={{ color: C.cyan }} />
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: '#818cf8' }}>
+                AI Efficiency Index
+              </p>
+            </div>
+            <div className="flex items-center gap-4 mb-3">
+              <ScoreRing value={94} />
+              <div>
+                <p className="text-4xl font-black text-white leading-none">94.2<span className="text-lg font-semibold" style={{ color: '#818cf8' }}>%</span></p>
+                <p className="text-xs mt-1 leading-snug" style={{ color: '#c7d2fe' }}>
+                  Your matching accuracy is 12% higher than the global benchmark.
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1.5 pt-3 border-t border-indigo-700">
+              {[
+                { label: 'Interview Rate', value: '74%' },
+                { label: 'Precision Score', value: '96%' },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-center justify-between text-xs">
+                  <span style={{ color: '#a5b4fc' }}>{label}</span>
+                  <div className="flex items-center gap-2">
+                    <div className="h-1 w-20 rounded-full bg-indigo-800 overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: value, background: C.cyan }} />
+                    </div>
+                    <span className="font-bold text-white">{value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Security */}
+          <Card>
+            <SectionHeader icon={Shield} title="Security" />
+            <div className="p-4 space-y-3">
+              {/* Account Password */}
+              <div className="p-3 rounded-xl border border-slate-200 hover:border-indigo-200 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Key className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Account Password</p>
+                    </div>
+                  </div>
+                  <button className="text-xs font-bold" style={{ color: C.accent }}>Change</button>
+                </div>
+              </div>
+
+              {/* MFA */}
+              <div className="p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Multi-factor Auth</p>
+                      <p className="text-xs text-slate-400">Added security layer</p>
+                    </div>
+                  </div>
+                  <Toggle checked={false} onChange={() => toast({ title: 'MFA setup coming soon' })} />
+                </div>
+              </div>
+
+              {/* Active sessions */}
+              <div className="p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4 text-slate-400" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Active Sessions</p>
+                      <p className="text-xs flex items-center gap-1 mt-0.5">
+                        <span className="text-slate-400">Mac Book Pro · London, UK</span>
+                        <span className="font-bold text-green-500">· Active Now</span>
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-slate-300" />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Curator Tip */}
+          <div className="rounded-2xl border border-indigo-100 p-4" style={{ background: '#f5f3ff' }}>
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full flex items-center justify-center shrink-0" style={{ background: C.primary }}>
+                <Zap className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: C.accent }}>Curator Tip</p>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Regularly auditing your AI matching thresholds ensures that high-quality candidates
+                  aren't filtered out by overly restrictive initial parameters.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

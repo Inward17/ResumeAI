@@ -6,24 +6,23 @@ import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
+import TopNavbar from "./components/TopNavbar";
 import Dashboard from "./components/Dashboard";
 import JobPostings from "./components/JobPostings";
-import CandidateDetails from "./components/CandidateDetails";
-import CandidateModal from "./components/CandidateModal";
+import CandidatePipeline from "./components/CandidatePipeline";
 import Profile from "./components/Profile";
 import Settings from "./components/Settings";
+import Interviews from "./components/Interviews";
 import { Toaster } from "./components/ui/toaster";
 
 // Main App Layout for authenticated users
 function AppLayout() {
   const [activeView, setActiveView] = useState('dashboard');
   const [selectedJob, setSelectedJob] = useState(null);
-  const [selectedCandidate, setSelectedCandidate] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleViewCandidates = (job) => {
     setSelectedJob(job);
-    setActiveView('candidates');
+    setActiveView('pipeline');
   };
 
   const handleBackToJobs = () => {
@@ -31,60 +30,39 @@ function AppLayout() {
     setActiveView('jobs');
   };
 
-  const handleViewCandidate = (candidate) => {
-    setSelectedCandidate(candidate);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedCandidate(null);
-  };
-
-  const handleStatusUpdate = () => {
-    setRefreshKey(prev => prev + 1);
-  };
-
   const renderMainContent = () => {
     switch (activeView) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onViewCandidates={handleViewCandidates} />;
       case 'jobs':
         return <JobPostings onViewCandidates={handleViewCandidates} />;
-      case 'candidates':
+      case 'pipeline':
         return selectedJob ? (
-          <CandidateDetails
-            key={refreshKey}
+          <CandidatePipeline
             job={selectedJob}
             onBack={handleBackToJobs}
-            onViewCandidate={handleViewCandidate}
           />
-        ) : null;
+        ) : <JobPostings onViewCandidates={handleViewCandidates} />;
+      case 'interviews':
+        return <Interviews />;
       case 'profile':
         return <Profile />;
       case 'settings':
         return <Settings />;
       default:
-        return <Dashboard />;
+        return <Dashboard onViewCandidates={handleViewCandidates} />;
     }
   };
 
   return (
-    <div className="flex h-screen bg-slate-50">
+    <div className="flex h-screen" style={{ background: '#f1f3f9' }}>
       <Sidebar activeView={activeView} setActiveView={setActiveView} />
-      <div className="flex-1 overflow-hidden">
-        <main className="h-full overflow-y-auto">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopNavbar activeView={activeView} setActiveView={setActiveView} />
+        <main className="flex-1 overflow-y-auto">
           {renderMainContent()}
         </main>
       </div>
-
-      {selectedCandidate && (
-        <CandidateModal
-          candidate={selectedCandidate}
-          job={selectedJob}
-          onClose={handleCloseModal}
-          onStatusUpdate={handleStatusUpdate}
-        />
-      )}
-
       <Toaster />
     </div>
   );
@@ -96,7 +74,7 @@ function App() {
       <Router>
         <Routes>
           {/* Public Routes */}
-          <Route path="/login" element={<Login />} />
+          <Route path="/login"    element={<Login />} />
           <Route path="/register" element={<Register />} />
 
           {/* Protected Routes */}
@@ -110,10 +88,8 @@ function App() {
           />
 
           {/* Redirect root to dashboard */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-          {/* Catch all - redirect to dashboard */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/"  element={<Navigate to="/dashboard" replace />} />
+          <Route path="*"  element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Router>
     </AuthProvider>
