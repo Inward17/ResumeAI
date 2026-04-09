@@ -135,7 +135,7 @@ const InterviewCard = ({ candidate, job, onView, onStatusChange }) => {
 };
 
 /* ── Main Component ── */
-const Interviews = () => {
+const Interviews = ({ onTakeInterview }) => {
   const { toast } = useToast();
   const [interviewCandidates, setInterviewCandidates] = useState([]); // [{candidate, job}]
   const [loading, setLoading] = useState(true);
@@ -344,6 +344,10 @@ const Interviews = () => {
           onStatusUpdate={(candidateId, status) =>
             handleStatusChange(candidateId, selectedEntry.job?.id, status)
           }
+          onTakeInterview={(candidate, job) => {
+            setSelectedEntry(null);
+            if (onTakeInterview) onTakeInterview(candidate, job);
+          }}
         />
       )}
     </div>

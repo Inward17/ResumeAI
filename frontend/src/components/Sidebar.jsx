@@ -74,7 +74,7 @@ const Sidebar = ({ activeView, setActiveView }) => {
         })}
       </nav>
 
-      {/* ── AI Quota + Upload CTA ── */}
+      {/* ── AI Quota + Upload CTA ──
       <div className="px-4 py-4 border-t border-slate-100">
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1.5">
@@ -96,7 +96,7 @@ const Sidebar = ({ activeView, setActiveView }) => {
           <Upload className="h-4 w-4" />
           Upload Resumes
         </button>
-      </div>
+      </div> */}
 
       {/* ── Bottom links ── */}
       <div className="px-3 py-3 border-t border-slate-100 space-y-0.5">

@@ -57,7 +57,7 @@ const SkillTag = ({ skill, level }) => (
   </span>
 );
 
-const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
+const CandidateModal = ({ candidate, job, onClose, onStatusUpdate, onTakeInterview }) => {
   const [status, setStatus] = useState(candidate.status || 'Reviewing');
   const { toast } = useToast();
 
@@ -96,6 +96,16 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate }) => {
           </div>
           <div className="flex items-center gap-3">
             <StatusSelect value={status} onChange={handleStatusChange} />
+            {onTakeInterview && (
+              <button
+                onClick={() => onTakeInterview(candidate, job)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 hover:scale-[1.02]"
+                style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.accent})` }}
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                Take Interview
+              </button>
+            )}
             <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
               <X className="h-5 w-5" />
             </button>

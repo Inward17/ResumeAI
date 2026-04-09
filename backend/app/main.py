@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.database import client
-from app.routes import resume, linkedin, verification, github_routes, unified_verification_routes, search_routes, job_routes
+from app.routes import resume, linkedin, verification, github_routes, unified_verification_routes, search_routes, job_routes, interview_questions_routes, evaluation_routes
 
 # Load environment variables
 load_dotenv()
@@ -31,6 +31,8 @@ app.include_router(github_routes.router, prefix="/api/v1")
 app.include_router(unified_verification_routes.router, prefix="/api/v1")
 app.include_router(search_routes.router)
 app.include_router(job_routes.router, prefix="/api")
+app.include_router(interview_questions_routes.router, prefix="/api")
+app.include_router(evaluation_routes.router, prefix="/api")
 
 
 @app.on_event("shutdown")
