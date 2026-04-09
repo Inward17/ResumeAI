@@ -98,9 +98,9 @@ class UnifiedVerificationService:
         tasks = []
         task_names = []
         
+        print(f"[VERIFY] Starting verification for {candidate_id}: github={github_username}, linkedin={linkedin_url}, has_profile={profile_data is not None}")
+        
         if github_username:
-            # Pass the full parsed resume (not just the web-search stub)
-            # so that projects reach the resume→repo matching stage.
             tasks.append(self._verify_github(candidate_id, github_username, parsed_resume))
             task_names.append("github")
         else:
@@ -120,15 +120,31 @@ class UnifiedVerificationService:
         
         # Execute all tasks concurrently
         if tasks:
+            print(f"[VERIFY] Running {len(tasks)} checks concurrently: {task_names}")
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            # Log any exceptions
+            # Log results
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    print(f"Verification error for {task_names[i]}: {result}")
+                    print(f"[VERIFY] ❌ {task_names[i]} FAILED: {result}")
+                else:
+                    print(f"[VERIFY] ✅ {task_names[i]} completed successfully")
         
         # Build and persist unified verification data
         verification_data = await self._build_and_persist(candidate_id)
+        
+        match_score = verification_data.matchScore
+        print(
+            f"[VERIFY] Final scores for {candidate_id}: "
+            f"overallCredibility={match_score.overallCredibility}, "
+            f"skillsMatch={match_score.skillsMatch}, "
+            f"experienceMatch={match_score.experienceMatch}"
+        )
+        print(
+            f"[VERIFY] Status: github={verification_data.verificationStatus.github}, "
+            f"linkedin={verification_data.verificationStatus.linkedin}, "
+            f"webCheck={verification_data.verificationStatus.webCheck}"
+        )
         
         # Clear cache after persistence
         self.cache.clear(candidate_id)
@@ -138,23 +154,23 @@ class UnifiedVerificationService:
     async def _verify_github(self, candidate_id: str, username: str, parsed_resume: Optional[dict] = None) -> dict:
         """Run GitHub verification using the new async pipeline"""
         try:
-            # Build a parsed_resume dict suitable for verify_github
             resume_for_github = parsed_resume or {}
-            # Ensure github_username is present in the resume data
             if "github_username" not in resume_for_github:
                 resume_for_github = {**resume_for_github, "github_username": username}
             
-            # Run the async verification pipeline directly
+            print(f"[VERIFY] GitHub: starting for {username}")
             result: GitHubVerificationResult = await verify_github(
                 candidate_id=candidate_id,
                 parsed_resume=resume_for_github,
             )
             
-            # Cache the result object
+            score = result.score100 if hasattr(result, 'score100') else 0
+            print(f"[VERIFY] GitHub: completed for {username} — success={result.success}, score={score}")
             self.cache.set(candidate_id, "github", result)
             return result
             
         except Exception as e:
+            print(f"[VERIFY] GitHub: EXCEPTION for {username}: {e}")
             error_result = {
                 "success": False,
                 "error": str(e),
@@ -167,19 +183,23 @@ class UnifiedVerificationService:
     async def _verify_linkedin(self, candidate_id: str, linkedin_url: str) -> dict:
         """Run LinkedIn scraping"""
         try:
-            # LinkedIn scraping via Apify
+            print(f"[VERIFY] LinkedIn: starting for {linkedin_url}")
             result = await scrape_linkedin_profiles([linkedin_url])
             
             if result.get("status") == "success" and result.get("data"):
                 linkedin_data = result["data"][0] if result["data"] else {}
+                name = f"{linkedin_data.get('firstName', '')} {linkedin_data.get('lastName', '')}".strip()
+                print(f"[VERIFY] LinkedIn: completed — found profile: {name}")
                 self.cache.set(candidate_id, "linkedin", linkedin_data)
                 return linkedin_data
             else:
+                print(f"[VERIFY] LinkedIn: scraping returned no data")
                 error_result = {"error": "LinkedIn scraping failed", "status": "failed"}
                 self.cache.set(candidate_id, "linkedin", error_result)
                 return error_result
                 
         except Exception as e:
+            print(f"[VERIFY] LinkedIn: EXCEPTION: {e}")
             error_result = {"error": str(e), "status": "failed"}
             self.cache.set(candidate_id, "linkedin", error_result)
             return error_result
@@ -187,11 +207,14 @@ class UnifiedVerificationService:
     async def _verify_web_search(self, candidate_id: str, profile_data: dict) -> dict:
         """Run web search verification"""
         try:
+            print(f"[VERIFY] WebSearch: starting for {candidate_id}")
             result = await verify_profile(profile_data)
+            print(f"[VERIFY] WebSearch: completed — edu={result.get('education',{}).get('overall_tag','N/A')}, exp={result.get('experience',{}).get('overall_tag','N/A')}")
             self.cache.set(candidate_id, "webSearch", result)
             return result
             
         except Exception as e:
+            print(f"[VERIFY] WebSearch: EXCEPTION: {e}")
             error_result = {"error": str(e), "status": "failed"}
             self.cache.set(candidate_id, "webSearch", error_result)
             return error_result
@@ -364,15 +387,15 @@ class UnifiedVerificationService:
                 results=[WebSearchResult(
                     profile_url=ws.get("profile_url"),
                     education=EducationVerification(
-                        average_score=ws.get("university", {}).get("average_score", 0),
-                        overall_tag=ws.get("university", {}).get("overall_tag"),
+                        average_score=ws.get("education", {}).get("average_score", 0),
+                        overall_tag=ws.get("education", {}).get("overall_tag"),
                         details=edu_details
-                    ) if ws.get("university") else None,
+                    ) if ws.get("education") else None,
                     experience=ExperienceVerification(
-                        average_score=ws.get("company", {}).get("average_score", 0),
-                        overall_tag=ws.get("company", {}).get("overall_tag"),
+                        average_score=ws.get("experience", {}).get("average_score", 0),
+                        overall_tag=ws.get("experience", {}).get("overall_tag"),
                         details=exp_details
-                    ) if ws.get("company") else None
+                    ) if ws.get("experience") else None
                 )]
             )
         elif cached.get("webSearch"):
@@ -462,6 +485,7 @@ class UnifiedVerificationService:
             {"$set": doc},
             upsert=True
         )
+        print(f"[VERIFY] Persisted verification_data for {verification_data.candidateId} to MongoDB")
 
 
 # Singleton instance

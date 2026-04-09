@@ -7,6 +7,7 @@ Public entry point for the skill_matching package.
 
     result = await run_unified_skill_scoring(
         required_skills=["Python", "GCP", "Kubernetes"],
+        preferred_skills=["Docker", "AWS"],
         parsed=parsed_resume_dict,
         github_v2_data=github_v2_data_dict,  # optional
     )
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 async def run_unified_skill_scoring(
     required_skills: List[str],
+    preferred_skills: List[str],
     parsed: Dict[str, Any],
     github_v2_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -68,7 +70,8 @@ async def run_unified_skill_scoring(
         4. Aggregate: jd_match_score = mean(all skill scores)
 
     Args:
-        required_skills:  List of skill strings from the job posting.
+        required_skills:  List of compulsory skill strings from the job posting.
+        preferred_skills: List of preferred skill strings from the job posting.
         parsed:           Parsed resume dict (from parser.py output).
         github_v2_data:   github_v2_data field from verification_data.githubData
                           (optional — pipeline degrades gracefully without it).
@@ -84,7 +87,11 @@ async def run_unified_skill_scoring(
     """
     _empty = {"skill_scores": [], "jd_match_score": 0.0}
 
-    if not required_skills:
+    preferred_skills = preferred_skills or []
+    all_skills_set = set(required_skills + preferred_skills)
+    all_skills_list = list(all_skills_set)
+
+    if not all_skills_list:
         return _empty
 
     try:
@@ -109,19 +116,31 @@ async def run_unified_skill_scoring(
             return _empty
 
         # ── Step 3: score each skill concurrently ──────────────────────────
-        skill_scores = await score_all_skills(required_skills, section_embeddings)
+        skill_scores = await score_all_skills(all_skills_list, section_embeddings)
 
         # ── Step 4: aggregate ───────────────────────────────────────────────
+        jd_match_score = 0.0
         if skill_scores:
-            jd_match_score = round(
-                sum(s["score"] for s in skill_scores) / len(skill_scores), 2
-            )
-        else:
-            jd_match_score = 0.0
+            req_set = set(required_skills)
+            total_weight = 0.0
+            total_weighted_score = 0.0
+            
+            for s in skill_scores:
+                # Add flag so frontend knows if it was required or preferred
+                s["is_required"] = s["skill"] in req_set
+                
+                weight = 1.0 if s["is_required"] else 0.5
+                total_weight += weight
+                total_weighted_score += s["score"] * weight
+
+            if total_weight > 0:
+                jd_match_score = round(total_weighted_score / total_weight, 2)
 
         logger.info(
-            "skill_matching: scored %d skills → jd_match_score=%.2f",
+            "skill_matching: scored %d skills (%d req, %d pref) → jd_match_score=%.2f",
             len(skill_scores),
+            len(required_skills),
+            len(preferred_skills),
             jd_match_score,
         )
 
@@ -133,7 +152,7 @@ async def run_unified_skill_scoring(
     except Exception as exc:
         logger.error(
             "skill_matching: pipeline failed for %d skills: %s",
-            len(required_skills),
+            len(all_skills_list),
             exc,
             exc_info=True,
         )

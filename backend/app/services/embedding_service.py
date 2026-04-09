@@ -6,35 +6,49 @@ Free, fast, runs locally without API calls
 from typing import List, Optional
 from math import sqrt
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
 # Lazy-loaded singleton for efficiency
 _embedding_model = None
+_fastembed_available = None  # None = untested, True = OK, False = broken
 
 
 def _get_model():
     """Lazy load the embedding model (first call downloads ~80MB model)"""
-    global _embedding_model
+    global _embedding_model, _fastembed_available
+    if _fastembed_available is False:
+        return None  # already known broken — skip fast
     if _embedding_model is None:
-        from fastembed import TextEmbedding
-        _embedding_model = TextEmbedding(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        try:
+            from fastembed import TextEmbedding
+            _embedding_model = TextEmbedding(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
+            )
+            _fastembed_available = True
+        except Exception as e:
+            _fastembed_available = False
+            _logger.warning(
+                "fastembed/onnxruntime unavailable (DLL or import error). "
+                "Embeddings will be zero-vectors. Error: %s", e
+            )
+            return None
     return _embedding_model
 
 
 def generate_embedding(text: str) -> List[float]:
     """
     Generate 384-dimensional embedding for text.
-    
-    Args:
-        text: Input text to embed
-        
-    Returns:
-        List of 384 floats representing the text embedding
+    Falls back to zero-vector if fastembed/onnxruntime is unavailable.
     """
     if not text or not text.strip():
         return [0.0] * 384
-    
+
     model = _get_model()
+    if model is None:
+        return [0.0] * 384  # fallback: onnxruntime DLL not working
+
     embeddings = list(model.embed([text.strip()]))
     return embeddings[0].tolist()
 
@@ -42,16 +56,15 @@ def generate_embedding(text: str) -> List[float]:
 def batch_generate_embeddings(texts: List[str]) -> List[List[float]]:
     """
     Generate embeddings for multiple texts efficiently.
-    
-    Args:
-        texts: List of texts to embed
-        
-    Returns:
-        List of 384-dimensional embeddings
+    Falls back to zero-vectors if fastembed/onnxruntime is unavailable.
     """
     if not texts:
         return []
-    
+
+    model = _get_model()
+    if model is None:
+        return [[0.0] * 384 for _ in texts]  # fallback
+
     # Filter empty texts and track indices
     valid_texts = []
     valid_indices = []
@@ -59,19 +72,18 @@ def batch_generate_embeddings(texts: List[str]) -> List[List[float]]:
         if text and text.strip():
             valid_texts.append(text.strip())
             valid_indices.append(i)
-    
+
     if not valid_texts:
         return [[0.0] * 384 for _ in texts]
-    
-    model = _get_model()
+
     embeddings_gen = model.embed(valid_texts)
     valid_embeddings = [emb.tolist() for emb in embeddings_gen]
-    
+
     # Reconstruct full list with zeros for empty texts
     result = [[0.0] * 384 for _ in texts]
     for idx, emb in zip(valid_indices, valid_embeddings):
         result[idx] = emb
-    
+
     return result
 
 

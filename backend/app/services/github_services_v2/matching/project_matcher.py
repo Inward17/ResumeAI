@@ -66,16 +66,23 @@ async def _ensure_bge_model():
 
         def _load():
             global _bge_model, _bge_tokenizer
-            import torch
-            from transformers import AutoModel, AutoTokenizer
-            from ..config import BGE_MODEL, DEVICE, NUM_THREADS
+            try:
+                # Fast DLL pre-check: import torch core first to detect Windows DLL failure
+                # before attempting slow model download/load
+                import torch
+                _ = torch.zeros(1)  # Force actual DLL initialization
+                from transformers import AutoModel, AutoTokenizer
+                from ..config import BGE_MODEL, DEVICE, NUM_THREADS
 
-            torch.set_num_threads(NUM_THREADS)
-            _bge_tokenizer = AutoTokenizer.from_pretrained(BGE_MODEL)
-            _bge_model = AutoModel.from_pretrained(BGE_MODEL)
-            _bge_model.to(DEVICE)
-            _bge_model.eval()
-            logger.info("BGE model loaded: %s", BGE_MODEL)
+                torch.set_num_threads(NUM_THREADS)
+                _bge_tokenizer = AutoTokenizer.from_pretrained(BGE_MODEL)
+                _bge_model = AutoModel.from_pretrained(BGE_MODEL)
+                _bge_model.to(DEVICE)
+                _bge_model.eval()
+                logger.info("BGE model loaded: %s", BGE_MODEL)
+            except Exception as e:
+                logger.error("BGE unavailable (DLL issue). Deep project matching disabled. Error: %s", e)
+                _bge_model = "FAILED"
 
         await asyncio.to_thread(_load)
 
@@ -87,6 +94,10 @@ async def _embed_texts_bge(texts: List[str]) -> np.ndarray:
     CPU-only.  Offloaded to thread to avoid blocking.
     """
     await _ensure_bge_model()
+    
+    # Graceful fallback if model failed to load
+    if _bge_model == "FAILED":
+        return np.zeros((len(texts), 1024))
 
     def _encode():
         import torch

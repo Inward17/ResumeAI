@@ -85,15 +85,19 @@ async def _ensure_codebert():
 
         def _load():
             global _codebert_model, _codebert_tokenizer
-            import torch
-            from transformers import AutoModel, AutoTokenizer
+            try:
+                import torch
+                from transformers import AutoModel, AutoTokenizer
 
-            torch.set_num_threads(NUM_THREADS)
-            _codebert_tokenizer = AutoTokenizer.from_pretrained(CODEBERT_MODEL)
-            _codebert_model = AutoModel.from_pretrained(CODEBERT_MODEL)
-            _codebert_model.to(DEVICE)
-            _codebert_model.eval()
-            logger.info("CodeBERT model loaded: %s", CODEBERT_MODEL)
+                torch.set_num_threads(NUM_THREADS)
+                _codebert_tokenizer = AutoTokenizer.from_pretrained(CODEBERT_MODEL)
+                _codebert_model = AutoModel.from_pretrained(CODEBERT_MODEL)
+                _codebert_model.to(DEVICE)
+                _codebert_model.eval()
+                logger.info("CodeBERT model loaded: %s", CODEBERT_MODEL)
+            except Exception as e:
+                logger.error("CodeBERT unavailable (DLL issue). Code similarity disabled. Error: %s", e)
+                _codebert_model = "FAILED"
 
         await asyncio.to_thread(_load)
 
@@ -220,6 +224,10 @@ def _chunk_code(code: str) -> List[str]:
 async def _embed_chunks(chunks: List[str]) -> np.ndarray:
     """Embed code chunks with CodeBERT. Uses LRU + disk cache."""
     await _ensure_codebert()
+    
+    # Graceful fallback if model failed to load
+    if _codebert_model == "FAILED":
+        return np.zeros((len(chunks), CODEBERT_EMBEDDING_DIM))
 
     cached_results: Dict[int, np.ndarray] = {}
     to_encode: List[Tuple[int, str]] = []
