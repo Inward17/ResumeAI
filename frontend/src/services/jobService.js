@@ -12,33 +12,33 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
  *  Transform: Backend (snake_case) ➜ Frontend (camelCase)
  * ───────────────────────────────────────────────────────────── */
 const transformJobFromAPI = (job) => ({
-    id:              job.id,
-    title:           job.job_title,
-    description:     job.job_description,
-    requirements:    job.required_skills    || [],
-    preferredSkills: job.preferred_skills   || [],
+    id: job.id,
+    title: job.job_title,
+    description: job.job_description,
+    requirements: job.required_skills || [],
+    preferredSkills: job.preferred_skills || [],
     experienceLevel: job.experience_level,
-    employmentType:  job.employment_type,
-    location:        job.location,
-    status:          job.is_active ? 'Active' : 'Closed',
-    totalCandidates: job.total_candidates   || 0,
-    screened:        job.screened           || 0,
-    shortlisted:     job.shortlisted       || 0,
-    postedAt:        job.posted_at,
+    employmentType: job.employment_type,
+    location: job.location,
+    status: job.is_active ? 'Active' : 'Closed',
+    totalCandidates: job.total_candidates || 0,
+    screened: job.screened || 0,
+    shortlisted: job.shortlisted || 0,
+    postedAt: job.posted_at,
 });
 
 /* ─────────────────────────────────────────────────────────────
  *  Transform: Frontend (camelCase) ➜ Backend (snake_case)
  * ───────────────────────────────────────────────────────────── */
 const transformJobToAPI = (job) => ({
-    job_title:        job.title,
-    job_description:  job.description,
-    required_skills:  job.requirements    || [],
+    job_title: job.title,
+    job_description: job.description,
+    required_skills: job.requirements || [],
     preferred_skills: job.preferredSkills || [],
     experience_level: job.experienceLevel,
-    employment_type:  job.employmentType,
-    location:         job.location,
-    is_active:        job.status !== 'Closed',    // default to active
+    employment_type: job.employmentType,
+    location: job.location,
+    is_active: job.status !== 'Closed',    // default to active
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -50,7 +50,21 @@ export const getJobs = async () => {
     const response = await fetch(`${API_BASE_URL}/api/jobs`);
     if (!response.ok) throw new Error('Failed to fetch jobs');
     const rawJobs = await response.json();
-    return rawJobs.map(transformJobFromAPI);
+    const jobs = rawJobs.map(transformJobFromAPI);
+
+    // N+1 solution for candidate counts (since backend does not compute them)
+    const enrichedJobs = await Promise.all(jobs.map(async (job) => {
+        try {
+            const candidates = await getJobCandidates(job.id);
+            job.totalCandidates = candidates.length;
+            job.screened = candidates.filter(c => c.status !== 'New').length;
+            job.shortlisted = candidates.filter(c => ['Shortlisted', 'Interview', 'Offer'].includes(c.status)).length;
+        } catch (err) {
+            // default to mapped values
+        }
+        return job;
+    }));
+    return enrichedJobs;
 };
 
 /** Fetch a single job by ID (GET /api/jobs/:id) */
@@ -58,7 +72,16 @@ export const getJob = async (jobId) => {
     const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`);
     if (!response.ok) throw new Error('Failed to fetch job');
     const rawJob = await response.json();
-    return transformJobFromAPI(rawJob);
+    const job = transformJobFromAPI(rawJob);
+    try {
+        const candidates = await getJobCandidates(job.id);
+        job.totalCandidates = candidates.length;
+        job.screened = candidates.filter(c => c.status !== 'New').length;
+        job.shortlisted = candidates.filter(c => ['Shortlisted', 'Interview', 'Offer'].includes(c.status)).length;
+    } catch (err) {
+        // default to mapped values
+    }
+    return job;
 };
 
 /** Create a new job (POST /api/jobs) */
@@ -112,18 +135,18 @@ export const getJobCandidates = async (jobId) => {
     const data = await response.json();
     // Backend returns { job_id, candidates: [...] }
     return (data.candidates || []).map(c => ({
-        id:                 c.candidate_id,
-        name:               c.name || 'Unknown',
-        email:              c.email || '',
-        phone:              c.phone || '',
-        status:             c.status || 'Under Review',
-        applicationDate:    c.application_date,
-        jdMatchScore:       c.jd_match_score       || 0,
-        verificationScore:  c.verification_score   || 0,
-        scoreDetails:       c.score_details        || {},
-        filename:           c.filename,
+        id: c.candidate_id,
+        name: c.name || 'Unknown',
+        email: c.email || '',
+        phone: c.phone || '',
+        status: c.status || 'Under Review',
+        applicationDate: c.application_date,
+        jdMatchScore: c.jd_match_score || 0,
+        verificationScore: c.verification_score || 0,
+        scoreDetails: c.score_details || {},
+        filename: c.filename,
         verificationStatus: c.verification_status,
-        skillMatches:       c.skill_matches        || [],
+        skillMatches: c.skill_matches || [],
     }));
 };
 

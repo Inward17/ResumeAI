@@ -154,8 +154,18 @@ const Dashboard = ({ onViewCandidates }) => {
                         <p className="text-xs text-slate-400 mt-0.5">{job.location || 'Remote'} • {job.employmentType || 'Full-time'}</p>
                       </td>
                       <td className="px-6 py-4 text-center">{statusPill(job.status)}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-sm font-semibold text-slate-700">{job.totalCandidates || 0}</span>
+                      <td className="px-6 py-4">
+                        {job.totalCandidates > 0 ? (
+                          <div className="flex -space-x-2 justify-center">
+                            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200"></div>
+                            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-300"></div>
+                            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-400 flex items-center justify-center text-[8px] font-bold text-white">+{job.totalCandidates}</div>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <span className="text-sm font-semibold text-slate-400">0</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <span className="text-xs text-slate-400">{job.postedAt ? new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
@@ -234,22 +244,7 @@ const Dashboard = ({ onViewCandidates }) => {
             <span className="text-sm font-bold" style={{ color: C.accent }}>143 Candidates</span>
           </div>
 
-          {/* Recent jobs mini-list */}
-          <div className="pt-2 border-t border-slate-100 space-y-2">
-            {(recentJobs.slice(0, 3)).map(job => (
-              <button
-                key={job.id}
-                onClick={() => onViewCandidates && onViewCandidates(job)}
-                className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors text-left"
-              >
-                <div>
-                  <p className="text-xs font-semibold text-slate-900 truncate max-w-[140px]">{job.title}</p>
-                  <p className="text-[10px] text-slate-400">{job.totalCandidates || 0} candidates</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
-              </button>
-            ))}
-          </div>
+
         </Card>
       </div>
     </div>
