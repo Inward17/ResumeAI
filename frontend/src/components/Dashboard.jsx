@@ -69,7 +69,7 @@ const Dashboard = ({ onViewCandidates }) => {
 
   return (
     <div className="min-h-full p-8" style={{ background: C.pageGray }}>
-      {/* ── Page header ── */}
+      {/* ── Page header ──
       <div className="flex items-center justify-between mb-8">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Dashboard Overview</p>
@@ -83,7 +83,7 @@ const Dashboard = ({ onViewCandidates }) => {
             />
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* ── Stat cards row ── */}
       <div className="grid grid-cols-4 gap-4 mb-8">

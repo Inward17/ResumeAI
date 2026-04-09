@@ -13,12 +13,14 @@ import CandidatePipeline from "./components/CandidatePipeline";
 import Profile from "./components/Profile";
 import Settings from "./components/Settings";
 import Interviews from "./components/Interviews";
+import QAPage from "./components/QAPage";
 import { Toaster } from "./components/ui/toaster";
 
 // Main App Layout for authenticated users
 function AppLayout() {
   const [activeView, setActiveView] = useState('dashboard');
   const [selectedJob, setSelectedJob] = useState(null);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
 
   const handleViewCandidates = (job) => {
     setSelectedJob(job);
@@ -44,7 +46,34 @@ function AppLayout() {
           />
         ) : <JobPostings onViewCandidates={handleViewCandidates} />;
       case 'interviews':
-        return <Interviews />;
+        return (
+          <Interviews
+            onTakeInterview={(candidate, job) => {
+              setSelectedCandidate(candidate);
+              setSelectedJob(job);
+              setActiveView('qa');
+            }}
+          />
+        );
+      case 'qa':
+        return selectedCandidate ? (
+          <QAPage
+            candidate={selectedCandidate}
+            job={selectedJob}
+            onBack={() => {
+              setSelectedCandidate(null);
+              setActiveView('interviews');
+            }}
+          />
+        ) : (
+          <Interviews
+            onTakeInterview={(candidate, job) => {
+              setSelectedCandidate(candidate);
+              setSelectedJob(job);
+              setActiveView('qa');
+            }}
+          />
+        );
       case 'profile':
         return <Profile />;
       case 'settings':

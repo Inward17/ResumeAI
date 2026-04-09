@@ -175,3 +175,26 @@ export const updateCandidateStatus = async (jobId, candidateId, status) => {
     if (!response.ok) throw new Error('Failed to update status');
     return response.json();
 };
+
+/** Fetch AI-generated interview questions (GET /api/jobs/:jobId/candidates/:candidateId/interview-questions) */
+export const getInterviewQuestions = async (jobId, candidateId) => {
+    const response = await fetch(
+        `${API_BASE_URL}/api/jobs/${jobId}/candidates/${candidateId}/interview-questions`
+    );
+    if (!response.ok) throw new Error('Failed to fetch interview questions');
+    return response.json();
+};
+
+/** Submit interview evaluation (POST /api/jobs/:jobId/candidates/:candidateId/evaluation) */
+export const submitEvaluation = async (jobId, candidateId, evaluationData) => {
+    const response = await fetch(
+        `${API_BASE_URL}/api/jobs/${jobId}/candidates/${candidateId}/evaluation`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(evaluationData),
+        }
+    );
+    if (!response.ok) throw new Error('Failed to submit evaluation');
+    return response.json();
+};
