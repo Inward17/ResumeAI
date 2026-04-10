@@ -56,7 +56,7 @@ const CandidateRow = ({ candidate, onClick, onMoveToInterview }) => {
   const verified = candidate.verificationScore ?? 0;
   const isInterview = ['Interview', 'interview', 'Shortlisted', 'shortlisted'].includes(candidate.status);
   return (
-    <div className="flex items-center justify-between px-5 py-4 hover:bg-indigo-50/60 transition-colors border-b border-slate-100 last:border-0 group">
+    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0 px-5 py-4 hover:bg-indigo-50/60 transition-colors border-b border-slate-100 last:border-0 group">
       {/* Left: avatar + name — clicking opens dossier */}
       <button onClick={() => onClick(candidate)} className="flex items-center gap-3 flex-1 text-left min-w-0">
         <div className="h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
@@ -70,7 +70,7 @@ const CandidateRow = ({ candidate, onClick, onMoveToInterview }) => {
       </button>
 
       {/* Right: score + status + action */}
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pl-12 md:pl-0 mt-1 md:mt-0">
         <span
           className="text-xs font-bold px-2.5 py-0.5 rounded-full"
           style={match >= 80
@@ -109,6 +109,7 @@ const CandidatePipeline = ({ job, onBack }) => {
   const [uploadProgress, setUploadProgress] = useState(null); // {processed, total}
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [mobileTab, setMobileTab] = useState('pipeline'); // 'pipeline' | 'analysis'
   const fileInputRef = useRef(null);
   const { toast } = useToast();
 
@@ -167,7 +168,7 @@ const CandidatePipeline = ({ job, onBack }) => {
     : 0;
 
   return (
-    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+    <div className="min-h-full md:p-8 p-4 pb-20" style={{ background: C.pageGray }}>
       {/* ── Back + header ── */}
       <div className="mb-6">
         <button
@@ -176,27 +177,49 @@ const CandidatePipeline = ({ job, onBack }) => {
         >
           <ArrowLeft className="h-4 w-4" /> Back to Postings
         </button>
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-slate-900">{job.title}</h1>
-            <div className="flex items-center gap-4 text-xs text-slate-400 mt-1">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400 mt-1">
               {job.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>}
               {job.employmentType && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{job.employmentType}</span>}
               <span className="flex items-center gap-1"><Users className="h-3 w-3" />{candidates.length} Active Candidates</span>
             </div>
           </div>
           {/* Pipeline velocity */}
-          <div className="text-right">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pipeline Velocity</p>
+          <div className="md:text-right flex md:flex-col items-center md:items-end justify-between bg-white md:bg-transparent p-4 md:p-0 rounded-2xl md:rounded-none border md:border-0 border-slate-200">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pipeline Velocity</p>
+              <p className="text-xs text-slate-400 hidden md:block mt-1">Average time to AI verification</p>
+            </div>
             <p className="text-2xl font-black" style={{ color: C.primary }}>4.2 <span className="text-base font-semibold">Days</span></p>
-            <p className="text-xs text-slate-400">Average time to AI verification</p>
           </div>
         </div>
       </div>
 
+      {/* Mobile Tab Switcher */}
+      <div className="lg:hidden flex bg-slate-200/50 p-1 rounded-xl mb-6">
+        <button
+          onClick={() => setMobileTab('pipeline')}
+          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+            mobileTab === 'pipeline' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+          }`}
+        >
+          Pipeline
+        </button>
+        <button
+          onClick={() => setMobileTab('analysis')}
+          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+            mobileTab === 'analysis' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+          }`}
+        >
+          Analysis
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Left: Upload + Candidate list */}
-        <div className="flex flex-col gap-5">
+        <div className={`flex-col gap-5 ${mobileTab === 'pipeline' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Upload zone */}
           <div
             className="rounded-2xl border-2 border-dashed p-6 flex flex-col items-center gap-3 text-center transition-colors"
@@ -280,7 +303,7 @@ const CandidatePipeline = ({ job, onBack }) => {
         </div>
 
         {/* Right: live analysis + stats */}
-        <div className="flex flex-col gap-5">
+        <div className={`flex-col gap-5 ${mobileTab === 'analysis' ? 'flex' : 'hidden lg:flex'}`}>
           {/* Live Analysis card */}
           <div
             className="rounded-2xl p-5"

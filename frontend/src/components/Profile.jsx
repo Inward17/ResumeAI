@@ -126,7 +126,7 @@ const Profile = () => {
   const setAi    = (key, val) => setAiParams(p => ({ ...p, [key]: val }));
 
   return (
-    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+    <div className="min-h-full md:p-8 p-4 pb-20" style={{ background: C.pageGray }}>
       {/* ── Page header ── */}
       <div className="mb-8">
         <h1 className="text-2xl font-black text-slate-900">Account Settings</h1>
@@ -143,7 +143,7 @@ const Profile = () => {
           <Card>
             <SectionHeader icon={User} title="Personal Information" />
             <form onSubmit={handleSavePersonal} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <FInput id="fullName" label="Full Name" icon={User}
                   value={personal.fullName}
                   onChange={e => setPersonal(p => ({ ...p, fullName: e.target.value }))}
@@ -153,7 +153,7 @@ const Profile = () => {
                   onChange={e => setPersonal(p => ({ ...p, email: e.target.value }))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FInput id="phone" label="Phone Number" icon={Phone}
                   value={personal.phone}
                   onChange={e => setPersonal(p => ({ ...p, phone: e.target.value }))}
@@ -212,7 +212,7 @@ const Profile = () => {
           <Card>
             <SectionHeader icon={Star} title="AI Parameters" />
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
                   { key: 'defaultJobActive', label: 'Default Job Status', sub: 'Set new pipelines to Active' },
                   { key: 'highScoreAlerts',  label: 'High Score Alerts',  sub: 'Match threshold > 90%' },

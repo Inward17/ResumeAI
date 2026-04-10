@@ -68,7 +68,7 @@ const Dashboard = ({ onViewCandidates }) => {
   const recentJobs = jobs.slice(0, 5);
 
   return (
-    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+    <div className="min-h-full md:p-8 p-4" style={{ background: C.pageGray }}>
       {/* ── Page header ──
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -86,7 +86,7 @@ const Dashboard = ({ onViewCandidates }) => {
       </div> */}
 
       {/* ── Stat cards row ── */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid md:grid-cols-4 grid-cols-2 gap-4 mb-8">
         {STATS.map((s, i) => (
           <Card
             key={s.label}
@@ -108,7 +108,7 @@ const Dashboard = ({ onViewCandidates }) => {
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
                   {s.icon && <s.icon className="h-4 w-4" style={{ color: s.iconColor || C.accent }} />}
                 </div>
-                <p className="text-4xl font-black text-slate-900">{s.value}</p>
+                <p className="md:text-4xl text-2xl font-black text-slate-900">{s.value}</p>
                 {s.sub && <p className="text-[10px] font-bold uppercase tracking-widest mt-1 text-green-500">{s.sub}</p>}
               </>
             )}
@@ -117,7 +117,7 @@ const Dashboard = ({ onViewCandidates }) => {
       </div>
 
       {/* ── Main content row ── */}
-      <div className="grid grid-cols-[1fr_280px] gap-6">
+      <div className="grid md:grid-cols-[1fr_280px] grid-cols-1 gap-6">
         {/* Left col: recent jobs + AI pulse */}
         <div className="flex flex-col gap-6">
           {/* Recent Job Postings table */}
@@ -134,46 +134,77 @@ const Dashboard = ({ onViewCandidates }) => {
             ) : recentJobs.length === 0 ? (
               <div className="px-6 py-8 text-center text-slate-400 text-sm">No jobs yet. Create your first job posting.</div>
             ) : (
-              <table className="min-w-full">
-                <thead>
-                  <tr style={{ background: '#f8fafc' }}>
-                    {['Job Title', 'Status', 'Candidates', 'Date Created'].map((h, i) => (
-                      <th key={h} className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 ${i > 0 ? 'text-center' : 'text-left'}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
+              <>
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        {['Job Title', 'Status', 'Candidates', 'Date Created'].map((h, i) => (
+                          <th key={h} className={`px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 ${i > 0 ? 'text-center' : 'text-left'}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {recentJobs.map(job => (
+                        <tr
+                          key={job.id}
+                          className="hover:bg-slate-50 transition-colors cursor-pointer"
+                          onClick={() => onViewCandidates && onViewCandidates(job)}
+                        >
+                          <td className="px-6 py-4">
+                            <p className="text-sm font-semibold text-slate-900">{job.title}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{job.location || 'Remote'} • {job.employmentType || 'Full-time'}</p>
+                          </td>
+                          <td className="px-6 py-4 text-center">{statusPill(job.status)}</td>
+                          <td className="px-6 py-4">
+                            {job.totalCandidates > 0 ? (
+                              <div className="flex -space-x-2 justify-center">
+                                <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200"></div>
+                                <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-300"></div>
+                                <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-400 flex items-center justify-center text-[8px] font-bold text-white">+{job.totalCandidates}</div>
+                              </div>
+                            ) : (
+                              <div className="text-center">
+                                <span className="text-sm font-semibold text-slate-400">0</span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-xs text-slate-400">{job.postedAt ? new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="md:hidden flex flex-col divide-y divide-slate-100">
                   {recentJobs.map(job => (
-                    <tr
+                    <div
                       key={job.id}
-                      className="hover:bg-slate-50 transition-colors cursor-pointer"
+                      className="p-4 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col gap-3"
                       onClick={() => onViewCandidates && onViewCandidates(job)}
                     >
-                      <td className="px-6 py-4">
-                        <p className="text-sm font-semibold text-slate-900">{job.title}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">{job.location || 'Remote'} • {job.employmentType || 'Full-time'}</p>
-                      </td>
-                      <td className="px-6 py-4 text-center">{statusPill(job.status)}</td>
-                      <td className="px-6 py-4">
-                        {job.totalCandidates > 0 ? (
-                          <div className="flex -space-x-2 justify-center">
-                            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200"></div>
-                            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-300"></div>
-                            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-400 flex items-center justify-center text-[8px] font-bold text-white">+{job.totalCandidates}</div>
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <span className="text-sm font-semibold text-slate-400">0</span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="text-xs text-slate-400">{job.postedAt ? new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
-                      </td>
-                    </tr>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{job.title}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{job.location || 'Remote'} • {job.employmentType || 'Full-time'}</p>
+                        </div>
+                        {statusPill(job.status)}
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-slate-50 border-dashed">
+                        <div className="flex items-center gap-1.5">
+                          <Users className="h-4 w-4" style={{ color: C.accent }} />
+                          <span className="font-semibold text-slate-700">{job.totalCandidates}</span> candidates
+                        </div>
+                        <span>
+                          {job.postedAt ? new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </>
             )}
           </Card>
 

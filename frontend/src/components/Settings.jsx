@@ -48,12 +48,12 @@ const Panel = ({ children, className = '' }) => (
 
 /** Standard panel header row */
 const PanelHeader = ({ title, subtitle, action }) => (
-  <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b border-slate-100">
+  <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 md:gap-0 px-6 pt-6 pb-4 border-b border-slate-100">
     <div>
       <p className="font-semibold text-slate-900">{title}</p>
       {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
     </div>
-    {action}
+    {action && <div className="self-end md:self-auto">{action}</div>}
   </div>
 );
 
@@ -227,7 +227,7 @@ const Settings = () => {
 
   /* ── Render ── */
   return (
-    <div className="min-h-full p-8" style={{ background: COLOR.pageGray }}>
+    <div className="min-h-full md:p-8 p-4 pb-20" style={{ background: COLOR.pageGray }}>
 
       {/* ── Page title ── */}
       <div className="mb-6">
@@ -236,7 +236,7 @@ const Settings = () => {
       </div>
 
       {/* ── Underline tab bar ── */}
-      <div className="flex gap-0 border-b border-slate-200 mb-8">
+      <div className="flex gap-0 border-b border-slate-200 mb-8 overflow-x-auto no-scrollbar">
         {TABS.map(({ id, label }) => (
           <button
             key={id}
@@ -305,7 +305,8 @@ const Settings = () => {
             />
 
             {/* Table */}
-            <table className="min-w-full">
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
               <thead>
                 <tr style={{ background: 'var(--color-sidebar-bg)' }}>
                   {['Name', 'Email Address', 'Role', 'Actions'].map((h, i) => (
@@ -336,7 +337,8 @@ const Settings = () => {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           </Panel>
 
           {/* Insight + security row */}
@@ -448,7 +450,7 @@ const Settings = () => {
               {integrations.map(integration => (
                 <div
                   key={integration.id}
-                  className="flex items-center justify-between px-6 py-5 hover:bg-slate-50 transition-colors"
+                  className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-6 py-5 hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-center gap-4">
                     {/* Brand coloured initial */}
@@ -463,7 +465,7 @@ const Settings = () => {
                       <p className="text-xs text-slate-500 mt-0.5">{integration.description}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-3 shrink-0">
                     <span
                       className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider"
                       style={integration.connected
@@ -510,14 +512,14 @@ const Settings = () => {
             <div className="divide-y divide-slate-100">
               {apiKeys.map(keyItem => (
                 <div key={keyItem.id} className="px-6 py-5">
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 mb-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{keyItem.name}</p>
                       <p className="text-xs text-slate-400 mt-0.5">
                         Created {keyItem.created} · Last used {keyItem.lastUsed}
                       </p>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 self-end md:self-auto">
                       <button className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors" title="Copy">
                         <Copy className="h-4 w-4" />
                       </button>

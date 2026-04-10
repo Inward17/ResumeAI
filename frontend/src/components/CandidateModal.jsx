@@ -85,28 +85,33 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate, onTakeIntervi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,14,42,0.7)', backdropFilter: 'blur(4px)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4" style={{ background: 'rgba(15,14,42,0.7)', backdropFilter: 'blur(4px)' }}>
+      <div className="bg-white rounded-t-3xl md:rounded-2xl shadow-2xl w-full max-w-4xl h-[95vh] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col">
 
         {/* ── Modal header ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100" style={{ background: '#f8fafc' }}>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Candidate Dossier</p>
-            <p className="text-sm font-semibold text-slate-700">{job?.title || 'Job Candidate'}</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between px-6 py-4 border-b border-slate-100 gap-4" style={{ background: '#f8fafc' }}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Candidate Dossier</p>
+              <p className="text-sm font-semibold text-slate-700">{job?.title || 'Job Candidate'}</p>
+            </div>
+            <button onClick={onClose} className="md:hidden p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <div className="flex items-center gap-3">
             <StatusSelect value={status} onChange={handleStatusChange} />
             {onTakeInterview && (
               <button
                 onClick={() => onTakeInterview(candidate, job)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 hover:scale-[1.02]"
+                className="flex items-center justify-center flex-1 md:flex-none gap-2 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 hover:scale-[1.02]"
                 style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.accent})` }}
               >
                 <ArrowUpRight className="h-4 w-4" />
                 Take Interview
               </button>
             )}
-            <button onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
+            <button onClick={onClose} className="hidden md:block p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -114,10 +119,10 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate, onTakeIntervi
 
         {/* ── Two-column body ── */}
         <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-[1fr_340px] h-full">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_340px] md:h-full">
 
             {/* LEFT: identity + persona + experience */}
-            <div className="p-6 border-r border-slate-100 space-y-6">
+            <div className="p-4 md:p-6 md:border-r border-b md:border-b-0 border-slate-100 space-y-6">
               {/* Identity */}
               <div>
                 <div className="flex items-start gap-4">
@@ -137,9 +142,9 @@ const CandidateModal = ({ candidate, job, onClose, onStatusUpdate, onTakeIntervi
               </div>
 
               {/* AI Scores row */}
-              <div className="flex items-center gap-6 p-4 rounded-2xl" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <div className="flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-6 p-4 rounded-2xl" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                 <Ring value={matchScore} label="Role Match" sub="Score" large />
-                <div className="flex-1 grid grid-cols-2 gap-3">
+                <div className="w-full md:flex-1 grid grid-cols-2 gap-3">
                   <Ring value={expScore} label="Experience Depth" sub="Top 1% expertise" />
                   <Ring value={verifyScore} label="Verification" sub="GitHub verified" />
                 </div>

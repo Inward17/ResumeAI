@@ -37,6 +37,15 @@ const TopNavbar = ({ activeView, setActiveView }) => {
     >
       {/* Left: Page title + sub-label */}
       <div className="flex items-center gap-3">
+        {/* MOBILE LOGO */}
+        <div className="flex md:hidden h-8 w-8 rounded-lg items-center justify-center shrink-0" style={{ background: C.primary }}>
+          <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="white" strokeWidth="2.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+        </div>
+
         <div>
           <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 leading-none mb-0.5">
             {page.title}
@@ -51,9 +60,9 @@ const TopNavbar = ({ activeView, setActiveView }) => {
       </div>
 
       {/* Right: search + actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center md:gap-2 gap-1">
         {/* Search bar */}
-        <div className="relative">
+        <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
           <input
             value={searchVal}
@@ -100,7 +109,7 @@ const TopNavbar = ({ activeView, setActiveView }) => {
         </div>
 
         {/* Help */}
-        <button className="h-9 w-9 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-colors">
+        <button className="hidden md:flex h-9 w-9 rounded-xl items-center justify-center hover:bg-slate-100 transition-colors">
           <HelpCircle className="h-4.5 w-4.5 text-slate-500" />
         </button>
 

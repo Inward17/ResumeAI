@@ -84,9 +84,9 @@ function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen" style={{ background: '#f1f3f9' }}>
+    <div className="flex flex-col-reverse md:flex-row h-screen" style={{ background: '#f1f3f9' }}>
       <Sidebar activeView={activeView} setActiveView={setActiveView} />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
         <TopNavbar activeView={activeView} setActiveView={setActiveView} />
         <main className="flex-1 overflow-y-auto">
           {renderMainContent()}

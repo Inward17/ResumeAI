@@ -203,20 +203,20 @@ const JobPostings = ({ onViewCandidates }) => {
   };
 
   return (
-    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+    <div className="min-h-full md:p-8 p-4" style={{ background: C.pageGray }}>
       {/* Header */}
       <div className="mb-8">
         <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Job Postings</p>
-        <div className="flex items-end justify-between">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-slate-900 leading-tight">Manage Talent Pipeline.</h1>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <p className="text-sm text-slate-400 mt-0.5 max-w-sm md:max-w-none">
               Organize, track, and optimize your open positions with AI-driven candidate scoring and market insights.
             </p>
           </div>
           <button
             onClick={() => { setEditingJob(null); setIsModalOpen(true); }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-sm hover:opacity-90 transition-opacity"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-sm hover:opacity-90 transition-opacity w-full md:w-auto"
             style={{ background: C.primary }}
           >
             <Plus className="h-4 w-4" /> Create New Job
@@ -225,7 +225,7 @@ const JobPostings = ({ onViewCandidates }) => {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 border-b border-slate-200 mb-7">
+      <div className="flex gap-1 border-b border-slate-200 mb-7 overflow-x-auto whitespace-nowrap pb-px no-scrollbar">
         {FILTERS.map(f => (
           <button
             key={f}

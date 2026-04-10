@@ -220,7 +220,7 @@ const Interviews = ({ onTakeInterview }) => {
   ).length;
 
   return (
-    <div className="min-h-full p-8" style={{ background: C.pageGray }}>
+    <div className="min-h-full p-4 md:p-8 pb-20 md:pb-8" style={{ background: C.pageGray }}>
       {/* ── Header ── */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-slate-900">Interview Pipeline</h1>
@@ -230,7 +230,7 @@ const Interviews = ({ onTakeInterview }) => {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
         {[
           { label: 'Total in Pipeline', value: total, icon: Users, color: C.primary },
           { label: 'Avg Match Score',   value: `${avgMatch}%`, icon: Star, color: C.accent },
@@ -248,9 +248,9 @@ const Interviews = ({ onTakeInterview }) => {
       </div>
 
       {/* ── Filter bar ── */}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
         {/* Search */}
-        <div className="relative flex-1 max-w-xs">
+        <div className="relative w-full md:flex-1 md:max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
             value={search}
@@ -261,7 +261,7 @@ const Interviews = ({ onTakeInterview }) => {
         </div>
 
         {/* Status filter tabs */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 gap-1">
+        <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 gap-1 overflow-x-auto no-scrollbar w-full md:w-auto">
           {['All', 'Interview', 'Shortlisted'].map(s => (
             <button
               key={s}

@@ -124,13 +124,12 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4 p-0"
       style={{ background: 'rgba(15,14,42,0.45)', backdropFilter: 'blur(6px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-[800px] flex flex-col overflow-hidden"
-        style={{ maxHeight: '92vh' }}
+        className="bg-white md:rounded-2xl rounded-t-3xl shadow-2xl w-full max-w-[800px] flex flex-col overflow-hidden h-[95vh] md:h-auto md:max-h-[92vh]"
       >
         {/* ── Modal Header ── */}
         <div className="px-6 pt-6 pb-4 relative">
@@ -167,7 +166,7 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
         <form id="job-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
           {/* Row 1: Job Title + Department + Status */}
-          <div className="grid grid-cols-[1fr_auto_auto] gap-3 items-end">
+          <div className="flex flex-col md:grid md:grid-cols-[1fr_auto_auto] gap-4 md:gap-3 md:items-end">
             <FInput
               id="job-title"
               label="Job Title"
@@ -176,7 +175,7 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
               value={form.title}
               onChange={e => set('title', e.target.value)}
             />
-            <div className="w-32">
+            <div className="w-full md:w-32">
               <FSelect
                 id="department"
                 label="Department"
@@ -185,7 +184,7 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
                 options={DEPARTMENTS}
               />
             </div>
-            <div className="w-28">
+            <div className="w-full md:w-28">
               <FSelect
                 id="status"
                 label="Status"
@@ -197,7 +196,7 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
           </div>
 
           {/* Row 2: Job Type pills + Experience Level pills */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Job Type</p>
               <div className="flex flex-wrap gap-1.5">
@@ -227,7 +226,7 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
           </div>
 
           {/* Location — text input + work-type pills */}
-          <div className="grid grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Location</p>
               <div className="relative">
