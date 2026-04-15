@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ArrowLeft, Mail, Phone, Send,
-  Zap, Clock, User, Monitor, XCircle, CheckCircle, Loader2, Award
+  Zap, Clock, User, Monitor, XCircle, CheckCircle, Loader2, Award, Bot
 } from 'lucide-react';
 import { C } from '../theme';
 import { getInterviewQuestions, submitEvaluation } from '../services/jobService';
+import FactCheckerBot from './FactCheckerBot';
 
 /* ── Clickable Tag pill ── */
 const TopicTag = ({ label, selected, onClick }) => (
@@ -94,6 +95,7 @@ const QAPage = ({ candidate, job, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [isFactCheckerOpen, setIsFactCheckerOpen] = useState(false);
 
   // selectedKeywords: { [questionId]: ["tag1", "tag2"] }
   const [selectedKeywords, setSelectedKeywords] = useState({});
@@ -183,9 +185,10 @@ const QAPage = ({ candidate, job, onBack }) => {
     `"Demonstrates high architectural maturity. Strong emphasis on scalability and performance optimization in microservices."`;
 
   return (
-    <div className="min-h-full" style={{ background: C.pageGray }}>
-      {/* ── Scrollable content ── */}
-      <div className="max-w-7xl mx-auto px-8 pt-6 pb-28">
+    <div className="flex h-full w-full overflow-hidden" style={{ background: C.pageGray }}>
+      {/* ── Main Scrollable Content ── */}
+      <div className="flex-1 overflow-y-auto min-h-full pb-28 relative">
+        <div className="max-w-7xl mx-auto px-8 pt-6">
         {/* Back link */}
         <button
           onClick={onBack}
@@ -214,7 +217,19 @@ const QAPage = ({ candidate, job, onBack }) => {
               >
                 Candidate Dossier
               </p>
-              <h1 className="text-2xl font-black text-slate-900">{name}</h1>
+              <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+                {name}
+                {!isFactCheckerOpen && (
+                  <button 
+                    onClick={() => setIsFactCheckerOpen(true)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center hover:scale-105 transition-transform"
+                    style={{ background: '#e0e7ff', color: C.accent }}
+                    title="Open AI Fact Checker"
+                  >
+                    <Bot className="h-4 w-4" />
+                  </button>
+                )}
+              </h1>
               <p className="text-sm text-slate-500 font-medium">{title}</p>
               <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
                 <span className="flex items-center gap-1.5">
@@ -228,8 +243,6 @@ const QAPage = ({ candidate, job, onBack }) => {
               </div>
             </div>
           </div>
-
-
         </div>
 
         {/* ── Two Column Layout ── */}
@@ -403,11 +416,13 @@ const QAPage = ({ candidate, job, onBack }) => {
           </div>
         </div>
       </div>
+      </div>
 
       {/* ── Sticky Bottom Action Bar ── */}
       <div
-        className="fixed bottom-0 left-56 right-0 z-40"
+        className="fixed bottom-0 left-0 md:left-56 z-40 transition-all duration-300"
         style={{
+          right: isFactCheckerOpen ? '400px' : '0',
           background: 'white',
           borderTop: '1px solid #e2e8f0',
           boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
@@ -450,6 +465,16 @@ const QAPage = ({ candidate, job, onBack }) => {
           </div>
         </div>
       </div>
+      
+      {/* ── Docked AI Assistant Sidebar ── */}
+      {isFactCheckerOpen && (
+        <div className="w-[400px] flex flex-col bg-white border-l border-slate-200 shrink-0 h-full relative z-40">
+          <FactCheckerBot 
+            candidateName={name} 
+            onClose={() => setIsFactCheckerOpen(false)} 
+          />
+        </div>
+      )}
     </div>
   );
 };
