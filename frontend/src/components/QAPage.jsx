@@ -470,6 +470,7 @@ const QAPage = ({ candidate, job, onBack }) => {
       {isFactCheckerOpen && (
         <div className="w-[400px] flex flex-col bg-white border-l border-slate-200 shrink-0 h-full relative z-40">
           <FactCheckerBot 
+            candidateId={candidate.id}
             candidateName={name} 
             onClose={() => setIsFactCheckerOpen(false)} 
           />

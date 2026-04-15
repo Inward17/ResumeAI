@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, X, Loader2 } from 'lucide-react';
 import { C } from '../theme';
+import { factCheck } from '../services/jobService';
 
-const FactCheckerBot = ({ candidateName, onClose }) => {
+const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
   const [messages, setMessages] = useState([
     { role: 'assistant', text: `Hi! I'm your AI Assistant. What claim would you like me to verify about ${candidateName}?` }
   ]);
@@ -18,8 +19,8 @@ const FactCheckerBot = ({ candidateName, onClose }) => {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const handleSend = async () => {
+    if (!inputValue.trim() || isTyping) return;
     
     // Add user message
     const userMsg = inputValue.trim();
@@ -27,14 +28,22 @@ const FactCheckerBot = ({ candidateName, onClose }) => {
     setInputValue('');
     setIsTyping(true);
 
-    // Mock API delay for backend call
-    setTimeout(() => {
-      setIsTyping(false);
+    try {
+      const data = await factCheck(candidateId, userMsg, candidateName);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        text: `[Frontend Mock] I have checked the dossier for "${userMsg}". Awaiting backend integration to provide accurate claim verification.` 
+        text: data.response,
+        condition: data.condition,
       }]);
-    }, 1500);
+    } catch (err) {
+      console.error('Fact check failed:', err);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        text: 'Sorry, I encountered an error while verifying that claim. Please try again.' 
+      }]);
+    } finally {
+      setIsTyping(false);
+    }
   };
 
   return (
@@ -65,6 +74,7 @@ const FactCheckerBot = ({ candidateName, onClose }) => {
                   ? 'bg-indigo-600 text-white rounded-tr-none' 
                   : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'
               }`}
+              style={{ whiteSpace: 'pre-wrap' }}
             >
               {msg.text}
             </div>

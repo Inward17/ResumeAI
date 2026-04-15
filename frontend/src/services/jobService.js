@@ -198,3 +198,17 @@ export const submitEvaluation = async (jobId, candidateId, evaluationData) => {
     if (!response.ok) throw new Error('Failed to submit evaluation');
     return response.json();
 };
+
+/** AI Fact Checker (POST /api/fact-checker/:candidateId) */
+export const factCheck = async (candidateId, message, candidateName) => {
+    const response = await fetch(
+        `${API_BASE_URL}/api/fact-checker/${candidateId}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, candidate_name: candidateName }),
+        }
+    );
+    if (!response.ok) throw new Error('Fact check request failed');
+    return response.json();
+};
