@@ -16,12 +16,42 @@ External GitHub API calls are only made as a fallback.
 
 import json
 import os
+import re
 import logging
 from typing import Any, Dict, Optional, List
 
 import httpx
 
 from app.database import db
+
+
+def _normalize(text: str) -> str:
+    """Normalize a string for fuzzy matching: lowercase, strip noise words, remove separators."""
+    text = text.lower().strip()
+    # Remove common noise words
+    for word in ("project", "app", "application", "system", "tool", "based", "the", "a", "an"):
+        text = re.sub(rf'\b{word}\b', '', text)
+    # Replace hyphens, underscores, dots with spaces, collapse whitespace
+    text = re.sub(r'[-_.]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _fuzzy_match(query: str, target: str) -> bool:
+    """Check if query matches target using normalized substring + token overlap."""
+    nq = _normalize(query)
+    nt = _normalize(target)
+    if not nq or not nt:
+        return False
+    # Direct substring match
+    if nq in nt or nt in nq:
+        return True
+    # Token overlap: if all significant query tokens appear in target
+    q_tokens = set(nq.split())
+    t_tokens = set(nt.split())
+    if q_tokens and q_tokens.issubset(t_tokens):
+        return True
+    return False
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +292,7 @@ async def _handle_verify_tech(
         lang = (repo.get("language", "") or "").lower()
         desc = (repo.get("description", "") or "").lower()
         topics = [t.lower() for t in repo.get("topics", [])]
-        if tech_lower in lang or tech_lower in desc or tech_lower in " ".join(topics):
+        if tech_lower in lang or tech_lower in desc or tech_lower in " ".join(topics) or _fuzzy_match(tech_query, repo_name):
             matching_repos.append(repo_name)
 
     # ── Step 3: Fallback — live GitHub API ──────────────────────────
@@ -277,9 +307,10 @@ async def _handle_verify_tech(
                 for repo in all_repos:
                     lang = (repo.get("language", "") or "").lower()
                     desc = (repo.get("description", "") or "").lower()
+                    rname = repo.get("name", "") or ""
                     topics = [t.lower() for t in repo.get("topics", [])]
-                    if tech_lower in lang or tech_lower in desc or tech_lower in " ".join(topics):
-                        live_repos_found.append(repo.get("name", "unknown"))
+                    if tech_lower in lang or tech_lower in desc or tech_lower in " ".join(topics) or _fuzzy_match(tech_query, rname):
+                        live_repos_found.append(rname or "unknown")
             finally:
                 await client.close()
             print(f"[FactChecker] Live GitHub check for '{tech_query}': found {len(live_repos_found)} repos")
@@ -334,19 +365,18 @@ async def _handle_verify_project(
     Step 3: Fallback — live GitHub API search for matching repo name.
     """
     parsed = candidate.get("parsed", {}) or {}
-    project_lower = project_query.lower().strip()
 
     # ── Step 1: Check resume ────────────────────────────────────────
     resume_projects = parsed.get("projects", []) or []
     resume_match = None
     for p in resume_projects:
         if isinstance(p, dict):
-            pname = (p.get("name", "") or "").lower()
-            pdesc = (p.get("description", "") or "").lower()
-            if project_lower in pname or project_lower in pdesc:
-                resume_match = p.get("name", project_lower)
+            pname = p.get("name", "") or ""
+            pdesc = p.get("description", "") or ""
+            if _fuzzy_match(project_query, pname) or _fuzzy_match(project_query, pdesc):
+                resume_match = p.get("name", project_query)
                 break
-        elif isinstance(p, str) and project_lower in p.lower():
+        elif isinstance(p, str) and _fuzzy_match(project_query, p):
             resume_match = p
             break
 
@@ -357,8 +387,8 @@ async def _handle_verify_project(
 
     github_match = None
     for m in matches:
-        if project_lower in (m.get("projectName", "") or "").lower() or \
-           project_lower in (m.get("repoName", "") or "").lower():
+        if _fuzzy_match(project_query, m.get("projectName", "") or "") or \
+           _fuzzy_match(project_query, m.get("repoName", "") or ""):
             github_match = m
             break
 
@@ -372,9 +402,9 @@ async def _handle_verify_project(
             try:
                 all_repos = await client.get_user_repos(username)
                 for repo in all_repos:
-                    repo_name = (repo.get("name", "") or "").lower()
-                    repo_desc = (repo.get("description", "") or "").lower()
-                    if project_lower in repo_name or project_lower in repo_desc:
+                    repo_name = repo.get("name", "") or ""
+                    repo_desc = repo.get("description", "") or ""
+                    if _fuzzy_match(project_query, repo_name) or _fuzzy_match(project_query, repo_desc):
                         live_match = {
                             "name": repo.get("name"),
                             "description": repo.get("description", ""),
@@ -399,15 +429,17 @@ async def _handle_verify_project(
 
     if github_match:
         evidence_parts.append(
-            f"✅ **GitHub (cached):** Matched to repo '{github_match.get('repoName', '')}' "
+            f"✅ **GitHub (cached):** A match was found! Repo '{github_match.get('repoName', '')}' matches the query "
             f"(similarity: {github_match.get('similarity', 'N/A')}, "
-            f"match: {github_match.get('matchStrength', 'N/A')})."
+            f"match rating: {github_match.get('matchStrength', 'N/A')})."
         )
     elif live_match:
-        fork_note = " ⚠️ (THIS IS A FORK)" if live_match["fork"] else ""
+        fork_note = " ⚠️ (NOTE: THIS REPOSITORY IS A FORK, NOT ORIGINAL)" if live_match["fork"] else "✅ (This is an original, non-forked repository)"
         evidence_parts.append(
-            f"✅ **GitHub (live):** Found repo '{live_match['name']}'{fork_note} — "
-            f"Language: {live_match['language'] or 'N/A'}, Stars: {live_match['stars']}."
+            f"✅ **GitHub (live):** A match was found! The repository '{live_match['name']}' matches the project '{project_query}'.\n"
+            f"   - {fork_note}\n"
+            f"   - Language: {live_match['language'] or 'Unknown'}\n"
+            f"   - Stars: {live_match['stars']}"
         )
     else:
         evidence_parts.append(f"❌ **GitHub:** No matching repository found for '{project_query}'.")
@@ -424,7 +456,7 @@ Claim: Candidate says they built a project called "{project_query}"
 Evidence:
 {evidence}
 
-Provide a clear verdict: Does the evidence support this claim?"""
+Provide a clear verdict: Does the evidence support this claim? If the repository is a fork, emphasize that."""
 
     response = await _call_groq(system, user_msg, temperature=0.3)
     return response or f"Evidence gathered:\n{evidence}"
