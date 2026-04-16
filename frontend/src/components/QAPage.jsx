@@ -231,7 +231,7 @@ const QAPage = ({ candidate, job, onBack }) => {
                 )}
               </h1>
               <p className="text-sm text-slate-500 font-medium">{title}</p>
-              <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-xs text-slate-400">
                 <span className="flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5" />
                   {email}
@@ -246,7 +246,7 @@ const QAPage = ({ candidate, job, onBack }) => {
         </div>
 
         {/* ── Two Column Layout ── */}
-        <div className="grid grid-cols-[380px_1fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
           {/* LEFT COLUMN */}
           <div className="space-y-6">
             {/* AI Insight Summary */}
@@ -420,15 +420,14 @@ const QAPage = ({ candidate, job, onBack }) => {
 
       {/* ── Sticky Bottom Action Bar ── */}
       <div
-        className="fixed bottom-0 left-0 md:left-56 z-40 transition-all duration-300"
+        className={`fixed bottom-0 left-0 md:left-56 z-40 transition-all duration-300 ${isFactCheckerOpen ? 'md:right-[400px] right-0' : 'right-0'}`}
         style={{
-          right: isFactCheckerOpen ? '400px' : '0',
           background: 'white',
           borderTop: '1px solid #e2e8f0',
           boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
         }}
       >
-        <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 md:py-4 flex flex-col xl:flex-row items-center justify-between gap-4 xl:gap-0">
           <div className="flex items-center gap-3">
             <div
               className="h-9 w-9 rounded-lg flex items-center justify-center"
@@ -445,30 +444,30 @@ const QAPage = ({ candidate, job, onBack }) => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2 w-full xl:w-auto pb-2 xl:pb-0">
             <button
               onClick={onBack}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold border-2 border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors whitespace-nowrap"
             >
-              <XCircle className="h-4 w-4" />
-              Reject Candidate
+              <XCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
+              Reject
             </button>
             <button
               onClick={handleSubmit}
               disabled={submitting || loading}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
               style={{ background: C.primary }}
             >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {submitting ? <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 animate-spin" /> : <Send className="h-3.5 w-3.5 md:h-4 md:w-4" />}
               {submitting ? 'Submitting…' : 'Submit Evaluation'}
             </button>
           </div>
         </div>
       </div>
       
-      {/* ── Docked AI Assistant Sidebar ── */}
+      {/* ── Docked AI Assistant Sidebar (Full screen overlay on mobile) ── */}
       {isFactCheckerOpen && (
-        <div className="w-[400px] flex flex-col bg-white border-l border-slate-200 shrink-0 h-full relative z-40">
+        <div className="fixed inset-0 z-[60] md:static md:w-[400px] flex flex-col bg-white md:border-l border-slate-200 shrink-0 h-full md:z-40">
           <FactCheckerBot 
             candidateId={candidate.id}
             candidateName={name} 
