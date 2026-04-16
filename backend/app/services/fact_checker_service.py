@@ -82,7 +82,7 @@ Return ONLY a JSON object with these fields:
 Return ONLY the JSON, no markdown, no explanation."""
 
 
-async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Optional[str]:
+async def _call_groq(system: str, user: str, temperature: float = 0.3, response_format: dict = None) -> Optional[str]:
     """Make a single Groq chat completion call. Returns the assistant text or None."""
     api_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     if not api_key:
@@ -98,6 +98,8 @@ async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Option
         "temperature": temperature,
         "max_tokens": 2000,
     }
+    if response_format:
+        payload["response_format"] = response_format
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -122,17 +124,22 @@ async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Option
 
 async def _classify_intent(user_message: str, candidate_name: str) -> Dict[str, str]:
     """Route the interviewer's prompt to one of the 4 conditions."""
+    if not user_message or not user_message.strip():
+        return {"condition": "general_qa", "extracted_query": ""}
+
     user_prompt = f"Candidate name: {candidate_name}\nInterviewer message: {user_message}"
-    raw = await _call_groq(ROUTER_SYSTEM_PROMPT, user_prompt)
+    raw = await _call_groq(ROUTER_SYSTEM_PROMPT, user_prompt, response_format={"type": "json_object"})
     if not raw:
         return {"condition": "general_qa", "extracted_query": user_message}
 
     try:
         cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
         if cleaned.endswith("```"):
-            cleaned = cleaned.rsplit("```", 1)[0]
+            cleaned = cleaned[:-3]
         parsed = json.loads(cleaned.strip())
         condition = parsed.get("condition", "general_qa")
         if condition not in ("general_qa", "verify_tech", "verify_project", "verify_authenticity"):
@@ -141,7 +148,8 @@ async def _classify_intent(user_message: str, candidate_name: str) -> Dict[str, 
             "condition": condition,
             "extracted_query": parsed.get("extracted_query", user_message),
         }
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to parse classification JSON: {e} | Raw: {raw}")
         return {"condition": "general_qa", "extracted_query": user_message}
 
 
@@ -235,6 +243,7 @@ async def _handle_general_qa(
 
     system = """You are an AI assistant helping an interviewer during a live technical interview.
 You have access to the candidate's resume and verification data.
+If asked to summarize a project, provide a clean, bulleted breakdown of what the project is, its tech stack, and any related metrics.
 Provide helpful, concise, and actionable responses.
 Be direct and professional. Keep the response under 150 words."""
 
@@ -298,6 +307,7 @@ async def _handle_verify_tech(
     # ── Step 3: Fallback — live GitHub API ──────────────────────────
     username = _get_github_username(candidate, verification)
     live_repos_found = []
+    deep_code_matches = []
     if not github_has_tech and not matching_repos and username:
         try:
             from app.services.github_services_v2.github_client import GitHubClient
@@ -311,9 +321,15 @@ async def _handle_verify_tech(
                     topics = [t.lower() for t in repo.get("topics", [])]
                     if tech_lower in lang or tech_lower in desc or tech_lower in " ".join(topics) or _fuzzy_match(tech_query, rname):
                         live_repos_found.append(rname or "unknown")
+                
+                # Deep code search fallback if no top-level repo matched
+                if not live_repos_found:
+                    code_hits = await client.search_user_code(username, tech_query, limit=3)
+                    for hit in code_hits:
+                        deep_code_matches.append(f"{hit['repo_name']}/{hit['file_name']}")
             finally:
                 await client.close()
-            print(f"[FactChecker] Live GitHub check for '{tech_query}': found {len(live_repos_found)} repos")
+            print(f"[FactChecker] Live GitHub check for '{tech_query}': found {len(live_repos_found)} repos, {len(deep_code_matches)} files")
         except Exception as e:
             logger.warning("[FactChecker] Live GitHub fallback failed: %s", e)
 
@@ -329,8 +345,10 @@ async def _handle_verify_tech(
         evidence_parts.append(f"✅ **GitHub (cached):** Found evidence of '{tech_query}' — {repos_list}.")
     elif live_repos_found:
         evidence_parts.append(f"✅ **GitHub (live):** Found {len(live_repos_found)} repos using '{tech_query}': {', '.join(live_repos_found[:5])}.")
+    elif deep_code_matches:
+        evidence_parts.append(f"✅ **GitHub Code Search**: Found '{tech_query}' actively used inside repository files: {', '.join(deep_code_matches)}.")
     else:
-        evidence_parts.append(f"❌ **GitHub:** No repositories found using '{tech_query}'.")
+        evidence_parts.append(f"❌ **GitHub:** No repositories or active code found using '{tech_query}'.")
 
     evidence = "\n".join(evidence_parts)
 
@@ -447,6 +465,7 @@ async def _handle_verify_project(
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying a candidate's project claim during a live interview.
+If the interviewer asks for a summary of a project, provide a clean, bulleted breakdown of the repository's purpose, tech stack, and originality using the evidence.
 Based on the evidence provided, give a clear verdict and recommendation to the interviewer.
 Be direct, concise (under 120 words), and helpful."""
 
@@ -601,6 +620,11 @@ async def fact_check(candidate_id: str, user_message: str, candidate_name: str =
         {"response": str, "condition": str, "extracted_query": str}
     """
     print(f"[FactChecker] Received: candidate={candidate_id}, msg='{user_message[:80]}...'")
+    
+    user_message = user_message.strip()
+    words = user_message.split()
+    if len(words) > 500:
+        user_message = " ".join(words[:500]) + "..."
 
     # Step 1: Classify intent
     intent = await _classify_intent(user_message, candidate_name)

@@ -359,6 +359,39 @@ class GitHubClient:
         self._save_search_cache(query, results)
         return results
 
+    async def search_user_code(
+        self,
+        username: str,
+        query: str,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Deep Code Search: Search across a user's entire repository footprint for a specific query string.
+        Uses GET /search/code?q={query}+user:{username}
+        """
+        resp = await self._request(
+            "GET",
+            "/search/code",
+            params={"q": f"{query} user:{username}", "per_page": limit},
+        )
+        if resp is None:
+            return []
+
+        items = resp.json().get("items", [])
+        results: List[Dict[str, Any]] = []
+        for item in items:
+            repo_name = item.get("repository", {}).get("name", "Unknown Repo")
+            file_name = item.get("name", "Unknown File")
+            file_path = item.get("path", "")
+            results.append({
+                "repo_name": repo_name,
+                "file_name": file_name,
+                "path": file_path,
+                "html_url": item.get("html_url", ""),
+            })
+
+        return results
+
     # ──────────────────────────────────────────────────────────────
     # Search cache helpers
     # ──────────────────────────────────────────────────────────────
