@@ -437,6 +437,8 @@ async def _analyse_single_repo(
     # 6. Compare against each reference repo
     max_repo_sim = 0.0
     matched_ref: Optional[str] = None
+    matched_structure_jaccard = 0.0
+    matched_top_chunk_mean = 0.0
 
     for ref in ext_repos:
         ref_owner = ref["owner"]
@@ -492,12 +494,16 @@ async def _analyse_single_repo(
         if repo_sim > max_repo_sim:
             max_repo_sim = repo_sim
             matched_ref = ref.get("full_name", "")
+            matched_structure_jaccard = float(j)
+            matched_top_chunk_mean = float(repo_sim)
 
     return {
         "repo": repo_name,
         "similarity": round(max(0.0, min(1.0, max_repo_sim)), 4),
         "verdict": _verdict(max_repo_sim),
         "matchedRepo": matched_ref,
+        "structureJaccard": round(max(0.0, min(1.0, matched_structure_jaccard)), 4),
+        "topChunkMean": round(max(0.0, min(1.0, matched_top_chunk_mean)), 4),
         "skipped": False,
     }
 

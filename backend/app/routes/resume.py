@@ -623,6 +623,21 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
                 f"| overall={overall_credibility} | github={github_verification_score}% "
                 f"| bonus={verification_bonus} | jd_match={jd_match_score:.2f}/10 | source={'verified' if match_score else 'unverified'}"
             )
+
+        try:
+            from app.services.metrics_service import upsert_metrics_for_application
+
+            await upsert_metrics_for_application(
+                candidate_id=candidate_id,
+                job_id=job_id,
+                candidate_doc=candidate_doc,
+                application_doc=application_doc,
+                job_doc=job_doc,
+                verification_doc=verification,
+                db_client=db,
+            )
+        except Exception as metrics_exc:
+            print(f"[APP] Metrics upsert failed for {candidate_id}: {metrics_exc}")
     except Exception as e:
         print(f"[APP] FAILED to create application for {candidate_id}: {e}")
         import traceback

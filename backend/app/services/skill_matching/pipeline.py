@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 async def run_unified_skill_scoring(
     required_skills: List[str],
     parsed: Dict[str, Any],
+    preferred_skills: Optional[List[str]] = None,
     github_v2_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
@@ -68,7 +69,10 @@ async def run_unified_skill_scoring(
         4. Aggregate: jd_match_score = mean(all skill scores)
 
     Args:
-        required_skills:  List of skill strings from the job posting.
+        required_skills:  List of required skill strings from the job posting.
+        preferred_skills: Optional preferred skills. Accepted for backward
+                          compatibility with older callers and merged into the
+                          scoring list in-order without duplicates.
         parsed:           Parsed resume dict (from parser.py output).
         github_v2_data:   github_v2_data field from verification_data.githubData
                           (optional — pipeline degrades gracefully without it).
@@ -84,7 +88,12 @@ async def run_unified_skill_scoring(
     """
     _empty = {"skill_scores": [], "jd_match_score": 0.0}
 
-    if not required_skills:
+    preferred_skills = preferred_skills or []
+    all_skills = list(dict.fromkeys([
+        skill for skill in [*(required_skills or []), *preferred_skills] if skill
+    ]))
+
+    if not all_skills:
         return _empty
 
     try:
@@ -109,7 +118,7 @@ async def run_unified_skill_scoring(
             return _empty
 
         # ── Step 3: score each skill concurrently ──────────────────────────
-        skill_scores = await score_all_skills(required_skills, section_embeddings)
+        skill_scores = await score_all_skills(all_skills, section_embeddings)
 
         # ── Step 4: aggregate ───────────────────────────────────────────────
         if skill_scores:
@@ -133,7 +142,7 @@ async def run_unified_skill_scoring(
     except Exception as exc:
         logger.error(
             "skill_matching: pipeline failed for %d skills: %s",
-            len(required_skills),
+            len(all_skills),
             exc,
             exc_info=True,
         )

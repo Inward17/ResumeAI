@@ -423,6 +423,34 @@ class TestSkillMatchingPipeline:
         )
         assert result == {"skill_scores": [], "jd_match_score": 0.0}
 
+    async def test_pipeline_accepts_preferred_skills_kwarg(self):
+        """Older callers may pass preferred_skills; pipeline must accept it."""
+        from app.services.skill_matching.pipeline import run_unified_skill_scoring
+
+        fake_emb = [0.5] * 384
+        parsed = {
+            "skills": "Python, Docker",
+            "experience": ["Built services in Python"],
+            "projects": [{"name": "Infra", "description": "Docker project"}],
+        }
+
+        with patch(
+            "app.services.embedding_service.generate_embedding",
+            return_value=fake_emb,
+        ), patch(
+            "app.services.embedding_service.cosine_similarity",
+            return_value=0.7,
+        ):
+            result = await run_unified_skill_scoring(
+                required_skills=["Python"],
+                preferred_skills=["Docker"],
+                parsed=parsed,
+            )
+
+        assert len(result["skill_scores"]) == 2
+        assert [item["skill"] for item in result["skill_scores"]] == ["Python", "Docker"]
+        assert 0 <= result["jd_match_score"] <= 10
+
     async def test_pipeline_failure_returns_zeroed(self):
         """Pipeline must return zeroed results on internal failure (never crash)."""
         from app.services.skill_matching.pipeline import run_unified_skill_scoring
