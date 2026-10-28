@@ -47,6 +47,8 @@ def _patch_db(mock_db):
         "app.routes.resume.db",
         "app.routes.github_routes.db",
         "app.services.unified_verification.db",
+        "app.auth.db",
+        "app.services.task_queue.db",
     ]
 
     # Pre-import every module so patch() can resolve the attribute
@@ -66,18 +68,72 @@ def _patch_db(mock_db):
         yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_resume_storage(tmp_path):
+    """Uploaded files go to a temp dir instead of the repo's resumes/ folder."""
+    with patch("app.routes.resume.RESUMES_DIR", str(tmp_path)):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # FastAPI async test client
 # ---------------------------------------------------------------------------
+TEST_USER_UID = "test-user"
+
+
 @pytest.fixture()
-async def client(mock_db):
-    """Async HTTP client for route tests."""
+def test_user():
+    from app.auth import AuthUser
+    return AuthUser(uid=TEST_USER_UID, email="tester@example.com", name="Test User", provider="google.com")
+
+
+@pytest.fixture()
+async def client(mock_db, test_user):
+    """Async HTTP client for route tests, signed in as ``test_user``."""
+    from httpx import AsyncClient, ASGITransport
+    from app.main import app
+    from app.auth import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: test_user
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture()
+async def anon_client(mock_db):
+    """Async HTTP client without credentials (real auth dependency)."""
     from httpx import AsyncClient, ASGITransport
     from app.main import app
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+async def create_owned_job(db, owner_uid: str = TEST_USER_UID, **fields) -> str:
+    """Insert a job owned by ``owner_uid`` and return its id."""
+    doc = {
+        "job_title": "Software Engineer",
+        "job_description": "Build things",
+        "required_skills": ["Python"],
+        "preferred_skills": [],
+        "is_active": True,
+        "posted_at": datetime.utcnow(),
+        "owner_uid": owner_uid,
+        **fields,
+    }
+    result = await db.jobs.insert_one(doc)
+    return str(result.inserted_id)
+
+
+@pytest.fixture()
+async def owned_job_id(mock_db):
+    """Id of a job owned by the signed-in test user."""
+    return await create_owned_job(mock_db)
 
 
 # ---------------------------------------------------------------------------

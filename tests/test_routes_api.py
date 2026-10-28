@@ -4,6 +4,8 @@ Tests for GitHub and verification routes.
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
+from tests.conftest import create_owned_job
+
 
 # ============================================================================
 # GitHub routes tests
@@ -157,15 +159,27 @@ class TestUnifiedVerificationRoutes:
         )
         assert resp.status_code == 500
 
-    async def test_verification_status_not_found(self, client):
+    async def test_verification_status_not_found(self, client, mock_db, owned_job_id):
+        await mock_db.applications.insert_one({"candidate_id": "pending", "job_id": owned_job_id})
         resp = await client.post(
             "/api/v1/verification/verification-status",
-            json={"candidate_id": "nonexistent"},
+            json={"candidate_id": "pending"},
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "not_found"
 
-    async def test_verification_status_found(self, client, mock_db):
+    async def test_verification_status_other_users_candidate(self, client, mock_db):
+        other_job = await create_owned_job(mock_db, owner_uid="someone-else")
+        await mock_db.applications.insert_one({"candidate_id": "theirs", "job_id": other_job})
+        await mock_db.verification_data.insert_one({"candidateId": "theirs"})
+        resp = await client.post(
+            "/api/v1/verification/verification-status",
+            json={"candidate_id": "theirs"},
+        )
+        assert resp.status_code == 404
+
+    async def test_verification_status_found(self, client, mock_db, owned_job_id):
+        await mock_db.applications.insert_one({"candidate_id": "cand-001", "job_id": owned_job_id})
         await mock_db.verification_data.insert_one({
             "candidateId": "cand-001",
             "verificationStatus": {"github": "verified"},
@@ -181,7 +195,8 @@ class TestUnifiedVerificationRoutes:
         assert data["status"] == "found"
         assert data["data"]["candidateId"] == "cand-001"
 
-    async def test_verification_status_get_found(self, client, mock_db):
+    async def test_verification_status_get_found(self, client, mock_db, owned_job_id):
+        await mock_db.applications.insert_one({"candidate_id": "cand-002", "job_id": owned_job_id})
         await mock_db.verification_data.insert_one({
             "candidateId": "cand-002",
             "verificationStatus": {"github": "verified"},
@@ -193,8 +208,7 @@ class TestUnifiedVerificationRoutes:
 
     async def test_verification_status_get_not_found(self, client):
         resp = await client.get("/api/v1/verification/verification-status/nonexistent")
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "not_found"
+        assert resp.status_code == 404
 
 
 # ============================================================================

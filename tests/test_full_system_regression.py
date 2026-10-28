@@ -22,6 +22,8 @@ from datetime import datetime
 from unittest.mock import patch, AsyncMock, MagicMock
 from bson import ObjectId
 
+from tests.conftest import create_owned_job
+
 
 # ═══════════════════════════════════════════════════════════════════
 # 1. FULL PIPELINE FLOW (End-to-End Happy Path)
@@ -58,27 +60,34 @@ class TestFullPipelineFlow:
             assert "Python" in job["required_skills"]
 
         # ── Step 2: Upload resume ───────────────────────────────────
+        files = [
+            ("files", ("resume.pdf", b"fake-pdf", "application/pdf"))
+        ]
+        resp = await client.post(
+            f"/api/v1/jobs/{job_id}/upload", files=files
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "accepted"
+        assert len(data["saved"]) == 1
+        candidate_id = data["saved"][0]["candidate_id"]
+        assert candidate_id  # UUID was generated
+
+        # Verify the resume was queued for the workers
+        task = await mock_db.tasks.find_one({"task_id": candidate_id})
+        assert task["status"] == "queued"
+        assert task["job_id"] == job_id
+        assert task["owner_uid"] == "test-user"
+
+        # The worker handler runs the full pipeline with the task's data
         with patch(
             "app.routes.resume._parse_and_verify", new_callable=AsyncMock
         ) as mock_pipeline:
-            files = [
-                ("files", ("resume.pdf", b"fake-pdf", "application/pdf"))
-            ]
-            resp = await client.post(
-                f"/api/v1/jobs/{job_id}/upload", files=files
+            from app.routes.resume import process_resume_task
+            await process_resume_task(task)
+            mock_pipeline.assert_called_once_with(
+                task["filename"], candidate_id, job_id, "test-user"
             )
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["status"] == "accepted"
-            assert len(data["saved"]) == 1
-            candidate_id = data["saved"][0]["candidate_id"]
-            assert candidate_id  # UUID was generated
-
-            # Verify background task was scheduled
-            mock_pipeline.assert_called_once()
-            call_args = mock_pipeline.call_args
-            assert call_args[0][1] == candidate_id  # candidate_id passed
-            assert call_args[0][2] == job_id  # job_id passed
 
         # ── Step 3: Simulate what the background task does ──────────
         # Insert candidate record (as _parse_and_store would)
@@ -160,7 +169,7 @@ class TestFullPipelineFlow:
         self, client, mock_db
     ):
         """Multiple candidates for the same job should all be returned."""
-        job_id = "multi-job-123"
+        job_id = await create_owned_job(mock_db)
 
         # Insert 3 candidates with different scores
         for i, (name, score) in enumerate([
@@ -509,23 +518,22 @@ class TestResumeRoutesRegression:
         results = compute_skill_matches(["Python"], parsed)
         assert results[0]["score"] == 0  # Not found, but no crash
 
-    async def test_upload_creates_task_record(self, client, mock_db):
+    async def test_upload_creates_task_record(self, client, mock_db, owned_job_id):
         """Upload must create a task record in the DB."""
-        with patch("app.routes.resume._parse_and_verify", new_callable=AsyncMock):
-            files = [("files", ("test.pdf", b"content", "application/pdf"))]
-            resp = await client.post("/api/v1/jobs/job-task-test/upload", files=files)
-            assert resp.status_code == 200
-            candidate_id = resp.json()["saved"][0]["candidate_id"]
+        files = [("files", ("test.pdf", b"content", "application/pdf"))]
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+        assert resp.status_code == 200
+        candidate_id = resp.json()["saved"][0]["candidate_id"]
 
         task = await mock_db.tasks.find_one({"task_id": candidate_id})
         assert task is not None
-        assert task["job_id"] == "job-task-test"
+        assert task["job_id"] == owned_job_id
         assert task["status"] == "queued"
         assert task["type"] == "parse_and_verify"
 
     async def test_candidate_status_update(self, client, mock_db):
         """Status update must modify the application record."""
-        job_id = "status-test-job"
+        job_id = await create_owned_job(mock_db)
         cand_id = "status-test-cand"
 
         await mock_db.applications.insert_one({
@@ -545,10 +553,10 @@ class TestResumeRoutesRegression:
         app = await mock_db.applications.find_one({"candidate_id": cand_id})
         assert app["status"] == "Shortlisted"
 
-    async def test_candidate_status_update_not_found(self, client, mock_db):
+    async def test_candidate_status_update_not_found(self, client, mock_db, owned_job_id):
         """Status update for non-existent application → 404."""
         resp = await client.put(
-            "/api/v1/jobs/fake/candidates/fake/status",
+            f"/api/v1/jobs/{owned_job_id}/candidates/fake/status",
             json={"status": "Rejected"},
         )
         assert resp.status_code == 404
@@ -1069,15 +1077,15 @@ class TestDataIntegrity:
 class TestEdgeCasesAndFailures:
     """Tests that the system handles edge cases gracefully."""
 
-    async def test_upload_unsupported_format_rejected(self, client):
+    async def test_upload_unsupported_format_rejected(self, client, owned_job_id):
         """Unsupported file formats must be rejected with 400."""
         files = [("files", ("resume.xlsx", b"content", "application/excel"))]
-        resp = await client.post("/api/v1/jobs/job-1/upload", files=files)
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
         assert resp.status_code == 400
 
-    async def test_empty_candidates_list(self, client):
+    async def test_empty_candidates_list(self, client, owned_job_id):
         """GET candidates for job with no applications must return empty list."""
-        resp = await client.get("/api/v1/jobs/nonexistent-job/candidates")
+        resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
         assert resp.status_code == 200
         assert resp.json()["candidates"] == []
 
@@ -1116,11 +1124,17 @@ class TestEdgeCasesAndFailures:
         )
         assert resp.status_code == 400
 
-    async def test_verification_status_nonexistent(self, client):
-        """Checking status of non-existent verification must return not_found."""
-        resp = await client.get("/api/v1/verification/verification-status/does-not-exist")
+    async def test_verification_status_nonexistent(self, client, mock_db, owned_job_id):
+        """Checking status of a candidate without verification must return not_found."""
+        await mock_db.applications.insert_one({"candidate_id": "no-verif", "job_id": owned_job_id})
+        resp = await client.get("/api/v1/verification/verification-status/no-verif")
         assert resp.status_code == 200
         assert resp.json()["status"] == "not_found"
+
+    async def test_verification_status_unknown_candidate(self, client):
+        """Candidates outside the user's jobs are reported as not found (404)."""
+        resp = await client.get("/api/v1/verification/verification-status/does-not-exist")
+        assert resp.status_code == 404
 
     def test_compute_skill_matches_empty_resume(self):
         """Skill matching against completely empty resume must not crash."""

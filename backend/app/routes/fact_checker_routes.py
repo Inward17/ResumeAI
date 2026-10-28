@@ -2,7 +2,8 @@
 Fact Checker Routes — API endpoint for AI-powered claim verification.
 Used by the FactCheckerBot frontend component during live interviews.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from app.auth import require_candidate_access
 from pydantic import BaseModel
 
 from app.services.fact_checker_service import fact_check
@@ -16,7 +17,7 @@ class FactCheckRequest(BaseModel):
     candidate_name: str = "the candidate"
 
 
-@router.post("/{candidate_id}")
+@router.post("/{candidate_id}", dependencies=[Depends(require_candidate_access)])
 async def check_fact(candidate_id: str, body: FactCheckRequest):
     """
     Run the AI Fact Checker for a candidate.

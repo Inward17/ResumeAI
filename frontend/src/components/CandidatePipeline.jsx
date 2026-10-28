@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import CandidateModal from './CandidateModal';
-import { getJobCandidates, uploadResumes, updateCandidateStatus } from '../services/jobService';
+import { getJobCandidates, getJobTasks, uploadResumes, updateCandidateStatus } from '../services/jobService';
 import { C } from '../theme';
 
 /* ── Score ring ── */
@@ -106,46 +106,83 @@ const CandidatePipeline = ({ job, onBack }) => {
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(null); // {processed, total}
+  const [uploadProgress, setUploadProgress] = useState(null); // {processed, total} files sent
+  const [taskCounts, setTaskCounts] = useState(null); // backend processing status
+  const [batch, setBatch] = useState(null); // {base, total} — progress of the latest upload
+  const [pollKey, setPollKey] = useState(0);
+  const lastFinished = useRef(null);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [mobileTab, setMobileTab] = useState('pipeline'); // 'pipeline' | 'analysis'
   const fileInputRef = useRef(null);
   const { toast } = useToast();
 
-  const fetchCandidates = async () => {
+  const fetchCandidates = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await getJobCandidates(job.id);
       setCandidates(data || []);
     } catch (err) {
-      // Silently fail — backend not running is OK for demo
+      if (!silent) toast({ title: 'Error loading candidates', description: err.message, variant: 'destructive' });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { fetchCandidates(); }, [job.id]);
 
-  const uploadFiles = async (files) => {
-    if (!files || files.length === 0) return;
+  // Poll resume processing status while anything is queued/processing and
+  // refresh the list as candidates finish (they appear once verified).
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+    const tick = async () => {
+      try {
+        const { counts } = await getJobTasks(job.id);
+        if (cancelled) return;
+        setTaskCounts(counts);
+        const finished = counts.done + counts.failed;
+        if (lastFinished.current !== null && finished !== lastFinished.current) {
+          fetchCandidates(true);
+        }
+        lastFinished.current = finished;
+        if (counts.queued + counts.processing > 0) timer = setTimeout(tick, 3000);
+      } catch (err) {
+        if (!cancelled) timer = setTimeout(tick, 10000);
+      }
+    };
+    tick();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [job.id, pollKey]);
+
+  const uploadFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
     setUploading(true);
     setUploadProgress({ processed: 0, total: files.length });
+    setBatch({ base: taskCounts ? taskCounts.done + taskCounts.failed : 0, total: files.length });
     try {
-      await uploadResumes(job.id, files);
-      setUploadProgress({ processed: files.length, total: files.length });
-      toast({ title: 'Resumes uploaded', description: `${files.length} resume(s) processed by AI.` });
-      setTimeout(() => {
-        setUploading(false);
-        setUploadProgress(null);
-        fetchCandidates();
-      }, 1500);
+      await uploadResumes(job.id, files, (processed, total) => setUploadProgress({ processed, total }));
+      toast({ title: 'Resumes queued', description: `${files.length} resume(s) uploaded. AI screening is running in the background.` });
     } catch (err) {
       toast({ title: 'Upload error', description: err.message, variant: 'destructive' });
+    } finally {
       setUploading(false);
       setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setPollKey(k => k + 1);
     }
   };
+
+  const activeTasks = taskCounts ? taskCounts.queued + taskCounts.processing : 0;
+  const processingPct = (() => {
+    if (!taskCounts || activeTasks === 0) return 100;
+    if (batch) {
+      const finished = taskCounts.done + taskCounts.failed - batch.base;
+      return Math.max(0, Math.min(100, Math.round((finished / batch.total) * 100)));
+    }
+    return Math.round(((taskCounts.done + taskCounts.failed) / (taskCounts.total || 1)) * 100);
+  })();
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -261,7 +298,7 @@ const CandidatePipeline = ({ job, onBack }) => {
             {uploading && uploadProgress && (
               <div className="w-full mt-2">
                 <div className="flex justify-between text-xs mb-1 text-slate-500">
-                  <span>Processing… {uploadProgress.processed}/{uploadProgress.total}</span>
+                  <span>Uploading… {uploadProgress.processed}/{uploadProgress.total}</span>
                   <span>{Math.round((uploadProgress.processed / uploadProgress.total) * 100)}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
@@ -271,6 +308,29 @@ const CandidatePipeline = ({ job, onBack }) => {
                   />
                 </div>
               </div>
+            )}
+
+            {/* Background processing status (from the task queue) */}
+            {!uploading && activeTasks > 0 && (
+              <div className="w-full mt-2" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between text-xs mb-1 text-slate-500">
+                  <span>
+                    AI screening… {taskCounts.processing} in progress · {taskCounts.queued} queued
+                  </span>
+                  <span>{processingPct}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${processingPct}%`, background: C.accent }}
+                  />
+                </div>
+              </div>
+            )}
+            {taskCounts?.failed > 0 && (
+              <p className="text-xs text-red-500 mt-1">
+                {taskCounts.failed} resume(s) could not be processed. Re-upload them to retry.
+              </p>
             )}
           </div>
 
@@ -318,19 +378,19 @@ const CandidatePipeline = ({ job, onBack }) => {
               <div className="w-px h-10 bg-indigo-700" />
               <div>
                 <p className="text-xs text-indigo-300 font-semibold">Remaining</p>
-                <p className="text-3xl font-black text-white">{String(Math.max(0, 5 - candidates.length)).padStart(2, '0')}</p>
+                <p className="text-3xl font-black text-white">{String(activeTasks).padStart(2, '0')}</p>
               </div>
             </div>
-            {uploading ? (
+            {activeTasks > 0 ? (
               <div>
                 <div className="flex justify-between text-xs text-indigo-300 mb-1.5">
                   <span>AI Processing</span>
-                  <span>{uploadProgress ? Math.round((uploadProgress.processed / uploadProgress.total) * 100) : 0}%</span>
+                  <span>{processingPct}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-indigo-800 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all"
-                    style={{ width: `${uploadProgress ? (uploadProgress.processed / uploadProgress.total) * 100 : 0}%`, background: C.cyan }}
+                    style={{ width: `${processingPct}%`, background: C.cyan }}
                   />
                 </div>
               </div>

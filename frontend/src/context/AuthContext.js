@@ -10,6 +10,7 @@ import {
     setPersistence
 } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import { apiFetch } from '../services/api';
 
 export const AuthContext = createContext(null);
 
@@ -22,6 +23,8 @@ export const AuthProvider = ({ children }) => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
             setLoading(false);
+            // Register/refresh the user record on the backend (verifies the token too)
+            if (user) apiFetch('/api/auth/me').catch(() => {});
         });
 
         return () => unsubscribe();

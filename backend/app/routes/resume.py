@@ -4,17 +4,20 @@ import uuid
 from bson import ObjectId
 from typing import List, Dict, Any
 from datetime import datetime
-from fastapi import APIRouter, File, UploadFile, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+from app.auth import AuthUser, get_current_user, require_job_owner
 from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
 from app.utils.file_utils import read_file
 from app.services.skill_matching.pipeline import run_unified_skill_scoring
+from app.services.task_queue import task_queue, TERMINAL_STATUSES
 
+# Gemini concurrency, retries and rate-limit backoff are handled in
+# app.services.parser; the number of resumes processed at once is set by
+# RESUME_WORKERS in app.services.task_queue.
 
-# Global semaphore to limit concurrent resume parsing to 1 at a time
-# This prevents Gemini rate limits and "stuck" requests
-parsing_semaphore = asyncio.Semaphore(1)
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
 
 
 router = APIRouter(prefix="/jobs", tags=["resume"])
@@ -191,11 +194,10 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
     return result
 
 
-async def _parse_and_store(filename: str, task_id: str) -> str:
+async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None) -> str:
     """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID."""
     candidate_id = task_id
     try:
-        filepath = os.path.join(RESUMES_DIR, filename)
         filepath = os.path.join(RESUMES_DIR, filename)
         
         # Read file in thread to avoid blocking event loop
@@ -206,11 +208,9 @@ async def _parse_and_store(filename: str, task_id: str) -> str:
         if not text:
             raise ValueError("Empty file")
         
-        # Serialize parsing to avoid rate limits/hanging
-        async with parsing_semaphore:
-            print(f"Parsing resume for {candidate_id}...")
-            parsed = await parse_resume(text)
-            print(f"Parsing completed for {candidate_id}")
+        print(f"Parsing resume for {candidate_id}...")
+        parsed = await parse_resume(text)
+        print(f"Parsing completed for {candidate_id}")
         
         # Extract personal info for verification
         personal_info = parsed.get("personal_info", {})
@@ -265,16 +265,21 @@ async def _parse_and_store(filename: str, task_id: str) -> str:
         # Generate skills embedding for JD matching
         from app.services.embedding_service import generate_embedding
         skills_text = parsed.get("skills", "") or ""
-        skills_embedding = generate_embedding(skills_text)
+        # CPU-bound — keep it off the event loop so other workers keep running
+        skills_embedding = await asyncio.to_thread(generate_embedding, skills_text)
         
         # TASK 1: DEDUPLICATION CHECK
         full_name = personal_info.get("full_name")
         phone_number = personal_info.get("phone_number")
         
         if full_name and phone_number:
+            # Only dedupe within the same recruiter's workspace so one user's
+            # upload never overwrites a candidate that belongs to another user
             existing_candidate = await db.candidates.find_one({
                 "parsed.personal_info.full_name": full_name,
-                "parsed.personal_info.phone_number": phone_number
+                "parsed.personal_info.phone_number": phone_number,
+                "owner_uid": owner_uid,
+                "candidate_id": {"$ne": candidate_id},
             })
             if existing_candidate:
                 print(f"Candidate match found! Reusing candidate_id: {existing_candidate['candidate_id']}")
@@ -307,6 +312,7 @@ async def _parse_and_store(filename: str, task_id: str) -> str:
         # Store in candidates collection
         candidate_doc = {
             "candidate_id": candidate_id,
+            "owner_uid": owner_uid,
             "filename": filename,
             "uploaded_at": datetime.utcnow(),
             "parsed": parsed,
@@ -326,7 +332,10 @@ async def _parse_and_store(filename: str, task_id: str) -> str:
             # NEW: Skills embedding for JD matching
             "skills_embedding": skills_embedding
         }
-        await db.candidates.insert_one(candidate_doc)
+        # Upsert so a task re-run after a worker crash doesn't create a duplicate
+        await db.candidates.update_one(
+            {"candidate_id": candidate_id}, {"$set": candidate_doc}, upsert=True
+        )
         
         # Update task status
         await db.tasks.update_one(
@@ -629,9 +638,9 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
         traceback.print_exc()
 
 
-async def _parse_and_verify(filename: str, task_id: str, job_id: str):
+async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None):
     """Combined background task: parse resume, then run verification"""
-    real_candidate_id = await _parse_and_store(filename, task_id)
+    real_candidate_id = await _parse_and_store(filename, task_id, owner_uid)
     
     # Check if parsing succeeded before verification
     task = await db.tasks.find_one({"task_id": task_id})
@@ -639,52 +648,102 @@ async def _parse_and_verify(filename: str, task_id: str, job_id: str):
         await _run_unified_verification(real_candidate_id, job_id, task_id)
 
 
-@router.post("/{job_id}/upload")
+async def process_resume_task(task: dict):
+    """Queue handler (see app.services.task_queue): runs one uploaded resume end to end."""
+    await _parse_and_verify(task["filename"], task["task_id"], task["job_id"], task.get("owner_uid"))
+
+
+def _write_file(path: str, content: bytes):
+    with open(path, "wb") as f:
+        f.write(content)
+
+
+@router.post("/{job_id}/upload", dependencies=[Depends(require_job_owner)])
 async def upload_resumes(
     job_id: str,
-    background_tasks: BackgroundTasks,
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    user: AuthUser = Depends(get_current_user),
 ):
-    """Upload resumes for parsing and verification"""
-    saved = []
-    
+    """Upload resumes; each one is queued and processed by the task workers."""
+    # Validate the whole batch first so a bad file doesn't leave half a batch queued
     for file in files:
         ext = file.filename.lower().split(".")[-1]
         if ext not in ("pdf", "docx", "doc", "txt"):
             raise HTTPException(400, f"Unsupported file type: {ext}")
-        
+        if file.size is not None and file.size > MAX_UPLOAD_MB * 1024 * 1024:
+            raise HTTPException(413, f"{file.filename} is larger than {MAX_UPLOAD_MB} MB")
+
+    saved = []
+    tasks = []
+    for file in files:
         # Generate unique candidate_id using UUID
         candidate_id = str(uuid.uuid4())
-        unique_name = f"{candidate_id}_{file.filename}"
+        safe_name = os.path.basename(file.filename)
+        unique_name = f"{candidate_id}_{safe_name}"
         dest = os.path.join(RESUMES_DIR, unique_name)
         
-        # Save file
-        with open(dest, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        # Save file without blocking the event loop
+        content = await file.read()
+        await asyncio.to_thread(_write_file, dest, content)
         
-        # Create task
-        await db.tasks.insert_one({
+        tasks.append({
             "task_id": candidate_id,
             "job_id": job_id,
+            "owner_uid": user.uid,
             "filename": unique_name,
+            "original_filename": safe_name,
             "type": "parse_and_verify",
             "status": "queued",
+            "attempts": 0,
             "created_at": datetime.utcnow()
         })
-        
-        # Schedule parsing + verification (now with job_id)
-        background_tasks.add_task(_parse_and_verify, unique_name, candidate_id, job_id)
         saved.append({
             "filename": file.filename, 
             "stored_as": unique_name,
             "candidate_id": candidate_id
         })
     
+    # Queue parsing + verification; workers pick these up immediately
+    if tasks:
+        await db.tasks.insert_many(tasks)
+        task_queue.notify()
+    
     return {"status": "accepted", "saved": saved}
 
 
-@router.put("/{job_id}/candidates/{candidate_id}/status")
+@router.get("/{job_id}/tasks", dependencies=[Depends(require_job_owner)])
+async def get_job_tasks(job_id: str, limit: int = 200):
+    """Processing progress for uploaded resumes (the frontend polls this)."""
+    counts = {"queued": 0, "processing": 0, "done": 0, "failed": 0}
+    async for row in db.tasks.aggregate([
+        {"$match": {"job_id": job_id}},
+        {"$group": {"_id": "$status", "n": {"$sum": 1}}},
+    ]):
+        status = row["_id"]
+        if status == "queued":
+            counts["queued"] += row["n"]
+        elif status in ("done", "verification_failed"):
+            # verification_failed still creates the candidate (with unverified scores)
+            counts["done"] += row["n"]
+        elif status in TERMINAL_STATUSES:
+            counts["failed"] += row["n"]
+        else:  # processing / parsed / verifying
+            counts["processing"] += row["n"]
+
+    recent = await db.tasks.find(
+        {"job_id": job_id},
+        {"_id": 0, "task_id": 1, "original_filename": 1, "filename": 1, "status": 1,
+         "error": 1, "created_at": 1, "completed_at": 1},
+    ).sort("created_at", -1).to_list(length=min(max(limit, 1), 1000))
+
+    return {
+        "job_id": job_id,
+        "counts": {**counts, "total": sum(counts.values())},
+        "tasks": recent,
+    }
+
+
+@router.put("/{job_id}/candidates/{candidate_id}/status", dependencies=[Depends(require_job_owner)])
 async def update_candidate_status(job_id: str, candidate_id: str, status_update: dict):
     """Update candidate application status"""
     new_status = status_update.get("status")
@@ -702,28 +761,57 @@ async def update_candidate_status(job_id: str, candidate_id: str, status_update:
     return {"status": "success", "new_status": new_status}
 
 
-@router.get("/{job_id}/candidates")
-async def get_job_candidates(job_id: str):
+async def _verification_by_candidate(collection, candidate_ids: List[str]) -> Dict[str, dict]:
+    """Fetch verification docs for many candidates in one query (docs use either id field name)."""
+    by_id: Dict[str, dict] = {}
+    cursor = db[collection].find(
+        {"$or": [{"candidateId": {"$in": candidate_ids}}, {"candidate_id": {"$in": candidate_ids}}]},
+        {"candidateId": 1, "candidate_id": 1, "verificationStatus": 1, "matchScore": 1},
+    )
+    async for doc in cursor:
+        cid = doc.get("candidateId") or doc.get("candidate_id")
+        by_id.setdefault(cid, doc)
+    return by_id
+
+
+@router.get("/{job_id}/candidates", dependencies=[Depends(require_job_owner)])
+async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
     """Get all candidates for a job from applications collection"""
-    applications = await db.applications.find({"job_id": job_id}).to_list(length=100)
+    # Previously capped at 100 with 2-3 queries per candidate; now batched
+    limit = min(max(limit, 1), 5000)
+    applications = await db.applications.find({"job_id": job_id}).sort(
+        "application_date", -1
+    ).skip(max(skip, 0)).to_list(length=limit)
+    candidate_ids = [app.get("candidate_id") for app in applications]
+
+    candidates_by_id = {
+        c["candidate_id"]: c
+        async for c in db.candidates.find(
+            {"candidate_id": {"$in": candidate_ids}},
+            {"candidate_id": 1, "parsed.personal_info": 1, "filename": 1},
+        )
+    }
+
+    dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
+    verification_by_id = await _verification_by_candidate("verification_data", candidate_ids)
+    agent_verification_by_id = (
+        await _verification_by_candidate("verification_data_agent", candidate_ids) if dual_run else {}
+    )
     
     result = []
     for app in applications:
         candidate_id = app.get("candidate_id")
         
         # Get candidate data
-        candidate = await db.candidates.find_one({"candidate_id": candidate_id})
+        candidate = candidates_by_id.get(candidate_id)
         parsed = candidate.get("parsed", {}) if candidate else {}
         personal_info = parsed.get("personal_info", {})
         
         # Get verification data for additional info
-        import os
-        dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
-        vquery = {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
         verification = None
         if dual_run:
-            v_legacy = await db.verification_data.find_one(vquery)
-            v_agent  = await db.verification_data_agent.find_one(vquery)
+            v_legacy = verification_by_id.get(candidate_id)
+            v_agent  = agent_verification_by_id.get(candidate_id)
             if v_legacy and v_legacy.get("matchScore"):
                 verification = v_legacy
             elif v_agent and v_agent.get("matchScore"):
@@ -731,7 +819,7 @@ async def get_job_candidates(job_id: str):
             else:
                 verification = v_legacy or v_agent
         else:
-            verification = await db.verification_data.find_one(vquery)
+            verification = verification_by_id.get(candidate_id)
         
         # Read stored skill_matches from application document (computed at upload time)
         skill_matches = app.get("score_details", {}).get("skill_matches", [])
@@ -740,7 +828,8 @@ async def get_job_candidates(job_id: str):
             "candidate_id": candidate_id,
             "name": personal_info.get("full_name", "Unknown"),
             "email": personal_info.get("email", ""),
-            "phone": personal_info.get("phone", ""),
+            # The parser stores "phone_number"; "phone" kept for older records
+            "phone": personal_info.get("phone_number") or personal_info.get("phone", ""),
             "status": app.get("status", "Under Review"),
             "application_date": app.get("application_date"),
             "score_details": app.get("score_details", {}),
