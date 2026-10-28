@@ -1,5 +1,15 @@
 # UI audit: what's real and what's only in the UI
 
+> **Update, 28 Oct 2026:** the findings below were addressed by the UI upgrade (see the "Done" section of [UI_UPGRADE_COMPATIBILITY.md](UI_UPGRADE_COMPATIBILITY.md)).
+>
+> - Every fake number, person and success toast listed here was removed.
+> - Unbuilt features are labelled "Coming soon".
+> - Branding is unified, and the PostHog snippet is gone.
+> - **Still not built** (shown as "Coming soon"): team members, billing, integrations, API keys, branding, notification preferences and two-factor authentication.
+> - The score mislabelling and the backend parts of the Draft/department/salary issue depend on the backend fixes (BE-06, FE-02).
+>
+> The audit is kept as a record of the state before the upgrade.
+
 Reviewed: every screen in `frontend/src/components` and the API calls behind it.
 
 ## Overall impression

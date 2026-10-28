@@ -14,6 +14,56 @@ Screenshots are in [`ui-review/`](ui-review/).
 
 ---
 
+## ✅ Done on 28 Oct 2026
+
+Steps 1–4 of the upgrade path (§4) are complete. Tailwind 4 and lucide-react 1.x were deliberately left out.
+
+**What changed**
+
+- **Build tool:** Create React App/CRACO → **Vite 6** (`yarn dev` / `yarn build` / `yarn preview`, port 3000, output `dist/`). Pages are lazy-loaded, and React/Firebase sit in separate vendor chunks (largest chunk ~84 kB gzipped; no size warnings). Build time is ~3 s.
+- **Environment variables:** `REACT_APP_*` → **`VITE_*`**:
+  - `VITE_API_URL`
+  - `VITE_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_STORAGE_BUCKET`, `_MESSAGING_SENDER_ID`, `_APP_ID`, `_MEASUREMENT_ID`
+
+  Rename them in your `frontend/.env`.
+- **Dependencies:**
+  - Removed 14 unused packages (`axios`, `zod`, `react-hook-form`, `@hookform/resolvers`, `date-fns`, `embla-carousel-react`, `cmdk`, `vaul`, `input-otp`, `react-day-picker`, `react-resizable-panels`, `next-themes`, `sonner`, `cra-template`), plus `react-scripts`, CRACO, the unconfigured ESLint packages and 23 unused Radix packages.
+  - Removed 41 unused `components/ui/*` files.
+  - Updated: `react-router-dom` 7.18, `firebase` 12.19.
+  - One lockfile (`yarn.lock`).
+  - Audit findings **80 → 4**. The 4 left (2 high, 2 low) are all `@grpc/grpc-js`, a Node-only dependency of Firestore inside the `firebase` package. The app only imports `firebase/auth`, so this code is never bundled or shipped. It clears when Firebase updates that dependency.
+- **Real URLs:** `/dashboard`, `/jobs`, `/jobs/:jobId` (dossier via `?candidate=<id>`), `/jobs/:jobId/candidates/:candidateId/interview`, `/interviews`, `/settings`, `/profile`, `/login`, `/register`.
+  - Refresh, the Back button and shared links work.
+  - Signed-out users are sent to `/login` and returned to the page they wanted.
+- **Design system:**
+  - Brand colours are Tailwind tokens (`brand`, `brand-accent`, `brand-light`, `brand-soft`, `brand-cyan`, `page`, `bg-brand-gradient`).
+  - `theme.js` / `theme.css` and almost all inline colour styles are gone.
+  - Shared `common.jsx` (cards, pills, score rings, buttons, empty states) and an accessible `Modal.jsx` (Radix Dialog).
+- **Honesty pass:**
+  - Every invented number, person and canned text was removed (Dashboard, pipeline, dossier, interview page, Profile, Settings, notifications).
+  - Unbuilt features (team, billing, integrations, API keys, branding, notifications, 2FA) are labelled **Coming soon**.
+  - Buttons either work or are gone.
+  - New, real features: scoring thresholds (saved per browser, used by pipelines/dossiers), password reset email, display-name change, Close/Reopen job, candidate search and status filter.
+- **Accessibility:**
+  - Readable text uses `slate-500`+ (no more 2.5:1 grey).
+  - Icon-only buttons have labels.
+  - Dialogs close on Escape and trap focus.
+  - Visible keyboard focus ring.
+- **Brand:** "ResumeAI" everywhere, with Login/Register on the app's indigo theme. PostHog snippet removed.
+
+**Bugs fixed:** FE-01 (config-missing screen instead of a blank page), FE-02 (frontend part: status/department/salary sent; Drafts filter), FE-03, FE-04, FE-05 (one status list), FE-06 (real dossier fields), FE-07, FE-08, FE-09, FE-10, FE-11.
+
+**Verified:**
+- Re-ran the Chromium review at 1440/820/390 px with the new API contract mocked: no page errors and no horizontal overflow.
+- Escape closes both dialogs; refresh on `/jobs/:id` keeps the page; deep links open the dossier.
+- Drafts filter works; status changes send canonical values; `/login` redirects signed-in users; protected pages redirect signed-out users.
+
+Safari and Firefox are still untested; only Chromium is available here.
+
+> The sections below describe the state **before** this upgrade and are kept for reference.
+
+---
+
 ## 1. Device / browser compatibility (tested)
 
 | Check | Result |
