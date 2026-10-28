@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, X, Loader2 } from 'lucide-react';
-import { C } from '../theme';
 import { factCheck } from '../services/jobService';
 
 const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
@@ -49,12 +48,12 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
   return (
     <div className="flex-1 w-full h-full bg-white flex flex-col z-50">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between" style={{ background: C.primary }}>
+      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-brand">
         <div className="flex items-center gap-2 text-white">
           <Bot className="h-4 w-4" />
           <h3 className="text-sm font-bold">AI Fact Checker</h3>
         </div>
-        <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-md transition-colors text-indigo-100 hover:text-white">
+        <button type="button" onClick={onClose} aria-label="Close fact checker" className="p-1 hover:bg-white/20 rounded-md transition-colors text-indigo-100 hover:text-white">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -64,14 +63,14 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
         {messages.map((msg, idx) => (
           <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
-              <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-1" style={{ background: C.cyan, color: 'white' }}>
+              <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-1 bg-brand-accent text-white" aria-hidden="true">
                 <Bot className="h-3.5 w-3.5" />
               </div>
             )}
             <div 
               className={`p-3 rounded-xl text-sm leading-relaxed max-w-[85%] ${
                 msg.role === 'user' 
-                  ? 'bg-indigo-600 text-white rounded-tr-none' 
+                  ? 'bg-brand-accent text-white rounded-tr-none' 
                   : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'
               }`}
               style={{ whiteSpace: 'pre-wrap' }}
@@ -82,12 +81,12 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
         ))}
         {isTyping && (
           <div className="flex gap-2 justify-start">
-            <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-1" style={{ background: C.cyan, color: 'white' }}>
+            <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-1 bg-brand-accent text-white" aria-hidden="true">
               <Bot className="h-3.5 w-3.5" />
             </div>
             <div className="bg-white border border-slate-200 p-3 rounded-xl rounded-tl-none shadow-sm flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
-              <span className="text-xs text-slate-500 font-medium tracking-wide">Verifying claim...</span>
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" aria-hidden="true" />
+              <span className="text-xs text-slate-600 font-medium tracking-wide">Verifying claim...</span>
             </div>
           </div>
         )}
@@ -101,14 +100,16 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Ask, e.g. 'Does he know NextJS?'"
-          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 transition-all text-slate-700 placeholder:text-slate-400"
+          placeholder="Ask, e.g. 'Has this candidate used Next.js?'"
+          aria-label="Claim to verify"
+          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-soft transition-all text-slate-800 placeholder:text-slate-500"
         />
         <button 
+          type="button"
+          aria-label="Send"
           onClick={handleSend}
           disabled={!inputValue.trim() || isTyping}
-          className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-          style={{ background: C.primary, color: 'white' }}
+          className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark"
         >
           <Send className="h-4 w-4" />
         </button>

@@ -115,7 +115,7 @@ The frontend already signed users in with **Firebase Authentication**, using Goo
 ### Configuration
 
 1. In the Firebase console, go to **Authentication → Sign-in method** and enable **Google** (plus Email/Password if you want it). Add your production domain under **Authorized domains**.
-2. `frontend/.env`: the `REACT_APP_FIREBASE_*` values from Project settings (see `frontend/.env.example`).
+2. `frontend/.env`: the `VITE_FIREBASE_*` values from Project settings, plus `VITE_API_URL` (see `frontend/.env.example`). These were called `REACT_APP_*` before the move to Vite.
 3. `backend/.env`: `FIREBASE_PROJECT_ID=<same project id>`.
 4. `CORS_ORIGINS` must list your frontend's URL.
 
