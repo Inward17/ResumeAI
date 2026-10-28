@@ -201,10 +201,16 @@ class TestCalculateMatchScores:
 
     def test_linkedin_only_score(self):
         service = self._make_service()
-        linkedin_data = LinkedInDataModel(profileId="li-1")
+        # LinkedIn now scores by agreement with the resume, not mere presence
+        result = service._calculate_match_scores(None, 75.0, None)
+        assert result.linkedinMatch == 75.0
+        assert result.overallCredibility == 75.0
 
-        result = service._calculate_match_scores(None, linkedin_data, None)
-        assert result.overallCredibility > 0  # LinkedIn presence gives 100 * 0.2
+    def test_linkedin_with_nothing_to_compare_not_counted(self):
+        service = self._make_service()
+        github_data = GitHubDataModel(success=True, score=85.0)
+        result = service._calculate_match_scores(github_data, None, None)
+        assert result.overallCredibility == 85.0
 
     def test_web_search_only_score(self):
         service = self._make_service()
@@ -222,7 +228,7 @@ class TestCalculateMatchScores:
     def test_all_sources_score(self):
         service = self._make_service()
         github_data = GitHubDataModel(success=True, score=85.0)
-        linkedin_data = LinkedInDataModel(profileId="li-1")
+        linkedin_match = 100.0
         web_data = WebSearchDataModel(
             status="success",
             results=[WebSearchResult(
@@ -230,7 +236,7 @@ class TestCalculateMatchScores:
             )],
         )
 
-        result = service._calculate_match_scores(github_data, linkedin_data, web_data)
+        result = service._calculate_match_scores(github_data, linkedin_match, web_data)
         # Weighted: GitHub(50%) + LinkedIn(20%) + Web(30%)
         expected = (85 * 0.5 + 100 * 0.2 + 80 * 0.3) / 1.0
         assert abs(result.overallCredibility - expected) < 1.0

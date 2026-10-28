@@ -3,7 +3,7 @@ Job Routes - CRUD operations for job postings
 """
 import asyncio
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from bson import ObjectId
@@ -12,6 +12,7 @@ from app.auth import AuthUser, get_current_user
 from app.database import db
 
 SHORTLISTED_STATUSES = ["Shortlisted", "Interview", "Offer"]
+JobStatus = Literal["Active", "Draft", "Closed"]
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -26,6 +27,11 @@ class JobCreate(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     is_active: bool = True
+    # "Draft" jobs used to be saved as active (is_active was the only field)
+    status: Optional[JobStatus] = None
+    department: Optional[str] = None
+    salary_min: Optional[int] = Field(default=None, ge=0)
+    salary_max: Optional[int] = Field(default=None, ge=0)
 
 
 class JobUpdate(BaseModel):
@@ -37,6 +43,10 @@ class JobUpdate(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     is_active: Optional[bool] = None
+    status: Optional[JobStatus] = None
+    department: Optional[str] = None
+    salary_min: Optional[int] = Field(default=None, ge=0)
+    salary_max: Optional[int] = Field(default=None, ge=0)
 
 
 class JobResponse(BaseModel):
@@ -49,6 +59,10 @@ class JobResponse(BaseModel):
     employment_type: Optional[str] = None
     location: Optional[str] = None
     is_active: bool
+    status: JobStatus = "Active"
+    department: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
     posted_at: datetime
     total_candidates: int = 0
     screened: int = 0
@@ -67,6 +81,11 @@ def job_helper(job: dict) -> dict:
         "employment_type": job.get("employment_type"),
         "location": job.get("location"),
         "is_active": job.get("is_active", True),
+        # Jobs saved before "status" existed only have is_active
+        "status": job.get("status") or ("Active" if job.get("is_active", True) else "Closed"),
+        "department": job.get("department"),
+        "salary_min": job.get("salary_min"),
+        "salary_max": job.get("salary_max"),
         "posted_at": job.get("posted_at", datetime.utcnow()),
         "total_candidates": job.get("total_candidates", 0),
         "screened": job.get("screened", 0),
@@ -95,6 +114,15 @@ async def _with_candidate_counts(jobs: List[dict]) -> List[dict]:
         job["screened"] = row.get("screened", 0)
         job["shortlisted"] = row.get("shortlisted", 0)
     return jobs
+
+
+def _sync_status(data: dict) -> dict:
+    """Keep ``status`` and the legacy ``is_active`` flag consistent."""
+    if data.get("status"):
+        data["is_active"] = data["status"] == "Active"
+    elif "is_active" in data and data["is_active"] is not None:
+        data["status"] = "Active" if data["is_active"] else "Closed"
+    return data
 
 
 def _owned_job_filter(job_id: str, user: AuthUser) -> dict:
@@ -129,7 +157,7 @@ async def create_job(job: JobCreate, user: AuthUser = Depends(get_current_user))
     """Create a new job posting"""
     from app.services.embedding_service import generate_embedding
     
-    job_data = job.model_dump()
+    job_data = _sync_status(job.model_dump())
     job_data["owner_uid"] = user.uid
     job_data["posted_at"] = datetime.utcnow()
     job_data["total_candidates"] = 0
@@ -160,7 +188,7 @@ async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_c
         raise HTTPException(status_code=404, detail="Job not found")
     
     # Build update data (only non-None fields)
-    update_data = {k: v for k, v in job.model_dump().items() if v is not None}
+    update_data = _sync_status({k: v for k, v in job.model_dump().items() if v is not None})
     
     if update_data:
         await db.jobs.update_one({"_id": obj_id}, {"$set": update_data})
