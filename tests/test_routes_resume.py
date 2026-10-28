@@ -210,6 +210,28 @@ class TestGetJobCandidates:
 # _create_application tests
 # ============================================================================
 class TestCreateApplication:
+    async def test_real_skill_scoring_creates_application(self, mock_db, owned_job_id):
+        """Runs the real (unmocked) skill-scoring pipeline. A signature mismatch here
+        once made every application fail silently, so no candidate ever appeared."""
+        from app.routes.resume import _create_application
+        from bson import ObjectId
+        await mock_db.jobs.update_one(
+            {"_id": ObjectId(owned_job_id)},
+            {"$set": {"required_skills": ["Python"], "preferred_skills": ["Docker"]}},
+        )
+        await mock_db.candidates.insert_one({
+            "candidate_id": "real-score", "parsed": {"skills": "Python, Docker", "experience": ["Backend dev"]},
+        })
+        with patch("app.services.embedding_service.generate_embedding", return_value=[0.1] * 384):
+            await _create_application(
+                "real-score", owned_job_id,
+                verification_data={"matchScore": {"overallCredibility": 60}},
+            )
+        app = await mock_db.applications.find_one({"candidate_id": "real-score"})
+        assert app is not None
+        scored = {s["skill"] for s in app["score_details"]["skill_matches"]}
+        assert scored == {"Python", "Docker"}
+
     async def test_create_with_verification_data(self, mock_db):
         from app.routes.resume import _create_application
         from bson import ObjectId
