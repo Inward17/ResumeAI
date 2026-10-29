@@ -8,10 +8,10 @@
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
 
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const apiFetch = async (path, options = {}) => {
-    const user = auth.currentUser;
+    const user = auth?.currentUser;
     const token = user ? await user.getIdToken() : null;
 
     const headers = new Headers(options.headers || {});
@@ -19,7 +19,7 @@ export const apiFetch = async (path, options = {}) => {
 
     const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
-    if (response.status === 401) {
+    if (response.status === 401 && auth) {
         // Token revoked/invalid — end the session; ProtectedRoute redirects to /login
         await signOut(auth).catch(() => {});
     }

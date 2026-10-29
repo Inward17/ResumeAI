@@ -12,7 +12,7 @@ uvicorn app.main:app --reload --port 8000
 
 # Frontend (copy frontend/.env.example to frontend/.env first)
 cd frontend
-yarn install && yarn start
+yarn install && yarn dev    # http://localhost:3000
 ```
 
 Tests: `pytest` from the repository root.

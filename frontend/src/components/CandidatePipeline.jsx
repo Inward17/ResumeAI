@@ -1,108 +1,70 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Upload, X, Zap, Clock, Users,
-  Star, CheckCircle, Github, MapPin, ChevronRight,
-  FileText, TrendingUp, BarChart2, Calendar
+  ArrowLeft, Upload, Clock, Users, MapPin, ChevronRight, FileText, Calendar, AlertTriangle, CheckCircle, Search, Briefcase,
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import CandidateModal from './CandidateModal';
-import { getJobCandidates, getJobTasks, uploadResumes, updateCandidateStatus } from '../services/jobService';
-import { C } from '../theme';
+import {
+  getJob, getJobCandidates, getJobTasks, uploadResumes, updateCandidateStatus,
+} from '../services/jobService';
+import { CANDIDATE_STATUSES, INTERVIEW_STATUSES } from '../lib/statuses';
+import { loadPreferences } from '../lib/preferences';
+import { cn } from '../lib/utils';
+import {
+  Card, CardHeader, PageContainer, StatusPill, ScoreBadge, ScoreRing, Initials, EmptyState, JobStatusPill, PrimaryButton,
+} from './common';
 
-/* ── Score ring ── */
-const ScoreRing = ({ value, label, size = 52 }) => {
-  const r = 18;
-  const circ = 2 * Math.PI * r;
-  const dash = (value / 100) * circ;
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg viewBox="0 0 40 40" width={size} height={size} className="-rotate-90">
-          <circle cx="20" cy="20" r={r} fill="none" stroke="#e0e7ff" strokeWidth="4" />
-          <circle cx="20" cy="20" r={r} fill="none" stroke={C.accent} strokeWidth="4"
-            strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[11px] font-black" style={{ color: C.primary }}>{value}%</span>
-        </div>
-      </div>
-      <span className="text-[10px] text-slate-400 font-semibold text-center leading-tight">{label}</span>
-    </div>
-  );
-};
+const ACCEPTED_TYPES = '.pdf,.docx,.doc,.txt';
 
-/* ── Status pill ── */
-const StatusPill = ({ status }) => {
-  const map = {
-    'Interview':   { bg: '#d1fae5', text: '#065f46' },
-    'interview':   { bg: '#d1fae5', text: '#065f46' },
-    'Shortlisted': { bg: '#e0e7ff', text: '#3730a3' },
-    'shortlisted': { bg: '#e0e7ff', text: '#3730a3' },
-    'Under Review':{ bg: '#fef3c7', text: '#92400e' },
-    'Rejected':    { bg: '#fee2e2', text: '#991b1b' },
-  };
-  const s = map[status] || { bg: '#f1f5f9', text: '#475569' };
+const CandidateRow = ({ candidate, prefs, onOpen, onMoveToInterview }) => {
+  const needsReview = candidate.verificationScore < prefs.verificationThreshold;
+  const inInterviewTrack = INTERVIEW_STATUSES.includes(candidate.status);
   return (
-    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-      style={{ background: s.bg, color: s.text }}>
-      {status || 'Review'}
-    </span>
-  );
-};
-
-/* ── Candidate list row ── */
-const CandidateRow = ({ candidate, onClick, onMoveToInterview }) => {
-  const match = Math.round(candidate.jdMatchScore ?? candidate.matchScore ?? 0);
-  const verified = candidate.verificationScore ?? 0;
-  const isInterview = ['Interview', 'interview', 'Shortlisted', 'shortlisted'].includes(candidate.status);
-  return (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-0 px-5 py-4 hover:bg-indigo-50/60 transition-colors border-b border-slate-100 last:border-0 group">
-      {/* Left: avatar + name — clicking opens dossier */}
-      <button onClick={() => onClick(candidate)} className="flex items-center gap-3 flex-1 text-left min-w-0">
-        <div className="h-9 w-9 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-          style={{ background: C.primary }}>
-          {(candidate.name || '?').charAt(0).toUpperCase()}
-        </div>
+    <li className="group flex flex-col gap-3 border-b border-slate-100 px-5 py-4 transition-colors last:border-0 hover:bg-brand-light/50 md:flex-row md:items-center md:justify-between">
+      <button type="button" onClick={() => onOpen(candidate)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+        <Initials name={candidate.name} />
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate">{candidate.name || 'Unknown'}</p>
-          <p className="text-xs text-slate-400 truncate">{candidate.email || '—'}</p>
+          <p className="truncate text-sm font-semibold text-slate-900">{candidate.name}</p>
+          <p className="truncate text-xs text-slate-500">{candidate.email || 'No email on resume'}</p>
         </div>
       </button>
-
-      {/* Right: score + status + action */}
-      <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pl-12 md:pl-0 mt-1 md:mt-0">
-        <span
-          className="text-xs font-bold px-2.5 py-0.5 rounded-full"
-          style={match >= 80
-            ? { background: '#cffafe', color: '#0e7490' }
-            : match >= 60
-            ? { background: '#ede9fe', color: '#5b21b6' }
-            : { background: '#fef3c7', color: '#92400e' }}
-        >
-          {match}% match
-        </span>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 pl-12 md:justify-end md:pl-0">
+        <ScoreBadge value={candidate.jdMatchScore} strong={prefs.matchThreshold} />
         <StatusPill status={candidate.status} />
-        {!isInterview && (
+        {needsReview ? (
+          <span title={`Verification ${candidate.verificationScore}% — below your ${prefs.verificationThreshold}% threshold`}>
+            <AlertTriangle className="h-4 w-4 text-amber-600" aria-label="Verification needs review" />
+          </span>
+        ) : (
+          <span title={`Verification ${candidate.verificationScore}%`}>
+            <CheckCircle className="h-4 w-4 text-emerald-600" aria-label="Verification above threshold" />
+          </span>
+        )}
+        {!inInterviewTrack && (
           <button
+            type="button"
             onClick={() => onMoveToInterview(candidate.id)}
-            title="Move to Interview"
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ background: '#d1fae5', color: '#065f46' }}
+            className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-200 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
-            <Calendar className="h-3 w-3" /> Interview
+            <Calendar className="h-3 w-3" aria-hidden="true" /> Move to interview
           </button>
         )}
-        {verified >= 80 && (
-          <CheckCircle className="h-4 w-4 shrink-0" style={{ color: C.cyan }} />
-        )}
-        <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
+        <ChevronRight className="hidden h-4 w-4 text-slate-400 md:block" aria-hidden="true" />
       </div>
-    </div>
+    </li>
   );
 };
 
-/* ── Main Component ── */
-const CandidatePipeline = ({ job, onBack }) => {
+const CandidatePipeline = () => {
+  const { jobId } = useParams();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
+  const prefs = useMemo(loadPreferences, []);
+
+  const [job, setJob] = useState(null);
+  const [jobError, setJobError] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -110,26 +72,34 @@ const CandidatePipeline = ({ job, onBack }) => {
   const [taskCounts, setTaskCounts] = useState(null); // backend processing status
   const [batch, setBatch] = useState(null); // {base, total} — progress of the latest upload
   const [pollKey, setPollKey] = useState(0);
-  const lastFinished = useRef(null);
-  const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [dragOver, setDragOver] = useState(false);
-  const [mobileTab, setMobileTab] = useState('pipeline'); // 'pipeline' | 'analysis'
+  const [mobileTab, setMobileTab] = useState('pipeline');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const lastFinished = useRef(null);
   const fileInputRef = useRef(null);
-  const { toast } = useToast();
 
-  const fetchCandidates = async (silent = false) => {
+  const selectedId = searchParams.get('candidate');
+  const selectedCandidate = candidates.find((c) => c.id === selectedId) || null;
+
+  useEffect(() => {
+    setJob(null);
+    setJobError(null);
+    getJob(jobId).then(setJob).catch((err) => setJobError(err.message));
+  }, [jobId]);
+
+  const fetchCandidates = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const data = await getJobCandidates(job.id);
-      setCandidates(data || []);
+      setCandidates(await getJobCandidates(jobId));
     } catch (err) {
-      if (!silent) toast({ title: 'Error loading candidates', description: err.message, variant: 'destructive' });
+      if (!silent) toast({ title: 'Could not load candidates', description: err.message, variant: 'destructive' });
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, [jobId, toast]);
 
-  useEffect(() => { fetchCandidates(); }, [job.id]);
+  useEffect(() => { fetchCandidates(); }, [fetchCandidates]);
 
   // Poll resume processing status while anything is queued/processing and
   // refresh the list as candidates finish (they appear once verified).
@@ -138,22 +108,20 @@ const CandidatePipeline = ({ job, onBack }) => {
     let timer = null;
     const tick = async () => {
       try {
-        const { counts } = await getJobTasks(job.id);
+        const { counts } = await getJobTasks(jobId);
         if (cancelled) return;
         setTaskCounts(counts);
         const finished = counts.done + counts.failed;
-        if (lastFinished.current !== null && finished !== lastFinished.current) {
-          fetchCandidates(true);
-        }
+        if (lastFinished.current !== null && finished !== lastFinished.current) fetchCandidates(true);
         lastFinished.current = finished;
         if (counts.queued + counts.processing > 0) timer = setTimeout(tick, 3000);
-      } catch (err) {
+      } catch {
         if (!cancelled) timer = setTimeout(tick, 10000);
       }
     };
     tick();
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [job.id, pollKey]);
+  }, [jobId, pollKey, fetchCandidates]);
 
   const uploadFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -162,17 +130,30 @@ const CandidatePipeline = ({ job, onBack }) => {
     setUploadProgress({ processed: 0, total: files.length });
     setBatch({ base: taskCounts ? taskCounts.done + taskCounts.failed : 0, total: files.length });
     try {
-      await uploadResumes(job.id, files, (processed, total) => setUploadProgress({ processed, total }));
-      toast({ title: 'Resumes queued', description: `${files.length} resume(s) uploaded. AI screening is running in the background.` });
+      await uploadResumes(jobId, files, (processed, total) => setUploadProgress({ processed, total }));
+      toast({ title: 'Resumes queued', description: `${files.length} resume(s) uploaded. Screening runs in the background.` });
     } catch (err) {
-      toast({ title: 'Upload error', description: err.message, variant: 'destructive' });
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     } finally {
       setUploading(false);
       setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      setPollKey(k => k + 1);
+      setPollKey((k) => k + 1);
     }
   };
+
+  const handleStatusUpdate = async (candidateId, status) => {
+    try {
+      await updateCandidateStatus(jobId, candidateId, status);
+      setCandidates((prev) => prev.map((c) => (c.id === candidateId ? { ...c, status } : c)));
+      toast({ title: `Moved to ${status}` });
+    } catch (err) {
+      toast({ title: 'Could not update status', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const openCandidate = (c) => setSearchParams({ candidate: c.id });
+  const closeCandidate = () => setSearchParams({}, { replace: true });
 
   const activeTasks = taskCounts ? taskCounts.queued + taskCounts.processing : 0;
   const processingPct = (() => {
@@ -184,267 +165,215 @@ const CandidatePipeline = ({ job, onBack }) => {
     return Math.round(((taskCounts.done + taskCounts.failed) / (taskCounts.total || 1)) * 100);
   })();
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    uploadFiles(e.dataTransfer.files);
-  };
+  const ranked = [...candidates].sort((a, b) => b.jdMatchScore - a.jdMatchScore);
+  const visible = ranked.filter((c) => {
+    const q = query.trim().toLowerCase();
+    return (statusFilter === 'All' || c.status === statusFilter)
+      && (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+  });
+  const avg = (key) => (candidates.length ? Math.round(candidates.reduce((s, c) => s + (c[key] || 0), 0) / candidates.length) : null);
+  const topMatch = candidates.length ? ranked[0].jdMatchScore : null;
+  const strongMatches = candidates.filter((c) => c.jdMatchScore >= prefs.matchThreshold).length;
 
-  const handleStatusUpdate = async (candidateId, status) => {
-    try {
-      await updateCandidateStatus(job.id, candidateId, status);
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status } : c));
-      toast({ title: 'Status updated' });
-    } catch (err) {
-      toast({ title: 'Error updating status', variant: 'destructive' });
-    }
-  };
-
-  const topMatch = candidates.length > 0
-    ? Math.max(...candidates.map(c => c.jdMatchScore ?? c.matchScore ?? 0))
-    : 0;
+  if (jobError) {
+    return (
+      <PageContainer>
+        <Card>
+          <EmptyState icon={Briefcase} title="Job not found" description="It may have been deleted, or it belongs to another account."
+            action={<PrimaryButton onClick={() => navigate('/jobs')}>Back to job postings</PrimaryButton>} />
+        </Card>
+      </PageContainer>
+    );
+  }
 
   return (
-    <div className="min-h-full md:p-8 p-4 pb-20" style={{ background: C.pageGray }}>
-      {/* ── Back + header ── */}
+    <PageContainer>
+      <Link to="/jobs" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to postings
+      </Link>
+
       <div className="mb-6">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors mb-4"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to Postings
-        </button>
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-slate-900">{job.title}</h1>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-400 mt-1">
-              {job.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>}
-              {job.employmentType && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{job.employmentType}</span>}
-              <span className="flex items-center gap-1"><Users className="h-3 w-3" />{candidates.length} Active Candidates</span>
+        {job ? (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-[1.75rem]">{job.title}</h1>
+              <JobStatusPill status={job.status} />
             </div>
-          </div>
-          {/* Pipeline velocity */}
-          <div className="md:text-right flex md:flex-col items-center md:items-end justify-between bg-white md:bg-transparent p-4 md:p-0 rounded-2xl md:rounded-none border md:border-0 border-slate-200">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pipeline Velocity</p>
-              <p className="text-xs text-slate-400 hidden md:block mt-1">Average time to AI verification</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+              {job.department && <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" aria-hidden="true" />{job.department}</span>}
+              {job.location && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{job.location}</span>}
+              {job.employmentType && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{job.employmentType}</span>}
+              <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" aria-hidden="true" />{candidates.length} candidates</span>
             </div>
-            <p className="text-2xl font-black" style={{ color: C.primary }}>4.2 <span className="text-base font-semibold">Days</span></p>
-          </div>
-        </div>
+          </>
+        ) : (
+          <div className="space-y-2"><div className="h-8 w-72 animate-pulse rounded-lg bg-slate-200" /><div className="h-4 w-48 animate-pulse rounded bg-slate-200" /></div>
+        )}
       </div>
 
-      {/* Mobile Tab Switcher */}
-      <div className="lg:hidden flex bg-slate-200/50 p-1 rounded-xl mb-6">
-        <button
-          onClick={() => setMobileTab('pipeline')}
-          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-            mobileTab === 'pipeline' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-          }`}
-        >
-          Pipeline
-        </button>
-        <button
-          onClick={() => setMobileTab('analysis')}
-          className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-            mobileTab === 'analysis' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-          }`}
-        >
-          Analysis
-        </button>
+      {/* Mobile tab switcher */}
+      <div className="mb-5 flex rounded-xl bg-slate-200/60 p-1 lg:hidden" role="tablist">
+        {[['pipeline', 'Pipeline'], ['analysis', 'Analysis']].map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={mobileTab === id} onClick={() => setMobileTab(id)}
+            className={cn('flex-1 rounded-lg py-2 text-sm font-bold transition-all', mobileTab === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>
+            {label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        {/* Left: Upload + Candidate list */}
-        <div className={`flex-col gap-5 ${mobileTab === 'pipeline' ? 'flex' : 'hidden lg:flex'}`}>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+        <div className={cn('flex-col gap-5', mobileTab === 'pipeline' ? 'flex' : 'hidden lg:flex')}>
           {/* Upload zone */}
           <div
-            className="rounded-2xl border-2 border-dashed p-6 flex flex-col items-center gap-3 text-center transition-colors"
-            style={{
-              borderColor: dragOver ? C.accent : '#c7d2fe',
-              background: dragOver ? '#eef2ff' : 'white',
-            }}
+            className={cn(
+              'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center transition-colors',
+              dragOver ? 'border-brand-accent bg-brand-light' : 'border-brand-soft bg-white',
+            )}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".pdf,.docx,.doc"
-              className="hidden"
-              onChange={e => uploadFiles(e.target.files)}
-            />
-            <div className="h-12 w-12 rounded-2xl flex items-center justify-center" style={{ background: '#eef2ff' }}>
-              <Upload className="h-6 w-6" style={{ color: C.accent }} />
+            <input ref={fileInputRef} id="resume-upload" type="file" multiple accept={ACCEPTED_TYPES} className="sr-only"
+              onChange={(e) => uploadFiles(e.target.files)} />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light">
+              <Upload className="h-6 w-6 text-brand-accent" aria-hidden="true" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">Upload Resumes</p>
-              <p className="text-sm text-slate-400 mt-0.5">
-                Drag and drop PDF/DOCX files here. Our AI will automatically parse skills and experience.
-              </p>
+              <p className="font-bold text-slate-900">Upload resumes</p>
+              <p className="mt-0.5 text-sm text-slate-600">Drag and drop PDF, DOCX or TXT files, or choose them. Large batches are fine.</p>
             </div>
-            <button
-              className="px-5 py-2 rounded-xl text-sm font-bold text-white mt-1"
-              style={{ background: C.primary }}
-              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-            >
-              Choose Files
-            </button>
+            <PrimaryButton onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              {uploading ? 'Uploading…' : 'Choose files'}
+            </PrimaryButton>
 
-            {/* Upload progress overlay */}
             {uploading && uploadProgress && (
-              <div className="w-full mt-2">
-                <div className="flex justify-between text-xs mb-1 text-slate-500">
+              <div className="w-full" aria-live="polite">
+                <div className="mb-1 flex justify-between text-xs text-slate-600">
                   <span>Uploading… {uploadProgress.processed}/{uploadProgress.total}</span>
                   <span>{Math.round((uploadProgress.processed / uploadProgress.total) * 100)}%</span>
                 </div>
-                <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${(uploadProgress.processed / uploadProgress.total) * 100}%`, background: C.accent }}
-                  />
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-full rounded-full bg-brand-accent transition-all" style={{ width: `${(uploadProgress.processed / uploadProgress.total) * 100}%` }} />
                 </div>
               </div>
             )}
-
-            {/* Background processing status (from the task queue) */}
             {!uploading && activeTasks > 0 && (
-              <div className="w-full mt-2" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between text-xs mb-1 text-slate-500">
-                  <span>
-                    AI screening… {taskCounts.processing} in progress · {taskCounts.queued} queued
-                  </span>
+              <div className="w-full" aria-live="polite">
+                <div className="mb-1 flex justify-between text-xs text-slate-600">
+                  <span>AI screening… {taskCounts.processing} in progress · {taskCounts.queued} queued</span>
                   <span>{processingPct}%</span>
                 </div>
-                <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${processingPct}%`, background: C.accent }}
-                  />
+                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-full rounded-full bg-brand-accent transition-all" style={{ width: `${processingPct}%` }} />
                 </div>
               </div>
             )}
             {taskCounts?.failed > 0 && (
-              <p className="text-xs text-red-500 mt-1">
-                {taskCounts.failed} resume(s) could not be processed. Re-upload them to retry.
-              </p>
+              <p className="text-xs text-red-700">{taskCounts.failed} resume(s) could not be processed. Re-upload them to retry.</p>
             )}
           </div>
 
           {/* Candidate list */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-              <p className="font-semibold text-slate-900">Candidate Analysis</p>
-              <span className="text-xs text-slate-400">{candidates.length} candidates</span>
-            </div>
-            {loading ? (
-              <div className="px-5 py-8 text-center text-slate-400 text-sm">Loading candidates…</div>
-            ) : candidates.length === 0 ? (
-              <div className="px-5 py-10 text-center">
-                <FileText className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">No candidates yet. Upload resumes above to get started.</p>
-              </div>
-            ) : (
-              <div>
-                {candidates.map(c => (
-                  <CandidateRow
-                    key={c.id}
-                    candidate={c}
-                    onClick={setSelectedCandidate}
-                    onMoveToInterview={(candidateId) => handleStatusUpdate(candidateId, 'Interview')}
-                  />
-                ))}
+          <Card className="overflow-hidden">
+            <CardHeader title="Candidates" subtitle="Ranked by role match" action={<span className="text-sm text-slate-500">{visible.length} of {candidates.length}</span>} />
+            {candidates.length > 0 && (
+              <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-3 md:flex-row md:items-center">
+                <div className="relative md:w-64">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search candidates"
+                    className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-accent focus:ring-2 focus:ring-brand-soft" />
+                </div>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-accent focus:ring-2 focus:ring-brand-soft">
+                  <option value="All">All statuses</option>
+                  {CANDIDATE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
             )}
-          </div>
+            {loading ? (
+              <div className="space-y-3 p-5">{[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-xl bg-slate-100" />)}</div>
+            ) : candidates.length === 0 ? (
+              <EmptyState icon={FileText} title="No candidates yet"
+                description={activeTasks > 0 ? 'Resumes are being screened — candidates appear here as each one finishes.' : 'Upload resumes above to get started.'} />
+            ) : visible.length === 0 ? (
+              <EmptyState icon={Search} title="No matching candidates" description="Try a different search or status." />
+            ) : (
+              <ul>
+                {visible.map((c) => (
+                  <CandidateRow key={c.id} candidate={c} prefs={prefs} onOpen={openCandidate}
+                    onMoveToInterview={(id) => handleStatusUpdate(id, 'Interview')} />
+                ))}
+              </ul>
+            )}
+          </Card>
         </div>
 
-        {/* Right: live analysis + stats */}
-        <div className={`flex-col gap-5 ${mobileTab === 'analysis' ? 'flex' : 'hidden lg:flex'}`}>
-          {/* Live Analysis card */}
-          <div
-            className="rounded-2xl p-5"
-            style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 60%, ${C.accent} 100%)` }}
-          >
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#818cf8' }}>Live Analysis</p>
-            <div className="flex items-center gap-4 mb-4">
+        {/* Analysis column */}
+        <div className={cn('flex-col gap-5', mobileTab === 'analysis' ? 'flex' : 'hidden lg:flex')}>
+          <div className="rounded-2xl bg-brand-gradient p-5 text-white">
+            <p className="mb-3 text-xs font-bold uppercase tracking-widest text-indigo-200">Screening status</p>
+            <div className="mb-4 flex items-center gap-5">
               <div>
-                <p className="text-xs text-indigo-300 font-semibold">Top Match</p>
-                <p className="text-3xl font-black text-white">{topMatch}%</p>
+                <p className="text-xs font-semibold text-indigo-200">Top match</p>
+                <p className="font-display text-3xl font-extrabold">{topMatch == null ? '—' : `${topMatch}%`}</p>
               </div>
-              <div className="w-px h-10 bg-indigo-700" />
+              <div className="h-10 w-px bg-white/20" />
               <div>
-                <p className="text-xs text-indigo-300 font-semibold">Remaining</p>
-                <p className="text-3xl font-black text-white">{String(activeTasks).padStart(2, '0')}</p>
+                <p className="text-xs font-semibold text-indigo-200">In queue</p>
+                <p className="font-display text-3xl font-extrabold">{activeTasks}</p>
               </div>
             </div>
             {activeTasks > 0 ? (
               <div>
-                <div className="flex justify-between text-xs text-indigo-300 mb-1.5">
-                  <span>AI Processing</span>
-                  <span>{processingPct}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-indigo-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{ width: `${processingPct}%`, background: C.cyan }}
-                  />
+                <div className="mb-1.5 flex justify-between text-xs text-indigo-100"><span>AI processing</span><span>{processingPct}%</span></div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
+                  <div className="h-full rounded-full bg-brand-cyan transition-all" style={{ width: `${processingPct}%` }} />
                 </div>
               </div>
             ) : (
-              <p className="text-xs leading-relaxed" style={{ color: '#c7d2fe' }}>
-                AI analysis complete. {candidates.length > 0 ? `${candidates.filter(c => (c.jdMatchScore ?? 0) >= 80).length} candidates meet the 80% threshold.` : 'Upload resumes to begin analysis.'}
+              <p className="text-sm leading-relaxed text-indigo-100">
+                {candidates.length > 0
+                  ? `${strongMatches} of ${candidates.length} candidates have a role match of ${prefs.matchThreshold}% or more.`
+                  : 'Upload resumes to begin screening.'}
               </p>
             )}
           </div>
 
-          {/* Score breakdown */}
           {candidates.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-              <p className="font-semibold text-slate-900 mb-4">Score Breakdown</p>
+            <Card className="p-5">
+              <p className="mb-4 font-semibold text-slate-900">Score overview</p>
               <div className="grid grid-cols-3 gap-2">
-                <ScoreRing value={topMatch} label="Top Match" />
-                <ScoreRing
-                  value={Math.round(candidates.reduce((s, c) => s + (c.jdMatchScore ?? 0), 0) / (candidates.length || 1))}
-                  label="Avg Match"
-                />
-                <ScoreRing
-                  value={Math.round(candidates.reduce((s, c) => s + (c.verificationScore ?? 0), 0) / (candidates.length || 1))}
-                  label="Avg Verify"
-                />
+                <ScoreRing value={topMatch} label="Top match" />
+                <ScoreRing value={avg('jdMatchScore')} label="Avg match" />
+                <ScoreRing value={avg('verificationScore')} label="Avg verified" />
               </div>
-            </div>
+            </Card>
           )}
 
-          {/* Job description preview */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <p className="font-semibold text-slate-900 mb-2">Job Overview</p>
-            <p className="text-xs text-slate-500 leading-relaxed line-clamp-6">{job.description || 'No description provided.'}</p>
-            {job.requirements?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
-                {job.requirements.slice(0, 6).map(skill => (
-                  <span key={skill} className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                    style={{ background: '#eef2ff', color: C.accent }}>{skill}</span>
+          <Card className="p-5">
+            <p className="mb-2 font-semibold text-slate-900">About this role</p>
+            <p className="line-clamp-6 text-sm leading-relaxed text-slate-600">{job?.description || 'No description provided.'}</p>
+            {job?.requirements?.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {job.requirements.map((skill) => (
+                  <span key={skill} className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand">{skill}</span>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
       </div>
 
-      {/* Candidate Dossier Modal */}
-      {selectedCandidate && (
-        <CandidateModal
-          candidate={selectedCandidate}
-          job={job}
-          onClose={() => setSelectedCandidate(null)}
-          onStatusUpdate={handleStatusUpdate}
-        />
-      )}
-    </div>
+      <CandidateModal
+        open={!!selectedCandidate}
+        candidate={selectedCandidate}
+        job={job}
+        prefs={prefs}
+        onClose={closeCandidate}
+        onStatusUpdate={handleStatusUpdate}
+        onTakeInterview={(c) => navigate(`/jobs/${jobId}/candidates/${c.id}/interview`)}
+      />
+    </PageContainer>
   );
 };
 

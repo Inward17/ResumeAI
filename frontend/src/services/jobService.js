@@ -7,6 +7,7 @@
  */
 
 import { apiFetch } from './api';
+import { normalizeStatus } from '../lib/statuses';
 
 /* ─────────────────────────────────────────────────────────────
  *  Transform: Backend (snake_case) ➜ Frontend (camelCase)
@@ -20,7 +21,11 @@ const transformJobFromAPI = (job) => ({
     experienceLevel: job.experience_level,
     employmentType: job.employment_type,
     location: job.location,
-    status: job.is_active ? 'Active' : 'Closed',
+    department: job.department || '',
+    salaryMin: job.salary_min ?? null,
+    salaryMax: job.salary_max ?? null,
+    // Older backends only send is_active
+    status: job.status || (job.is_active ? 'Active' : 'Closed'),
     totalCandidates: job.total_candidates || 0,
     screened: job.screened || 0,
     shortlisted: job.shortlisted || 0,
@@ -30,15 +35,21 @@ const transformJobFromAPI = (job) => ({
 /* ─────────────────────────────────────────────────────────────
  *  Transform: Frontend (camelCase) ➜ Backend (snake_case)
  * ───────────────────────────────────────────────────────────── */
+const toNumberOrNull = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+
 const transformJobToAPI = (job) => ({
     job_title: job.title,
     job_description: job.description,
     required_skills: job.requirements || [],
     preferred_skills: job.preferredSkills || [],
-    experience_level: job.experienceLevel,
-    employment_type: job.employmentType,
-    location: job.location,
-    is_active: job.status !== 'Closed',    // default to active
+    experience_level: job.experienceLevel || null,
+    employment_type: job.employmentType || null,
+    location: job.location || null,
+    department: job.department || null,
+    salary_min: toNumberOrNull(job.salaryMin),
+    salary_max: toNumberOrNull(job.salaryMax),
+    status: job.status || 'Active',
+    is_active: (job.status || 'Active') === 'Active',
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -110,20 +121,40 @@ export const getJobCandidates = async (jobId) => {
     if (!response.ok) throw new Error('Failed to fetch candidates');
     const data = await response.json();
     // Backend returns { job_id, candidates: [...] }
-    return (data.candidates || []).map(c => ({
-        id: c.candidate_id,
-        name: c.name || 'Unknown',
-        email: c.email || '',
-        phone: c.phone || '',
-        status: c.status || 'Under Review',
-        applicationDate: c.application_date,
-        jdMatchScore: c.jd_match_score || 0,
-        verificationScore: c.verification_score || 0,
-        scoreDetails: c.score_details || {},
-        filename: c.filename,
-        verificationStatus: c.verification_status,
-        skillMatches: c.skill_matches || [],
-    }));
+    return (data.candidates || []).map(transformCandidateFromAPI);
+};
+
+const pct = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+const strings = (v) => (Array.isArray(v) ? v.filter(Boolean).map(String) : []);
+
+const transformCandidateFromAPI = (c) => ({
+    id: c.candidate_id,
+    name: c.name || 'Unknown candidate',
+    email: c.email || '',
+    phone: c.phone || '',
+    status: normalizeStatus(c.status),
+    applicationDate: c.application_date,
+    // All scores are 0–100
+    jdMatchScore: pct(c.jd_match_score),
+    githubScore: c.github_score == null ? null : pct(c.github_score),
+    verificationScore: pct(c.verification_score),
+    scoreDetails: c.score_details || {},
+    filename: c.filename,
+    verificationStatus: c.verification_status || null,
+    skillMatches: c.skill_matches || [],
+    skills: strings(c.skills),
+    education: strings(c.education),
+    experience: strings(c.experience),
+    githubUrl: c.github_url || null,
+    linkedinUrl: c.linkedin_url || null,
+});
+
+/** One candidate of a job (the list endpoint is the only candidate source) */
+export const getJobCandidate = async (jobId, candidateId) => {
+    const candidates = await getJobCandidates(jobId);
+    const candidate = candidates.find(c => c.id === candidateId);
+    if (!candidate) throw new Error('Candidate not found for this job');
+    return candidate;
 };
 
 const UPLOAD_BATCH_SIZE = 10;
@@ -171,7 +202,10 @@ export const updateCandidateStatus = async (jobId, candidateId, status) => {
             body: JSON.stringify({ status }),
         }
     );
-    if (!response.ok) throw new Error('Failed to update status');
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to update status');
+    }
     return response.json();
 };
 
