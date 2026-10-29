@@ -3,12 +3,14 @@ Unified Verification Service - Orchestrates concurrent verification of GitHub, L
 """
 import asyncio
 import os
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+
+from rapidfuzz import fuzz
 
 from app.database import db
 from app.services.linkedinScraper import scrape_linkedin_profiles
-from app.services.verifier import verify_profile
+from app.services.verifier import verify_profile, _clean_company_name, _clean_education_name
 from app.services.github_services_v2 import verify_github, GitHubVerificationResult
 from app.models.verification_data_model import (
     VerificationDataModel,
@@ -26,8 +28,12 @@ from app.models.verification_data_model import (
     EducationDetail,
     ExperienceDetail,
     VerificationStatusModel,
-    MatchScoreModel
+    MatchScoreModel,
+    Discrepancy,
 )
+
+# Fuzzy score (0-100) at which a resume entry counts as present on LinkedIn
+LINKEDIN_MATCH_THRESHOLD = 80
 
 
 class VerificationCache:
@@ -97,6 +103,8 @@ class UnifiedVerificationService:
         # Using return_exceptions=True so one failure doesn't block others
         tasks = []
         task_names = []
+        # Kept so LinkedIn data can be compared with the resume's claims
+        self.cache.set(candidate_id, "resume", parsed_resume or {})
         
         if github_username:
             # Pass the full parsed resume (not just the web-search stub)
@@ -254,9 +262,10 @@ class UnifiedVerificationService:
         # Build LinkedIn data model
         linkedin_data = None
         linkedin_status = "pending"
+        linkedin_match: Optional[float] = None
+        discrepancies: List[Discrepancy] = []
         if cached.get("linkedin") and not cached["linkedin"].get("error"):
             li = cached["linkedin"]
-            linkedin_status = "verified"
             
             # Parse positions
             positions = []
@@ -319,6 +328,11 @@ class UnifiedVerificationService:
                 certifications=certifications,
                 skills=skills
             )
+            # A scraped profile only counts as verified if it agrees with the resume
+            linkedin_match, discrepancies = _compare_linkedin_with_resume(
+                linkedin_data, cached.get("resume") or {}
+            )
+            linkedin_status = "verified" if linkedin_match is not None and linkedin_match >= 60 else "unverified"
         elif cached.get("linkedin"):
             linkedin_status = "unverified"
         
@@ -363,16 +377,18 @@ class UnifiedVerificationService:
                 verifiedAt=now,
                 results=[WebSearchResult(
                     profile_url=ws.get("profile_url"),
+                    # verify_profile() returns "education"/"experience" — these were
+                    # previously read from non-existent keys, so web checks never counted
                     education=EducationVerification(
-                        average_score=ws.get("university", {}).get("average_score", 0),
-                        overall_tag=ws.get("university", {}).get("overall_tag"),
+                        average_score=ws["education"].get("average_score", 0),
+                        overall_tag=ws["education"].get("overall_tag"),
                         details=edu_details
-                    ) if ws.get("university") else None,
+                    ) if edu_details else None,
                     experience=ExperienceVerification(
-                        average_score=ws.get("company", {}).get("average_score", 0),
-                        overall_tag=ws.get("company", {}).get("overall_tag"),
+                        average_score=ws["experience"].get("average_score", 0),
+                        overall_tag=ws["experience"].get("overall_tag"),
                         details=exp_details
-                    ) if ws.get("company") else None
+                    ) if exp_details else None
                 )]
             )
         elif cached.get("webSearch"):
@@ -383,11 +399,11 @@ class UnifiedVerificationService:
             linkedin=linkedin_status,
             github=github_status,
             webCheck=web_status,
-            discrepancies=[]  # TODO: Compute discrepancies
+            discrepancies=discrepancies,
         )
         
         # Calculate match scores
-        match_score = self._calculate_match_scores(github_data, linkedin_data, web_search_data)
+        match_score = self._calculate_match_scores(github_data, linkedin_match, web_search_data)
         
         # Create verification data model
         verification_data = VerificationDataModel(
@@ -409,18 +425,26 @@ class UnifiedVerificationService:
     def _calculate_match_scores(
         self,
         github_data: Optional[GitHubDataModel],
-        linkedin_data: Optional[LinkedInDataModel],
+        linkedin_match: Optional[float],
         web_search_data: Optional[WebSearchDataModel]
     ) -> MatchScoreModel:
-        """Calculate credibility match scores"""
+        """Calculate credibility match scores.
+
+        Each source only takes part in the weighted average when it actually
+        had something to check, so a missing source never drags the score down.
+        """
         experience_match = 0
         skills_match = 0
+        web_scores: List[float] = []
         
-        # Experience verification score from web search
+        # Experience/education verification scores from web search
         if web_search_data and web_search_data.results:
             for result in web_search_data.results:
                 if result.experience:
                     experience_match = max(experience_match, result.experience.average_score)
+                    web_scores.append(result.experience.average_score)
+                if result.education:
+                    web_scores.append(result.education.average_score)
         
         # Skills credibility from GitHub score
         if github_data and github_data.success:
@@ -436,12 +460,13 @@ class UnifiedVerificationService:
             overall += github_score * 0.5
             weights += 0.5
         
-        if linkedin_data and linkedin_data.profileId:
-            overall += 100 * 0.2  # Full score for valid LinkedIn
+        # LinkedIn scores by agreement with the resume, not mere existence
+        if linkedin_match is not None:
+            overall += linkedin_match * 0.2
             weights += 0.2
         
-        if web_search_data and web_search_data.results:
-            avg_web = experience_match
+        if web_scores:
+            avg_web = sum(web_scores) / len(web_scores)
             overall += avg_web * 0.3
             weights += 0.3
         
@@ -450,6 +475,7 @@ class UnifiedVerificationService:
         return MatchScoreModel(
             experienceMatch=experience_match,
             skillsMatch=skills_match,
+            linkedinMatch=round(linkedin_match, 2) if linkedin_match is not None else 0,
             overallCredibility=overall_credibility
         )
     
@@ -462,6 +488,73 @@ class UnifiedVerificationService:
             {"$set": doc},
             upsert=True
         )
+
+
+def _resume_companies(parsed: dict) -> List[str]:
+    companies = [c for c in (parsed.get("company") or []) if isinstance(c, str) and c.strip()]
+    if companies:
+        return companies
+    # Older parses have no "company" list — fall back to "<role> at <company>" lines
+    found = []
+    for exp in parsed.get("experience") or []:
+        if isinstance(exp, str) and " at " in exp:
+            found.append(exp.split(" at ", 1)[1].split("(")[0].split("|")[0].split(" - ")[0].strip())
+    return [c for c in found if c]
+
+
+def _best_ratio(value: str, candidates: List[str]) -> float:
+    return max((fuzz.token_set_ratio(value.lower(), c.lower()) for c in candidates if c), default=0)
+
+
+def _compare_linkedin_with_resume(
+    linkedin: LinkedInDataModel, parsed: dict
+) -> Tuple[Optional[float], List[Discrepancy]]:
+    """
+    Compare the scraped LinkedIn profile with the resume's claims.
+
+    Returns (match 0-100, discrepancies). Match is the share of checks that
+    agree: candidate name, each resume company and each resume university.
+    None when there was nothing to compare.
+    """
+    checks: List[bool] = []
+    discrepancies: List[Discrepancy] = []
+
+    resume_name = ((parsed.get("personal_info") or {}).get("full_name") or "").strip()
+    linkedin_name = " ".join(filter(None, [linkedin.firstName, linkedin.lastName])).strip()
+    if resume_name and linkedin_name:
+        ok = fuzz.token_set_ratio(resume_name.lower(), linkedin_name.lower()) >= LINKEDIN_MATCH_THRESHOLD
+        checks.append(ok)
+        if not ok:
+            discrepancies.append(Discrepancy(
+                field="name", resumeValue=resume_name, linkedinValue=linkedin_name,
+                severity="critical", description="Name on resume differs from LinkedIn profile",
+            ))
+
+    linkedin_companies = [_clean_company_name(p.companyName) for p in linkedin.positions if p.companyName]
+    for company in _resume_companies(parsed):
+        ok = _best_ratio(_clean_company_name(company), linkedin_companies) >= LINKEDIN_MATCH_THRESHOLD
+        checks.append(ok)
+        if not ok:
+            discrepancies.append(Discrepancy(
+                field="experience", resumeValue=company, linkedinValue=None, severity="major",
+                description="Company on resume not found in LinkedIn experience",
+            ))
+
+    linkedin_schools = [_clean_education_name(e.schoolName) for e in linkedin.educations if e.schoolName]
+    for school in parsed.get("university") or []:
+        if not isinstance(school, str) or not school.strip():
+            continue
+        ok = _best_ratio(_clean_education_name(school), linkedin_schools) >= LINKEDIN_MATCH_THRESHOLD
+        checks.append(ok)
+        if not ok:
+            discrepancies.append(Discrepancy(
+                field="education", resumeValue=school, linkedinValue=None, severity="major",
+                description="University on resume not found in LinkedIn education",
+            ))
+
+    if not checks:
+        return None, discrepancies
+    return round(100 * sum(checks) / len(checks), 2), discrepancies
 
 
 # Singleton instance

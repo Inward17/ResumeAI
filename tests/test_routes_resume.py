@@ -6,6 +6,8 @@ from unittest.mock import patch, AsyncMock, MagicMock
 from io import BytesIO
 from datetime import datetime
 
+from tests.conftest import create_owned_job
+
 
 # ============================================================================
 # Helper function tests (pure, no mocking needed)
@@ -58,51 +60,112 @@ class TestExtractLinkedinUrl:
 # Upload route tests
 # ============================================================================
 class TestUploadResumes:
-    async def test_upload_valid_file(self, client, mock_db):
+    async def test_upload_valid_file(self, client, mock_db, owned_job_id):
         """Valid PDF upload should be accepted."""
-        with patch("app.routes.resume._parse_and_verify", new_callable=AsyncMock):
-            files = [("files", ("resume.pdf", b"fake-pdf-content", "application/pdf"))]
-            resp = await client.post("/api/v1/jobs/job-123/upload", files=files)
-            assert resp.status_code == 200
-            data = resp.json()
-            assert data["status"] == "accepted"
-            assert len(data["saved"]) == 1
-            assert "candidate_id" in data["saved"][0]
+        files = [("files", ("resume.pdf", b"fake-pdf-content", "application/pdf"))]
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "accepted"
+        assert len(data["saved"]) == 1
+        assert "candidate_id" in data["saved"][0]
 
-    async def test_upload_txt_file(self, client):
-        with patch("app.routes.resume._parse_and_verify", new_callable=AsyncMock):
-            files = [("files", ("resume.txt", b"Plain text resume content", "text/plain"))]
-            resp = await client.post("/api/v1/jobs/job-123/upload", files=files)
-            assert resp.status_code == 200
+    async def test_upload_txt_file(self, client, owned_job_id):
+        files = [("files", ("resume.txt", b"Plain text resume content", "text/plain"))]
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+        assert resp.status_code == 200
 
-    async def test_upload_unsupported_extension(self, client):
+    async def test_upload_unsupported_extension(self, client, owned_job_id):
         files = [("files", ("resume.xyz", b"content", "application/octet-stream"))]
-        resp = await client.post("/api/v1/jobs/job-123/upload", files=files)
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
         assert resp.status_code == 400
 
-    async def test_upload_multiple_files(self, client):
-        with patch("app.routes.resume._parse_and_verify", new_callable=AsyncMock):
-            files = [
-                ("files", ("resume1.pdf", b"pdf1", "application/pdf")),
-                ("files", ("resume2.docx", b"docx1", "application/vnd.openxmlformats")),
-            ]
-            resp = await client.post("/api/v1/jobs/job-123/upload", files=files)
-            assert resp.status_code == 200
-            assert len(resp.json()["saved"]) == 2
+    async def test_upload_unsupported_file_rejects_whole_batch(self, client, mock_db, owned_job_id):
+        """A bad file must not leave the valid files of the batch queued."""
+        files = [
+            ("files", ("good.pdf", b"pdf", "application/pdf")),
+            ("files", ("bad.xyz", b"content", "application/octet-stream")),
+        ]
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+        assert resp.status_code == 400
+        assert await mock_db.tasks.count_documents({}) == 0
+
+    async def test_upload_multiple_files(self, client, mock_db, owned_job_id):
+        files = [
+            ("files", ("resume1.pdf", b"pdf1", "application/pdf")),
+            ("files", ("resume2.docx", b"docx1", "application/vnd.openxmlformats")),
+        ]
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+        assert resp.status_code == 200
+        assert len(resp.json()["saved"]) == 2
+        assert await mock_db.tasks.count_documents({"job_id": owned_job_id, "status": "queued"}) == 2
+
+    async def test_upload_large_batch_is_queued(self, client, mock_db, owned_job_id):
+        """100 resumes in one request are all queued (previously processed one by one in-request)."""
+        files = [("files", (f"resume{i}.txt", b"resume text", "text/plain")) for i in range(100)]
+        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+        assert resp.status_code == 200
+        assert len(resp.json()["saved"]) == 100
+        assert await mock_db.tasks.count_documents({"job_id": owned_job_id, "status": "queued"}) == 100
+
+    async def test_upload_to_other_users_job_is_404(self, client, mock_db):
+        other_job = await create_owned_job(mock_db, owner_uid="someone-else")
+        files = [("files", ("resume.pdf", b"pdf", "application/pdf"))]
+        resp = await client.post(f"/api/v1/jobs/{other_job}/upload", files=files)
+        assert resp.status_code == 404
+        assert await mock_db.tasks.count_documents({}) == 0
+
+
+class TestJobTasks:
+    async def test_task_progress_counts(self, client, mock_db, owned_job_id):
+        now = datetime.utcnow()
+        for i, status in enumerate(["queued", "processing", "verifying", "done", "done", "failed", "verification_failed"]):
+            await mock_db.tasks.insert_one({
+                "task_id": f"t{i}", "job_id": owned_job_id, "status": status,
+                "original_filename": f"r{i}.pdf", "created_at": now,
+            })
+        resp = await client.get(f"/api/v1/jobs/{owned_job_id}/tasks")
+        assert resp.status_code == 200
+        counts = resp.json()["counts"]
+        assert counts == {"queued": 1, "processing": 2, "done": 3, "failed": 1, "total": 7}
+        assert len(resp.json()["tasks"]) == 7
 
 
 # ============================================================================
 # Candidates route tests
 # ============================================================================
 class TestGetJobCandidates:
-    async def test_no_candidates(self, client):
-        resp = await client.get("/api/v1/jobs/job-123/candidates")
+    async def test_no_candidates(self, client, owned_job_id):
+        resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["job_id"] == "job-123"
+        assert data["job_id"] == owned_job_id
         assert data["candidates"] == []
 
-    async def test_with_candidates(self, client, mock_db, sample_parsed_resume):
+    async def test_more_than_100_candidates_returned(self, client, mock_db, owned_job_id):
+        """The list used to be silently capped at 100 applications."""
+        for i in range(150):
+            cid = f"bulk-{i}"
+            await mock_db.candidates.insert_one({
+                "candidate_id": cid,
+                "parsed": {"personal_info": {"full_name": f"C{i}", "phone_number": f"+1 {i}"}},
+            })
+            await mock_db.applications.insert_one({
+                "candidate_id": cid, "job_id": owned_job_id, "status": "Under Review",
+                "application_date": datetime.utcnow(), "score_details": {},
+            })
+        resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
+        assert resp.status_code == 200
+        candidates = resp.json()["candidates"]
+        assert len(candidates) == 150
+        assert candidates[0]["phone"].startswith("+1 ")
+
+    async def test_other_users_job_is_404(self, client, mock_db):
+        other_job = await create_owned_job(mock_db, owner_uid="someone-else")
+        resp = await client.get(f"/api/v1/jobs/{other_job}/candidates")
+        assert resp.status_code == 404
+
+    async def test_with_candidates(self, client, mock_db, sample_parsed_resume, owned_job_id):
         """Insert application + candidate data, then query."""
         await mock_db.applications.delete_many({})
         await mock_db.candidates.delete_many({})
@@ -123,7 +186,7 @@ class TestGetJobCandidates:
         # Insert application
         await mock_db.applications.insert_one({
             "candidate_id": candidate_id,
-            "job_id": "job-123",
+            "job_id": owned_job_id,
             "status": "Under Review",
             "application_date": datetime.utcnow(),
             "score_details": {
@@ -134,7 +197,7 @@ class TestGetJobCandidates:
             },
         })
 
-        resp = await client.get("/api/v1/jobs/job-123/candidates")
+        resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
         assert resp.status_code == 200
         candidates = resp.json()["candidates"]
         assert len(candidates) == 1
@@ -147,6 +210,28 @@ class TestGetJobCandidates:
 # _create_application tests
 # ============================================================================
 class TestCreateApplication:
+    async def test_real_skill_scoring_creates_application(self, mock_db, owned_job_id):
+        """Runs the real (unmocked) skill-scoring pipeline. A signature mismatch here
+        once made every application fail silently, so no candidate ever appeared."""
+        from app.routes.resume import _create_application
+        from bson import ObjectId
+        await mock_db.jobs.update_one(
+            {"_id": ObjectId(owned_job_id)},
+            {"$set": {"required_skills": ["Python"], "preferred_skills": ["Docker"]}},
+        )
+        await mock_db.candidates.insert_one({
+            "candidate_id": "real-score", "parsed": {"skills": "Python, Docker", "experience": ["Backend dev"]},
+        })
+        with patch("app.services.embedding_service.generate_embedding", return_value=[0.1] * 384):
+            await _create_application(
+                "real-score", owned_job_id,
+                verification_data={"matchScore": {"overallCredibility": 60}},
+            )
+        app = await mock_db.applications.find_one({"candidate_id": "real-score"})
+        assert app is not None
+        scored = {s["skill"] for s in app["score_details"]["skill_matches"]}
+        assert scored == {"Python", "Docker"}
+
     async def test_create_with_verification_data(self, mock_db):
         from app.routes.resume import _create_application
         from bson import ObjectId

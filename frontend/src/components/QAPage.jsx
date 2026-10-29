@@ -1,480 +1,303 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  ArrowLeft, Mail, Phone, Send,
-  Zap, Clock, User, Monitor, XCircle, CheckCircle, Loader2, Award, Bot
-} from 'lucide-react';
-import { C } from '../theme';
-import { getInterviewQuestions, submitEvaluation } from '../services/jobService';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw } from 'lucide-react';
+import { getJob, getJobCandidate, getInterviewQuestions, submitEvaluation, updateCandidateStatus } from '../services/jobService';
+import { useToast } from '../hooks/use-toast';
+import { cn } from '../lib/utils';
 import FactCheckerBot from './FactCheckerBot';
+import { ConfirmDialog } from './Modal';
+import {
+  Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, Skeleton,
+} from './common';
 
-/* ── Clickable Tag pill ── */
 const TopicTag = ({ label, selected, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="inline-block text-xs font-semibold px-3 py-1.5 rounded-full transition-all duration-200 cursor-pointer"
-    style={
+    aria-pressed={selected}
+    className={cn(
+      'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition-colors',
       selected
-        ? { background: C.accent, color: '#ffffff', border: `1px solid ${C.accent}`, transform: 'scale(1.05)' }
-        : { background: '#eef2ff', color: '#4338ca', border: '1px solid #e0e7ff' }
-    }
+        ? 'border-success/40 bg-success-soft font-medium text-success'
+        : 'border-line-strong bg-surface text-ink-2 hover:border-primary/50 hover:bg-subtle',
+    )}
   >
+    <span className={cn('flex h-4 w-4 items-center justify-center rounded border',
+      selected ? 'border-success bg-success text-surface' : 'border-line-strong')} aria-hidden="true">
+      {selected && <Check className="h-3 w-3" strokeWidth={3} />}
+    </span>
     {label}
   </button>
 );
 
-/* ── Question Card with per-question scoring ── */
 const QuestionCard = ({ index, question, tags, selectedTags, onToggleTag }) => {
   const selected = selectedTags.length;
   const total = tags.length;
-
+  const done = selected === total && total > 0;
   return (
-    <div
-      className="rounded-2xl p-6"
-      style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <p
-          className="text-[11px] font-bold uppercase tracking-widest"
-          style={{ color: C.accent }}
-        >
-          Question {String(index).padStart(2, '0')}
-        </p>
-        <span
-          className="text-xs font-bold px-2.5 py-1 rounded-lg"
-          style={{
-            background: selected === total && total > 0 ? '#d1fae5' : selected > 0 ? '#eef2ff' : '#f1f5f9',
-            color: selected === total && total > 0 ? '#065f46' : selected > 0 ? C.accent : '#94a3b8',
-          }}
-        >
-          {selected}/{total}
+    <Card className="p-5">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-xs font-medium text-ink-3">Question {index}</p>
+        <span className={cn('rounded-md px-2 py-0.5 text-xs font-medium tabular-nums',
+          done ? 'bg-success-soft text-success' : selected > 0 ? 'bg-primary-soft text-primary-soft-fg' : 'bg-subtle text-ink-3')}>
+          {selected}/{total} covered
         </span>
       </div>
-      <p className="text-base font-bold text-slate-900 leading-relaxed mb-4">
-        "{question}"
-      </p>
+      <p className="mb-4 font-serif text-[1.45rem] leading-snug text-ink">{question}</p>
+      <p className="mb-2 text-xs text-ink-3">Tick each point the candidate covered</p>
       <div className="flex flex-wrap gap-2">
         {tags.map((tag, i) => (
-          <TopicTag
-            key={i}
-            label={tag}
-            selected={selectedTags.includes(tag)}
-            onClick={() => onToggleTag(tag)}
-          />
+          <TopicTag key={i} label={tag} selected={selectedTags.includes(tag)} onClick={() => onToggleTag(tag)} />
         ))}
       </div>
-    </div>
+    </Card>
   );
 };
 
-/* ── Loading Skeleton ── */
-const QuestionSkeleton = () => (
-  <div className="space-y-5">
-    {[1, 2, 3].map((i) => (
-      <div
-        key={i}
-        className="rounded-2xl p-6 animate-pulse"
-        style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}
-      >
-        <div className="h-3 w-24 bg-slate-200 rounded mb-3" />
-        <div className="h-5 w-full bg-slate-200 rounded mb-2" />
-        <div className="h-5 w-3/4 bg-slate-200 rounded mb-4" />
-        <div className="flex gap-2">
-          <div className="h-7 w-28 bg-slate-200 rounded-full" />
-          <div className="h-7 w-32 bg-slate-200 rounded-full" />
-          <div className="h-7 w-24 bg-slate-200 rounded-full" />
-        </div>
-      </div>
-    ))}
-  </div>
-);
+const QAPage = () => {
+  const { jobId, candidateId } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const pipelineUrl = `/jobs/${jobId}?candidate=${candidateId}`;
 
-/* ── Main Component ── */
-const QAPage = ({ candidate, job, onBack }) => {
+  const [job, setJob] = useState(null);
+  const [candidate, setCandidate] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [questionError, setQuestionError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [isFactCheckerOpen, setIsFactCheckerOpen] = useState(false);
-
-  // selectedKeywords: { [questionId]: ["tag1", "tag2"] }
-  const [selectedKeywords, setSelectedKeywords] = useState({});
+  const [selectedKeywords, setSelectedKeywords] = useState({}); // { [questionId]: ["tag", ...] }
+  const [confirmReject, setConfirmReject] = useState(false);
 
   useEffect(() => {
-    const fetchQuestions = async () => {
-      if (!job?.id || !candidate?.id) {
-        setLoading(false);
-        setError('Missing job or candidate data');
-        return;
-      }
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await getInterviewQuestions(job.id, candidate.id);
-        setQuestions(data.questions || []);
-      } catch (err) {
-        console.error('Failed to fetch interview questions:', err);
-        setError('Failed to generate questions. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchQuestions();
-  }, [job?.id, candidate?.id]);
+    Promise.all([getJob(jobId), getJobCandidate(jobId, candidateId)])
+      .then(([j, c]) => { setJob(j); setCandidate(c); })
+      .catch((err) => setLoadError(err.message));
+  }, [jobId, candidateId]);
 
-  // Toggle a keyword for a specific question
-  const handleToggleTag = useCallback((questionId, tag) => {
-    setSelectedKeywords(prev => {
+  const loadQuestions = useCallback(async () => {
+    setLoadingQuestions(true);
+    setQuestionError(null);
+    try {
+      const data = await getInterviewQuestions(jobId, candidateId);
+      setQuestions(data.questions || []);
+    } catch {
+      setQuestionError('Could not generate interview questions.');
+    } finally {
+      setLoadingQuestions(false);
+    }
+  }, [jobId, candidateId]);
+
+  useEffect(() => { loadQuestions(); }, [loadQuestions]);
+
+  const handleToggleTag = (questionId, tag) => {
+    setSelectedKeywords((prev) => {
       const current = prev[questionId] || [];
-      if (current.includes(tag)) {
-        return { ...prev, [questionId]: current.filter(t => t !== tag) };
-      } else {
-        return { ...prev, [questionId]: [...current, tag] };
-      }
+      return { ...prev, [questionId]: current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag] };
     });
-  }, []);
+  };
 
-  // Computed scores
   const totalPossible = questions.reduce((sum, q) => sum + (q.tags?.length || 0), 0);
   const totalSelected = Object.values(selectedKeywords).reduce((sum, tags) => sum + tags.length, 0);
   const aggregatePercent = totalPossible > 0 ? Math.round((totalSelected / totalPossible) * 100) : 0;
 
-  // Submit evaluation to backend
   const handleSubmit = async () => {
-    if (!job?.id || !candidate?.id) return;
     setSubmitting(true);
     try {
-      const evaluationData = {
-        candidate_name: candidate.name || 'Unknown',
-        job_title: job.title || 'N/A',
-        questions: questions.map(q => ({
+      await submitEvaluation(jobId, candidateId, {
+        candidate_name: candidate?.name || '',
+        job_title: job?.title || '',
+        questions: questions.map((q) => ({
           question_id: q.id,
           question: q.question,
           total_tags: q.tags?.length || 0,
           selected_tags: selectedKeywords[q.id] || [],
-          score: q.tags?.length > 0
-            ? (selectedKeywords[q.id]?.length || 0) / q.tags.length
-            : 0,
+          score: q.tags?.length > 0 ? (selectedKeywords[q.id]?.length || 0) / q.tags.length : 0,
         })),
         total_score: aggregatePercent,
         total_selected: totalSelected,
         total_possible: totalPossible,
-      };
-      await submitEvaluation(job.id, candidate.id, evaluationData);
-      onBack();
+      });
+      toast({ title: 'Evaluation submitted', description: `${candidate?.name}: ${aggregatePercent}% of key points covered.` });
+      navigate(pipelineUrl);
     } catch (err) {
-      console.error('Failed to submit evaluation:', err);
-      setError('Failed to submit evaluation. Please try again.');
+      toast({ title: 'Could not submit evaluation', description: err.message, variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (!candidate) return null;
+  const handleReject = async () => {
+    try {
+      await updateCandidateStatus(jobId, candidateId, 'Rejected');
+      toast({ title: 'Candidate rejected', description: candidate?.name });
+      navigate(pipelineUrl);
+    } catch (err) {
+      toast({ title: 'Could not reject candidate', description: err.message, variant: 'destructive' });
+    }
+  };
 
-  const name = candidate.name || 'Unknown Candidate';
-  const title = candidate.currentTitle || 'Senior Developer';
-  const email = candidate.email || 'candidate@example.com';
-  const phone = candidate.phone || '+91 98200 45XXX';
-  const matchScore = candidate.jdMatchScore ?? candidate.matchScore ?? 94;
-  const cultureFit = matchScore;
-  const aiSummary =
-    candidate.persona ||
-    candidate.summary ||
-    candidate.aiSummary ||
-    `"Demonstrates high architectural maturity. Strong emphasis on scalability and performance optimization in microservices."`;
+  if (loadError) {
+    return (
+      <PageContainer>
+        <Card>
+          <EmptyState icon={HelpCircle} title="Candidate not found" description={loadError}
+            action={<Button onClick={() => navigate(`/jobs/${jobId}`)}>Back to pipeline</Button>} />
+        </Card>
+      </PageContainer>
+    );
+  }
+
+  const canSubmit = !submitting && !loadingQuestions && !questionError && !!candidate;
 
   return (
-    <div className="flex h-full w-full overflow-hidden" style={{ background: C.pageGray }}>
-      {/* ── Main Scrollable Content ── */}
-      <div className="flex-1 overflow-y-auto min-h-full pb-28 relative">
-        <div className="max-w-7xl mx-auto px-8 pt-6">
-        {/* Back link */}
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors mb-6"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Pipeline
-        </button>
+    <div className={cn('flex min-h-full flex-col', isFactCheckerOpen && 'md:pr-[380px]')}>
+      <PageContainer className="flex-1 pb-8 md:pb-8">
+        <BackLink to={pipelineUrl}>Back to pipeline</BackLink>
 
-        {/* ── Candidate Header ── */}
-        <div className="flex items-start justify-between mb-8">
-          <div className="flex items-center gap-5">
-            {/* Avatar */}
-            <div
-              className="h-20 w-20 rounded-2xl flex items-center justify-center text-3xl font-black text-white shrink-0 shadow-lg"
-              style={{
-                background: `linear-gradient(135deg, ${C.primary}, ${C.accent})`,
-              }}
-            >
-              {name.charAt(0).toUpperCase()}
+        {/* Candidate header */}
+        <div className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-center md:justify-between">
+          {candidate ? (
+            <div className="flex min-w-0 items-center gap-4">
+              <Initials name={candidate.name} className="h-12 w-12 text-base" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h1 className="font-serif text-[2rem] leading-tight text-ink md:text-[2.5rem]">{candidate.name}</h1>
+                  <StatusPill status={candidate.status} />
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-3">
+                  {job && <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5" aria-hidden="true" />{job.title}</span>}
+                  {candidate.email && <a href={`mailto:${candidate.email}`} className="flex items-center gap-1.5 hover:text-primary-text"><Mail className="h-3.5 w-3.5" aria-hidden="true" />{candidate.email}</a>}
+                  {candidate.phone && <a href={`tel:${candidate.phone}`} className="flex items-center gap-1.5 hover:text-primary-text"><Phone className="h-3.5 w-3.5" aria-hidden="true" />{candidate.phone}</a>}
+                </div>
+              </div>
             </div>
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-widest mb-1"
-                style={{ color: C.accent }}
-              >
-                Candidate Dossier
-              </p>
-              <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
-                {name}
-                {!isFactCheckerOpen && (
-                  <button 
-                    onClick={() => setIsFactCheckerOpen(true)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center hover:scale-105 transition-transform"
-                    style={{ background: '#e0e7ff', color: C.accent }}
-                    title="Open AI Fact Checker"
-                  >
-                    <Bot className="h-4 w-4" />
-                  </button>
+          ) : (
+            <div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-7 w-56" /></div>
+          )}
+          {!isFactCheckerOpen && (
+            <Button variant="secondary" onClick={() => setIsFactCheckerOpen(true)} disabled={!candidate}>
+              <Bot className="text-primary-text" aria-hidden="true" /> Ask the fact checker
+            </Button>
+          )}
+        </div>
+
+        {/* With the fact checker open the page loses 380px, so only go two-column on very wide screens */}
+        <div className={cn('grid grid-cols-1 items-start gap-6',
+          isFactCheckerOpen ? '2xl:grid-cols-[300px_minmax(0,1fr)]' : 'lg:grid-cols-[300px_minmax(0,1fr)]')}>
+          {/* Scores — stays in view while scrolling the questions */}
+          <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2',
+            isFactCheckerOpen ? '2xl:sticky 2xl:top-6 2xl:grid-cols-1' : 'lg:sticky lg:top-6 lg:grid-cols-1')}>
+            <Card>
+              <CardHeader title="Interview score" />
+              <div className="p-4">
+                <div className="flex justify-center"><ScoreRing value={loadingQuestions ? null : aggregatePercent} size={96} stroke={8} /></div>
+                <p className="mt-3 text-center text-sm text-ink-3">
+                  <span className="font-medium tabular-nums text-ink">{totalSelected}</span> of <span className="font-medium tabular-nums text-ink">{totalPossible}</span> key points covered
+                </p>
+                {questions.length > 0 && (
+                  <ul className="mt-4 space-y-2 border-t border-line pt-4">
+                    {questions.map((q, i) => {
+                      const sel = (selectedKeywords[q.id] || []).length;
+                      const tot = q.tags?.length || 0;
+                      return (
+                        <li key={q.id} className="flex items-center gap-3 text-xs">
+                          <span className="w-6 text-ink-3">Q{i + 1}</span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
+                            <div className={cn('h-full rounded-full transition-all', sel === tot && tot > 0 ? 'bg-success' : 'bg-primary')}
+                              style={{ width: tot ? `${(sel / tot) * 100}%` : '0%' }} />
+                          </div>
+                          <span className="w-8 text-right font-medium tabular-nums text-ink-2">{sel}/{tot}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
-              </h1>
-              <p className="text-sm text-slate-500 font-medium">{title}</p>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5" />
-                  {email}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5" />
-                  {phone}
-                </span>
               </div>
-            </div>
-          </div>
-        </div>
+            </Card>
 
-        {/* ── Two Column Layout ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
-          {/* LEFT COLUMN */}
-          <div className="space-y-6">
-            {/* AI Insight Summary */}
-            <div
-              className="rounded-2xl p-6"
-              style={{
-                background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 100%)`,
-              }}
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <div
-                  className="h-7 w-7 rounded-lg flex items-center justify-center"
-                  style={{ background: 'rgba(255,255,255,0.15)' }}
-                >
-                  <Zap className="h-4 w-4" style={{ color: C.cyan }} />
-                </div>
-                <p className="text-xs font-bold uppercase tracking-widest text-indigo-200">
-                  AI Insight Summary
-                </p>
+            <Card>
+              <CardHeader title="Screening scores" />
+              <div className="grid grid-cols-2 gap-3 p-4">
+                <ScoreRing value={candidate?.jdMatchScore ?? null} label="Role match" />
+                <ScoreRing value={candidate?.verificationScore ?? null} label="Credibility" />
               </div>
-              <p className="text-sm leading-relaxed text-indigo-100 mb-6">
-                {aiSummary}
-              </p>
-              <div className="flex items-center gap-8">
-                <div>
-                  <p className="text-3xl font-black text-white">{cultureFit}%</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-300 mt-1">
-                    Role Match
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Interview Metadata */}
-            <div
-              className="rounded-2xl p-6 bg-white"
-              style={{ border: '1px solid #e2e8f0' }}
-            >
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">
-                Interview Metadata
-              </p>
-              <div className="space-y-4">
-                {[
-                  { icon: Monitor, label: 'Interview Type', value: 'Technical Round' },
-                  { icon: User, label: 'Job Role', value: job?.title || 'N/A' },
-                  { icon: Clock, label: 'Questions', value: loading ? '...' : `${questions.length} Generated` },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-sm text-slate-500">
-                      <Icon className="h-4 w-4 text-slate-400" />
-                      {label}
-                    </span>
-                    <span className="text-sm font-bold text-slate-900">{value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Live Interview Score Card */}
-            {!loading && questions.length > 0 && (
-              <div
-                className="rounded-2xl p-6 bg-white"
-                style={{ border: '1px solid #e2e8f0' }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Award className="h-4 w-4" style={{ color: C.accent }} />
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    Interview Score
-                  </p>
-                </div>
-                {/* Score ring */}
-                <div className="flex items-center justify-center mb-4">
-                  <div className="relative" style={{ width: 100, height: 100 }}>
-                    <svg viewBox="0 0 100 100" width={100} height={100} className="-rotate-90">
-                      <circle cx="50" cy="50" r="40" fill="none" stroke="#e0e7ff" strokeWidth="8" />
-                      <circle
-                        cx="50" cy="50" r="40" fill="none"
-                        stroke={aggregatePercent >= 70 ? '#059669' : aggregatePercent >= 40 ? C.accent : '#f59e0b'}
-                        strokeWidth="8"
-                        strokeDasharray={`${(aggregatePercent / 100) * 251.2} 251.2`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-xl font-black" style={{ color: C.primary }}>{aggregatePercent}%</span>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-center text-xs text-slate-500">
-                  <span className="font-bold text-slate-900">{totalSelected}</span> of{' '}
-                  <span className="font-bold text-slate-900">{totalPossible}</span> keywords covered
-                </p>
-                {/* Per-question breakdown */}
-                <div className="mt-4 space-y-2">
-                  {questions.map(q => {
-                    const sel = (selectedKeywords[q.id] || []).length;
-                    const tot = q.tags?.length || 0;
-                    return (
-                      <div key={q.id} className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500">Q{String(q.id).padStart(2, '0')}</span>
-                        <div className="flex-1 mx-3 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-300"
-                            style={{
-                              width: tot > 0 ? `${(sel / tot) * 100}%` : '0%',
-                              background: sel === tot && tot > 0
-                                ? '#059669'
-                                : `linear-gradient(90deg, ${C.accent}, ${C.cyan})`,
-                            }}
-                          />
-                        </div>
-                        <span className="font-bold text-slate-700">{sel}/{tot}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            </Card>
           </div>
 
-          {/* RIGHT COLUMN — Q&A Transcript */}
+          {/* Questions */}
           <div>
-            <div className="flex items-center gap-2 mb-5">
-              <Monitor className="h-5 w-5" style={{ color: C.primary }} />
-              <h2 className="text-lg font-black text-slate-900">
-                Response Transcript Analysis
-              </h2>
-            </div>
+            <h2 className="mb-4 text-base font-semibold text-ink">Questions for this candidate</h2>
 
-            {/* Loading state */}
-            {loading && (
-              <div>
-                <div className="flex items-center gap-3 mb-5 p-4 rounded-2xl" style={{ background: '#eef2ff', border: '1px solid #e0e7ff' }}>
-                  <Loader2 className="h-5 w-5 animate-spin" style={{ color: C.accent }} />
+            {loadingQuestions && (
+              <div className="space-y-4" role="status">
+                <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary-soft p-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary-text" aria-hidden="true" />
                   <div>
-                    <p className="text-sm font-bold text-slate-900">Generating AI-tailored questions…</p>
-                    <p className="text-xs text-slate-500">Analyzing JD and candidate profile via Groq</p>
+                    <p className="text-sm font-medium text-ink">Generating questions…</p>
+                    <p className="text-xs text-ink-3">Tailored to the job description and this resume. Usually takes a few seconds.</p>
                   </div>
                 </div>
-                <QuestionSkeleton />
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-lg" />)}
               </div>
             )}
 
-            {/* Error state */}
-            {!loading && error && (
-              <div className="p-6 rounded-2xl text-center" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
-                <p className="text-sm font-bold text-red-700 mb-1">{error}</p>
-                <p className="text-xs text-red-500">The AI service may be temporarily unavailable.</p>
-              </div>
+            {!loadingQuestions && questionError && (
+              <Card>
+                <EmptyState icon={XCircle} title={questionError} description="The AI service may be temporarily unavailable."
+                  action={<Button variant="secondary" onClick={loadQuestions}><RefreshCw aria-hidden="true" /> Try again</Button>} />
+              </Card>
             )}
 
-            {/* Questions */}
-            {!loading && !error && (
-              <div className="space-y-5">
-                {questions.map((q) => (
-                  <QuestionCard
-                    key={q.id}
-                    index={q.id}
-                    question={q.question}
-                    tags={q.tags}
-                    selectedTags={selectedKeywords[q.id] || []}
-                    onToggleTag={(tag) => handleToggleTag(q.id, tag)}
-                  />
+            {!loadingQuestions && !questionError && (
+              <div className="space-y-4">
+                {questions.map((q, i) => (
+                  <QuestionCard key={q.id} index={i + 1} question={q.question} tags={q.tags || []}
+                    selectedTags={selectedKeywords[q.id] || []} onToggleTag={(tag) => handleToggleTag(q.id, tag)} />
                 ))}
               </div>
             )}
           </div>
         </div>
-      </div>
+      </PageContainer>
+
+      {/* Action bar — sticks to the bottom of the scrolling page */}
+      <div className="sticky bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-8">
+          <p className="hidden text-sm text-ink-3 sm:block">
+            Score <span className="font-semibold tabular-nums text-ink">{aggregatePercent}%</span>
+            <span className="mx-2 text-line-strong">·</span>
+            {totalSelected}/{totalPossible} points
+          </p>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Button variant="danger-outline" onClick={() => setConfirmReject(true)} disabled={!candidate} className="flex-1 sm:flex-none">
+              <XCircle aria-hidden="true" /> Reject
+            </Button>
+            <Button onClick={handleSubmit} disabled={!canSubmit} className="flex-[2] sm:flex-none">
+              {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
+              {submitting ? 'Submitting…' : `Submit evaluation${loadingQuestions ? '' : ` · ${aggregatePercent}%`}`}
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* ── Sticky Bottom Action Bar ── */}
-      <div
-        className={`fixed bottom-0 left-0 md:left-56 z-40 transition-all duration-300 ${isFactCheckerOpen ? 'md:right-[400px] right-0' : 'right-0'}`}
-        style={{
-          background: 'white',
-          borderTop: '1px solid #e2e8f0',
-          boxShadow: '0 -4px 20px rgba(0,0,0,0.06)',
-        }}
-      >
-        <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 md:py-4 flex flex-col xl:flex-row items-center justify-between gap-4 xl:gap-0">
-          <div className="flex items-center gap-3">
-            <div
-              className="h-9 w-9 rounded-lg flex items-center justify-center"
-              style={{ background: '#eef2ff' }}
-            >
-              <CheckCircle className="h-5 w-5" style={{ color: C.accent }} />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-slate-900">
-                Interview Score: <span style={{ color: C.accent }}>{aggregatePercent}%</span> ({totalSelected}/{totalPossible} keywords)
-              </p>
-              <p className="text-xs text-slate-400">
-                Click on keywords the candidate covered, then submit your evaluation.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-2 w-full xl:w-auto pb-2 xl:pb-0">
-            <button
-              onClick={onBack}
-              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold border-2 border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors whitespace-nowrap"
-            >
-              <XCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
-              Reject
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || loading}
-              className="flex-1 md:flex-none flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50 whitespace-nowrap"
-              style={{ background: C.primary }}
-            >
-              {submitting ? <Loader2 className="h-3.5 w-3.5 md:h-4 md:w-4 animate-spin" /> : <Send className="h-3.5 w-3.5 md:h-4 md:w-4" />}
-              {submitting ? 'Submitting…' : 'Submit Evaluation'}
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* ── Docked AI Assistant Sidebar (Full screen overlay on mobile) ── */}
-      {isFactCheckerOpen && (
-        <div className="fixed inset-0 z-[60] md:static md:w-[400px] flex flex-col bg-white md:border-l border-slate-200 shrink-0 h-full md:z-40">
-          <FactCheckerBot 
-            candidateId={candidate.id}
-            candidateName={name} 
-            onClose={() => setIsFactCheckerOpen(false)} 
-          />
-        </div>
+      {isFactCheckerOpen && candidate && (
+        <aside className="fixed inset-0 z-[45] flex flex-col bg-surface md:inset-y-0 md:left-auto md:right-0 md:w-[380px] md:border-l md:border-line md:shadow-pop"
+          aria-label="AI fact checker">
+          <FactCheckerBot candidateId={candidate.id} candidateName={candidate.name} onClose={() => setIsFactCheckerOpen(false)} />
+        </aside>
       )}
+
+      <ConfirmDialog
+        open={confirmReject}
+        onOpenChange={setConfirmReject}
+        title={`Reject ${candidate?.name || 'this candidate'}?`}
+        description={`They'll be marked Rejected for ${job?.title || 'this job'}. You can change the status later from the pipeline.`}
+        confirmLabel="Reject candidate"
+        onConfirm={handleReject}
+      />
     </div>
   );
 };

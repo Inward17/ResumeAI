@@ -274,6 +274,10 @@ async def analyse_behavior(
     )
 
 
+# Max external repos checked per candidate (each check costs 1-2 GitHub API calls)
+MAX_OSS_REPO_CHECKS = 10
+
+
 async def _detect_oss_contributions(
     username: str,
     all_repos: List[Dict[str, Any]],
@@ -283,25 +287,49 @@ async def _detect_oss_contributions(
     Detect:
       - Commits to repos NOT owned by candidate
       - Distinct external orgs contributed to
+
+    Two kinds of repos are checked:
+      * repos owned by someone else (org repos the candidate is a member of)
+      * forks owned by the candidate — the contribution lives in the fork's
+        *parent*, which the repo list doesn't include, so it is looked up.
+        (Previously forks were skipped because they are owned by the
+        candidate, so this signal was ~0 for almost everyone.)
     """
     external_contributions = 0
     external_orgs: set = set()
 
-    for repo in all_repos:
+    def _owner(repo: Dict[str, Any]) -> str:
         owner = repo.get("owner", {})
-        owner_login = owner.get("login", "") if isinstance(owner, dict) else str(owner)
+        return owner.get("login", "") if isinstance(owner, dict) else str(owner)
 
+    # Most recently pushed first, so the cap keeps the most relevant repos
+    candidates = sorted(
+        (r for r in all_repos if r.get("fork") or _owner(r).lower() != username.lower()),
+        key=lambda r: r.get("pushed_at") or "",
+        reverse=True,
+    )[:MAX_OSS_REPO_CHECKS]
+
+    checked: set = set()
+    for repo in candidates:
+        owner_login, repo_name = _owner(repo), repo.get("name", "")
         if owner_login.lower() == username.lower():
-            continue  # owned by candidate — skip
+            # Candidate's own fork → check the upstream repository
+            info = await client.get_repo_info(owner_login, repo_name)
+            parent = (info or {}).get("parent") or {}
+            owner_login = _owner(parent)
+            repo_name = parent.get("name", "")
+            if not owner_login or not repo_name or owner_login.lower() == username.lower():
+                continue
 
-        # This is an external repo (fork or org membership)
-        if repo.get("fork", False):
-            # Check if candidate actually committed
-            repo_name = repo.get("name", "")
-            commits = await client.get_repo_commits(owner_login, repo_name, username, max_commits=5)
-            if commits:
-                external_contributions += 1
-                external_orgs.add(owner_login)
+        key = f"{owner_login}/{repo_name}".lower()
+        if key in checked:
+            continue
+        checked.add(key)
+
+        commits = await client.get_repo_commits(owner_login, repo_name, username, max_commits=5)
+        if commits:
+            external_contributions += 1
+            external_orgs.add(owner_login)
 
     return {
         "external_contributions": external_contributions,

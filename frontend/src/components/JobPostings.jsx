@@ -1,284 +1,217 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Plus, MoreVertical, Eye, Edit, Trash2, Archive,
-  MapPin, Clock, Users, Zap, TrendingUp, ArrowUpRight
+  Plus, MoreHorizontal, Eye, Pencil, Trash2, Archive, RotateCcw, MapPin, Clock, Users, Briefcase, Search,
 } from 'lucide-react';
 import { getJobs, createJob, updateJob, deleteJob } from '../services/jobService';
 import JobModal from './JobModal';
+import { ConfirmDialog } from './Modal';
 import { useToast } from '../hooks/use-toast';
-import { C } from '../theme';
+import {
+  Card, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, IconButton, Menu, Segmented, SearchInput, Tag, Skeleton, RelativeDate,
+} from './common';
 
-const FILTERS = ['All', 'Active', 'Drafts', 'Closed'];
+const FILTERS = [
+  { id: 'All', label: 'All' },
+  { id: 'Active', label: 'Active' },
+  { id: 'Draft', label: 'Drafts' },
+  { id: 'Closed', label: 'Closed' },
+];
 
-/* ─────────────────── Shared Card ─────────────────── */
-const Panel = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden ${className}`}>
-    {children}
-  </div>
-);
-
-/* ─────────────────── Status pill ─────────────────── */
-const StatusPill = ({ status }) => {
-  const cfg = {
-    Active:  { bg: '#cffafe', text: '#0e7490', dot: '#22d3ee' },
-    Closed:  { bg: '#f1f5f9', text: '#64748b', dot: '#94a3b8' },
-    Draft:   { bg: '#fef9c3', text: '#854d0e', dot: '#fbbf24' },
-  };
-  const c = cfg[status] || cfg.Closed;
+const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
+  const navigate = useNavigate();
+  const isClosed = job.status === 'Closed';
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase"
-      style={{ background: c.bg, color: c.text }}>
-      <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: c.dot }} />
-      {status}
-    </span>
-  );
-};
+    <Card className="group relative flex flex-col p-5 transition-colors hover:border-line-strong">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-serif text-[1.45rem] leading-tight text-ink">
+            {/* Stretched link: the whole card opens the pipeline */}
+            <Link to={`/jobs/${job.id}`} className="outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-primary/60">
+              {job.title}
+            </Link>
+          </h3>
+          <p className="mt-0.5 truncate text-sm text-ink-3">{job.department || 'No department'}</p>
+        </div>
+        <div className="relative z-10 -mr-1.5 -mt-1 flex items-center gap-1">
+          <JobStatusPill status={job.status} />
+          <Menu
+            label={`Actions for ${job.title}`}
+            trigger={<IconButton label={`Actions for ${job.title}`}><MoreHorizontal aria-hidden="true" /></IconButton>}
+            items={[
+              { label: 'View candidates', Icon: Eye, onSelect: () => navigate(`/jobs/${job.id}`) },
+              { label: 'Edit job', Icon: Pencil, onSelect: () => onEdit(job) },
+              { label: isClosed ? 'Reopen job' : 'Close job', Icon: isClosed ? RotateCcw : Archive, onSelect: () => onToggleClosed(job) },
+              { separator: true },
+              { label: 'Delete job', Icon: Trash2, danger: true, onSelect: () => onDelete(job) },
+            ]}
+          />
+        </div>
+      </div>
 
-/* ─────────────────── Action Menu ─────────────────── */
-const ActionMenu = ({ job, onEdit, onViewCandidates, onDelete }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+      <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-ink-2">{job.description}</p>
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
-        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
-      >
-        <MoreVertical className="h-5 w-5" />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-8 z-50 w-44 bg-white rounded-xl border border-slate-200 shadow-xl py-1.5">
-          <button onClick={() => { onViewCandidates(job); setOpen(false); }}
-            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-            <Eye className="h-4 w-4 text-slate-400" /> View Candidates
-          </button>
-          <button onClick={() => { onEdit(job); setOpen(false); }}
-            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-            <Edit className="h-4 w-4 text-slate-400" /> Edit Job
-          </button>
-          <button onClick={() => { setOpen(false); }}
-            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-            <Archive className="h-4 w-4 text-slate-400" /> Archive
-          </button>
-          <div className="my-1 border-t border-slate-100" />
-          <button onClick={() => { onDelete(job.id); setOpen(false); }}
-            className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
-            <Trash2 className="h-4 w-4" /> Delete
-          </button>
+      {job.requirements?.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {job.requirements.slice(0, 4).map((skill) => <Tag key={skill}>{skill}</Tag>)}
+          {job.requirements.length > 4 && <Tag className="text-ink-3">+{job.requirements.length - 4}</Tag>}
         </div>
       )}
-    </div>
+
+      <div className="min-h-4 flex-1" />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-xs text-ink-3">
+        <span className="flex items-center gap-1.5 font-medium text-ink-2">
+          <Users className="h-3.5 w-3.5" aria-hidden="true" />{job.totalCandidates} candidate{job.totalCandidates === 1 ? '' : 's'}
+        </span>
+        {job.location && <span className="flex min-w-0 items-center gap-1.5"><MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{job.location}</span></span>}
+        {job.employmentType && <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{job.employmentType}</span>}
+        <span className="ml-auto"><RelativeDate value={job.postedAt} /></span>
+      </div>
+    </Card>
   );
 };
 
-/* ─────────────────── Job Card ─────────────────── */
-const JobCard = ({ job, onEdit, onViewCandidates, onDelete }) => (
-  <Panel
-    className="p-5 flex flex-col gap-4 cursor-pointer hover:shadow-md transition-shadow"
-  >
-    <div className="flex items-start justify-between">
-      <div className="flex-1 pr-2 cursor-pointer" onClick={() => onViewCandidates(job)}>
-        <StatusPill status={job.status} />
-        <h3 className="text-base font-bold text-slate-900 mt-2 leading-tight">{job.title}</h3>
-        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{job.description}</p>
-      </div>
-      <ActionMenu job={job} onEdit={onEdit} onViewCandidates={onViewCandidates} onDelete={onDelete} />
-    </div>
-
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-      {job.location    && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>}
-      {job.employmentType && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{job.employmentType}</span>}
-      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{job.totalCandidates || 0} candidates</span>
-    </div>
-
-    {job.requirements?.length > 0 && (
-      <div className="flex flex-wrap gap-1.5">
-        {job.requirements.slice(0, 4).map(skill => (
-          <span key={skill} className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-            style={{ background: '#eef2ff', color: C.accent }}>
-            {skill}
-          </span>
-        ))}
-        {job.requirements.length > 4 && (
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">
-            +{job.requirements.length - 4}
-          </span>
-        )}
-      </div>
-    )}
-
-    <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-      <span className="text-xs text-slate-400">
-        {job.postedAt ? new Date(job.postedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-      </span>
-      <button
-        onClick={() => onViewCandidates(job)}
-        className="flex items-center gap-1 text-xs font-bold transition-colors"
-        style={{ color: C.accent }}
-      >
-        View Pipeline <ArrowUpRight className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  </Panel>
-);
-
-/* ─────────────────── Smart Tip Card ─────────────────── */
-const SmartTip = () => (
-  <div className="rounded-2xl p-5 col-span-full md:col-span-1"
-    style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 60%, ${C.accent} 100%)` }}>
-    <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#818cf8' }}>Weekly Pipeline Health</p>
-    <p className="font-bold text-white text-base leading-snug mb-2">AI-Curated Talent Pool</p>
-    <p className="text-sm leading-relaxed mb-3" style={{ color: '#c7d2fe' }}>
-      Your talent pool grew by 14% this week. Total quality leads: 128.
-      Update the "Senior UX Designer" role skills to increase match accuracy by 22%.
-    </p>
-    <button className="flex items-center gap-1 text-sm font-bold" style={{ color: '#818cf8' }}>
-      View Analytics <ArrowUpRight className="h-3.5 w-3.5" />
-    </button>
-  </div>
-);
-
-/* ─────────────────── Main Component ─────────────────── */
-const JobPostings = ({ onViewCandidates }) => {
+const JobPostings = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
+  const [query, setQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getJobs();
-      setJobs(data || []);
+      setJobs(await getJobs());
     } catch (err) {
-      toast({ title: 'Error loading jobs', description: err.message, variant: 'destructive' });
+      toast({ title: 'Could not load jobs', description: err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  useEffect(() => { fetchJobs(); }, []);
+  useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
-  const filteredJobs = filter === 'All'
-    ? jobs
-    : jobs.filter(j => j.status === filter || (filter === 'Drafts' && j.status === 'Draft'));
+  // /jobs?new=1 (e.g. from the dashboard) opens the create form
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setEditingJob(null);
+      setIsModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
+  const q = query.trim().toLowerCase();
+  const filteredJobs = jobs.filter((j) => (filter === 'All' || j.status === filter)
+    && (!q || [j.title, j.department, j.location, ...(j.requirements || [])].some((v) => v && v.toLowerCase().includes(q))));
+  const count = (id) => (id === 'All' ? jobs.length : jobs.filter((j) => j.status === id).length);
+
+  // Errors propagate so the form can show them
   const handleSave = async (formData) => {
     if (editingJob) {
       await updateJob(editingJob.id, formData);
-      toast({ title: 'Job updated', description: `"${formData.title}" has been updated.` });
+      toast({ title: 'Job updated', description: `"${formData.title}" was saved.` });
     } else {
       await createJob(formData);
-      toast({ title: 'Job created', description: `"${formData.title}" is now live.` });
+      toast({
+        title: formData.status === 'Draft' ? 'Draft saved' : 'Job created',
+        description: `"${formData.title}" ${formData.status === 'Active' ? 'is now open for candidates' : `was saved as ${formData.status.toLowerCase()}`}.`,
+      });
     }
     setIsModalOpen(false);
     setEditingJob(null);
     fetchJobs();
   };
 
-  const handleDelete = async (id) => {
+  const handleToggleClosed = async (job) => {
+    const status = job.status === 'Closed' ? 'Active' : 'Closed';
     try {
-      await deleteJob(id);
-      setJobs(prev => prev.filter(j => j.id !== id));
-      toast({ title: 'Job deleted' });
+      const updated = await updateJob(job.id, { ...job, status });
+      setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, ...updated } : j)));
+      toast({ title: status === 'Closed' ? 'Job closed' : 'Job reopened', description: job.title });
     } catch (err) {
-      toast({ title: 'Error deleting job', description: err.message, variant: 'destructive' });
+      toast({ title: 'Could not update job', description: err.message, variant: 'destructive' });
     }
   };
 
-  const handleEdit = (job) => {
-    setEditingJob(job);
-    setIsModalOpen(true);
+  const handleDelete = async () => {
+    const job = deleting;
+    try {
+      await deleteJob(job.id);
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      toast({ title: 'Job deleted', description: job.title });
+    } catch (err) {
+      toast({ title: 'Could not delete job', description: err.message, variant: 'destructive' });
+    }
   };
 
+  const openCreate = () => { setEditingJob(null); setIsModalOpen(true); };
+
   return (
-    <div className="min-h-full md:p-8 p-4" style={{ background: C.pageGray }}>
-      {/* Header */}
-      <div className="mb-8">
-        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Job Postings</p>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 leading-tight">Manage Talent Pipeline.</h1>
-            <p className="text-sm text-slate-400 mt-0.5 max-w-sm md:max-w-none">
-              Organize, track, and optimize your open positions with AI-driven candidate scoring and market insights.
-            </p>
-          </div>
-          <button
-            onClick={() => { setEditingJob(null); setIsModalOpen(true); }}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-sm hover:opacity-90 transition-opacity w-full md:w-auto"
-            style={{ background: C.primary }}
-          >
-            <Plus className="h-4 w-4" /> Create New Job
-          </button>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Jobs"
+        description="Create roles, upload resumes to them and review AI-ranked candidates."
+        action={<Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>}
+      />
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 border-b border-slate-200 mb-7 overflow-x-auto whitespace-nowrap pb-px no-scrollbar">
-        {FILTERS.map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-5 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap
-              ${filter === f ? 'border-indigo-800 text-indigo-900' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            {f}
-            <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full font-bold"
-              style={filter === f ? { background: C.primary, color: 'white' } : { background: '#f1f5f9', color: '#64748b' }}>
-              {f === 'All' ? jobs.length
-                : f === 'Drafts' ? jobs.filter(j => j.status === 'Draft').length
-                : jobs.filter(j => j.status === f).length}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Cards grid */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="bg-white rounded-2xl border border-slate-200 h-52 animate-pulse" />
-          ))}
-        </div>
-      ) : filteredJobs.length === 0 ? (
-        <div className="text-center py-20">
-          <p className="text-slate-400 text-sm">No jobs found. Create your first job posting.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filteredJobs.map(job => (
-            <JobCard
-              key={job.id}
-              job={job}
-              onEdit={handleEdit}
-              onViewCandidates={onViewCandidates}
-              onDelete={handleDelete}
-            />
-          ))}
-          {/* Smart Tip card at the end */}
-          <SmartTip />
+      {jobs.length > 0 && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Segmented label="Filter jobs by status" value={filter} onChange={setFilter}
+            items={FILTERS.map((f) => ({ ...f, count: count(f.id) }))} />
+          <SearchInput value={query} onChange={setQuery} placeholder="Search jobs or skills" className="sm:w-64" />
         </div>
       )}
 
-      {/* Job modal */}
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
+        </div>
+      ) : filteredJobs.length === 0 ? (
+        <Card>
+          {jobs.length === 0 ? (
+            <EmptyState icon={Briefcase} title="No jobs yet"
+              description="Create your first job to start screening candidates."
+              action={<Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>} />
+          ) : (
+            <EmptyState icon={Search} title="No jobs match"
+              description="Try another filter or search term."
+              action={<Button variant="secondary" onClick={() => { setFilter('All'); setQuery(''); }}>Clear filters</Button>} />
+          )}
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filteredJobs.map((job) => (
+            <JobCard
+              key={job.id}
+              job={job}
+              onEdit={(j) => { setEditingJob(j); setIsModalOpen(true); }}
+              onToggleClosed={handleToggleClosed}
+              onDelete={setDeleting}
+            />
+          ))}
+        </div>
+      )}
+
       <JobModal
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingJob(null); }}
         job={editingJob}
         onSave={handleSave}
       />
-    </div>
+
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={`Delete "${deleting?.title}"?`}
+        description="The job and its candidate pipeline will no longer be shown. This can't be undone."
+        confirmLabel="Delete job"
+        onConfirm={handleDelete}
+      />
+    </PageContainer>
   );
 };
 

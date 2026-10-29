@@ -1,70 +1,62 @@
-# Getting Started with Create React App
+# ResumeAI — frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React 19 + Vite 6 + Tailwind CSS 3, with Firebase Authentication (Google or email sign-in).
 
-## Available Scripts
+## Setup
 
-In the project directory, you can run:
+```bash
+cp .env.example .env   # VITE_API_URL and the VITE_FIREBASE_* values from Firebase console → Project settings
+yarn install
+```
 
-### `npm start`
+If a Firebase value is missing, the app shows a "Configuration missing" screen listing what to set.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Scripts
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+| Command | What it does |
+|---|---|
+| `yarn dev` (or `yarn start`) | Dev server on http://localhost:3000 with hot reload |
+| `yarn build` | Production build into `dist/` |
+| `yarn preview` | Serve the production build on http://localhost:3000 |
 
-### `npm test`
+The backend only accepts browser requests from origins in its `CORS_ORIGINS`, so add any other port you run on.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+`dist/` is a static single-page app. Configure your host to serve `index.html` for unknown paths so deep links like `/jobs/<id>` work on refresh (Netlify `_redirects`: `/* /index.html 200`; Vercel or Firebase Hosting: a rewrite to `/index.html`).
 
-### `npm run build`
+## Routes
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+| Path | Page |
+|---|---|
+| `/dashboard` | Overview: headline numbers, recent jobs |
+| `/jobs`, `/jobs/:jobId` | Jobs, and a job's ranked candidate pipeline (`?candidate=<id>` opens a dossier) |
+| `/jobs/:jobId/candidates/:candidateId/interview` | Interview kit and fact checker |
+| `/interviews` | Shortlisted and interview-stage candidates across jobs |
+| `/settings` | `?tab=` `team`, `api-keys`, `usage`; default is appearance and scoring |
+| `/profile` | Account and sign-in settings |
+| `/join/:token` | Accept a workspace invitation |
+| `/login`, `/register` | Sign in / sign up (they return you to the page you were going to) |
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Structure
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- `src/App.jsx` — routes; pages are lazy-loaded.
+- `src/components/common.jsx` — the shared UI kit: buttons, fields, cards, status dots, score bars and rings, stat strip, menu, segmented filter. Build new screens from these.
+- `src/components/Modal.jsx` — accessible dialog and `ConfirmDialog` (use it instead of `window.confirm`).
+- `src/components/WorkspaceSettings.jsx` — Team, API keys, Plan & usage settings sections.
+- `src/services/` — API clients. `api.js` adds the sign-in token to every request; `jobService.js` maps snake_case API fields to camelCase.
+- `src/lib/theme.js` — light / dark / system theme (`index.html` applies it before first paint).
+- `src/lib/statuses.js` — candidate and job statuses; must match the backend.
 
-### `npm run eject`
+## Design tokens
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Colours are CSS variables in `src/index.css` (light under `:root`, dark under `.dark`) exposed as Tailwind colours in `tailwind.config.js`. Use the semantic names, never raw palette colours, so both themes keep working:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+| Token | Use |
+|---|---|
+| `canvas`, `surface`, `subtle` | Page background, cards and inputs, hover fills and wells |
+| `line`, `line-strong` | Hairline borders, input borders |
+| `ink`, `ink-2`, `ink-3` | Primary, secondary and muted text |
+| `btn`, `btn-fg` | Solid (primary) buttons — ink in light mode, cream in dark |
+| `primary` (`-text`, `-soft`, `-soft-fg`) | Forest-green accent: links, focus, progress, active states |
+| `success`, `warning`, `danger`, `info` (+ `-soft`) | Status colours |
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Type: Geist for the interface, Instrument Serif (`font-serif`) for page titles and headline numbers only.

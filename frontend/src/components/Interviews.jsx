@@ -1,356 +1,175 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Calendar, MapPin, Clock, Users, ChevronRight,
-  CheckCircle, Star, Search, Filter, Zap, Phone,
-  Mail, ArrowRight, User, Briefcase
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarCheck, Briefcase, Mail, ArrowRight, Search } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { getJobs, getJobCandidates, updateCandidateStatus } from '../services/jobService';
+import { INTERVIEW_STATUSES } from '../lib/statuses';
+import { loadPreferences } from '../lib/preferences';
 import CandidateModal from './CandidateModal';
-import { C } from '../theme';
+import {
+  Card, PageContainer, PageHeader, Initials, EmptyState, Button, StatStrip, ScoreBar, Segmented, SearchInput, StatusSelect, Skeleton,
+} from './common';
 
-/* Statuses that qualify for the Interviews view */
-const INTERVIEW_STATUSES = ['Interview', 'Shortlisted', 'shortlisted', 'interview'];
-
-/* ── Status pill ── */
-const StatusPill = ({ status }) => {
-  const map = {
-    'Interview':   { bg: '#d1fae5', text: '#065f46', label: 'INTERVIEW' },
-    'interview':   { bg: '#d1fae5', text: '#065f46', label: 'INTERVIEW' },
-    'Shortlisted': { bg: '#e0e7ff', text: '#3730a3', label: 'SHORTLISTED' },
-    'shortlisted': { bg: '#e0e7ff', text: '#3730a3', label: 'SHORTLISTED' },
-    'Under Review':{ bg: '#fef3c7', text: '#92400e', label: 'UNDER REVIEW' },
-    'Rejected':    { bg: '#fee2e2', text: '#991b1b', label: 'REJECTED' },
-  };
-  const s = map[status] || { bg: '#f1f5f9', text: '#475569', label: status?.toUpperCase() };
-  return (
-    <span
-      className="text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wider"
-      style={{ background: s.bg, color: s.text }}
-    >
-      {s.label}
-    </span>
-  );
-};
-
-/* ── Candidate card ── */
-const InterviewCard = ({ candidate, job, onView, onStatusChange }) => {
-  const match = Math.round(candidate.jdMatchScore ?? 0);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow p-5">
-      {/* Top row */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          {/* Avatar */}
-          <div
-            className="h-10 w-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-            style={{ background: C.primary }}
-          >
-            {(candidate.name || '?').charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <p className="font-bold text-slate-900 text-sm">{candidate.name || 'Unknown'}</p>
-            <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
-              <Briefcase className="h-3 w-3" />
-              {job?.title || 'Job Posting'}
-            </p>
-          </div>
+const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
+  <Card className="flex flex-col p-4 transition-colors hover:border-line-strong">
+    <div className="flex items-start justify-between gap-3">
+      <button type="button" onClick={onView} className="flex min-w-0 items-center gap-3 rounded-lg text-left">
+        <Initials name={candidate.name} className="h-10 w-10 text-sm" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink hover:text-primary-text">{candidate.name}</p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-3">
+            <Briefcase className="h-3 w-3 shrink-0" aria-hidden="true" />{job.title}
+          </p>
         </div>
-        <StatusPill status={candidate.status} />
-      </div>
-
-      {/* Score bar */}
-      <div className="mb-3">
-        <div className="flex justify-between text-[11px] mb-1">
-          <span className="text-slate-400 font-semibold">JD Match</span>
-          <span className="font-bold" style={{ color: C.primary }}>{match}%</span>
-        </div>
-        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-          <div
-            className="h-full rounded-full"
-            style={{
-              width: `${match}%`,
-              background: match >= 80
-                ? `linear-gradient(90deg, ${C.accent}, ${C.cyan})`
-                : match >= 60
-                ? `linear-gradient(90deg, #818cf8, ${C.accent})`
-                : '#fbbf24',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Contact info */}
-      <div className="flex items-center gap-3 text-xs text-slate-400 mb-4">
-        {candidate.email && (
-          <span className="flex items-center gap-1 truncate">
-            <Mail className="h-3 w-3 shrink-0" />
-            <span className="truncate max-w-[140px]">{candidate.email}</span>
-          </span>
-        )}
-        {candidate.verificationScore > 0 && (
-          <span className="flex items-center gap-1">
-            <CheckCircle className="h-3 w-3" style={{ color: C.cyan }} />
-            <span className="font-semibold">{Math.round(candidate.verificationScore)}% verified</span>
-          </span>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
-        <button
-          onClick={() => onView(candidate, job)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-colors hover:opacity-90 text-white"
-          style={{ background: C.primary }}
-        >
-          <User className="h-3.5 w-3.5" />
-          View Dossier
-        </button>
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen(o => !o)}
-            className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
-          >
-            Move To ▾
-          </button>
-          {menuOpen && (
-            <div className="absolute bottom-full right-0 mb-1 w-44 bg-white rounded-xl border border-slate-200 shadow-xl z-20 overflow-hidden">
-              {['Under Review', 'Shortlisted', 'Interview', 'Rejected'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => { onStatusChange(candidate.id, job?.id, s); setMenuOpen(false); }}
-                  className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 transition-colors"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      </button>
+      <StatusSelect candidate={candidate} onChange={(_, status) => onMove(status)} />
     </div>
-  );
-};
 
-/* ── Main Component ── */
-const Interviews = ({ onTakeInterview }) => {
+    <dl className="mt-4 grid grid-cols-2 gap-4 text-xs">
+      <div><dt className="mb-1 text-ink-3">Role match</dt><dd><ScoreBar value={candidate.jdMatchScore} strong={prefs.matchThreshold} /></dd></div>
+      <div><dt className="mb-1 text-ink-3">Credibility</dt><dd><ScoreBar value={candidate.verificationScore} strong={prefs.verificationThreshold} /></dd></div>
+    </dl>
+
+    {candidate.email && (
+      <a href={`mailto:${candidate.email}`} className="mt-3 flex min-w-0 items-center gap-1.5 text-xs text-ink-3 hover:text-primary-text">
+        <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{candidate.email}</span>
+      </a>
+    )}
+
+    <div className="mt-4 flex gap-2 border-t border-line pt-3">
+      <Button variant="secondary" size="sm" onClick={onView} className="flex-1">View dossier</Button>
+      <Button size="sm" onClick={onStart} className="flex-1">Start interview <ArrowRight aria-hidden="true" /></Button>
+    </div>
+  </Card>
+);
+
+const Interviews = () => {
   const { toast } = useToast();
-  const [interviewCandidates, setInterviewCandidates] = useState([]); // [{candidate, job}]
+  const navigate = useNavigate();
+  const prefs = useMemo(loadPreferences, []);
+  const [entries, setEntries] = useState([]); // [{candidate, job}]
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
-  const [selectedEntry, setSelectedEntry] = useState(null); // {candidate, job}
+  const [selected, setSelected] = useState(null); // {candidateId, jobId}
 
-  /* Fetch all jobs then all their candidates, filter to interview-track ones */
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const jobs = await getJobs();
-      const results = [];
-      await Promise.all(
-        jobs.map(async (job) => {
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const jobs = await getJobs();
+        const lists = await Promise.all(jobs.map(async (job) => {
           try {
             const candidates = await getJobCandidates(job.id);
-            candidates
-              .filter(c => INTERVIEW_STATUSES.includes(c.status))
-              .forEach(c => results.push({ candidate: c, job }));
+            return candidates.filter((c) => INTERVIEW_STATUSES.includes(c.status)).map((candidate) => ({ candidate, job }));
           } catch {
-            // skip failed job
+            return [];
           }
-        })
-      );
-      // Sort by jdMatchScore descending
-      results.sort((a, b) => (b.candidate.jdMatchScore ?? 0) - (a.candidate.jdMatchScore ?? 0));
-      setInterviewCandidates(results);
-    } catch (err) {
-      toast({ title: 'Failed to load interviews', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { loadData(); }, []);
-
-  const handleStatusChange = async (candidateId, jobId, newStatus) => {
-    try {
-      await updateCandidateStatus(jobId, candidateId, newStatus);
-      // Optimistic update: remove from list if no longer an interview status
-      if (!INTERVIEW_STATUSES.includes(newStatus)) {
-        setInterviewCandidates(prev =>
-          prev.filter(({ candidate }) => candidate.id !== candidateId)
-        );
-      } else {
-        setInterviewCandidates(prev =>
-          prev.map(({ candidate, job }) =>
-            candidate.id === candidateId
-              ? { candidate: { ...candidate, status: newStatus }, job }
-              : { candidate, job }
-          )
-        );
+        }));
+        setEntries(lists.flat().sort((a, b) => b.candidate.jdMatchScore - a.candidate.jdMatchScore));
+      } catch (err) {
+        toast({ title: 'Could not load interviews', description: err.message, variant: 'destructive' });
+      } finally {
+        setLoading(false);
       }
-      toast({ title: `Status updated to "${newStatus}"` });
-    } catch {
-      toast({ title: 'Failed to update status', variant: 'destructive' });
+    };
+    load();
+  }, [toast]);
+
+  // Candidates moved out of the interview track stay visible (with their new status)
+  // until the next visit, so a mis-click can be undone from the same card.
+  const handleMove = async (candidateId, jobId, status) => {
+    const update = (s) => setEntries((prev) => prev.map((e) => (
+      e.candidate.id === candidateId && e.job.id === jobId ? { ...e, candidate: { ...e.candidate, status: s } } : e)));
+    const previous = entries.find((e) => e.candidate.id === candidateId && e.job.id === jobId)?.candidate.status;
+    update(status);
+    try {
+      await updateCandidateStatus(jobId, candidateId, status);
+      toast({ title: `Moved to ${status}` });
+    } catch (err) {
+      update(previous);
+      toast({ title: 'Could not update status', description: err.message, variant: 'destructive' });
     }
   };
 
-  /* Filter */
-  const filtered = interviewCandidates.filter(({ candidate, job }) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q ||
-      candidate.name?.toLowerCase().includes(q) ||
-      job?.title?.toLowerCase().includes(q) ||
-      candidate.email?.toLowerCase().includes(q);
-    const matchStatus = filterStatus === 'All' || candidate.status === filterStatus;
-    return matchSearch && matchStatus;
-  });
+  const q = search.trim().toLowerCase();
+  const filtered = entries.filter(({ candidate, job }) =>
+    (filterStatus === 'All' || candidate.status === filterStatus)
+    && (!q || candidate.name.toLowerCase().includes(q) || job.title.toLowerCase().includes(q) || (candidate.email || '').toLowerCase().includes(q)));
 
-  /* Stats */
-  const total = interviewCandidates.length;
-  const avgMatch = total
-    ? Math.round(interviewCandidates.reduce((s, { candidate }) => s + (candidate.jdMatchScore ?? 0), 0) / total)
-    : 0;
-  const shortlisted = interviewCandidates.filter(({ candidate }) =>
-    candidate.status === 'Shortlisted' || candidate.status === 'shortlisted'
-  ).length;
-  const toInterview = interviewCandidates.filter(({ candidate }) =>
-    candidate.status === 'Interview' || candidate.status === 'interview'
-  ).length;
+  const total = entries.length;
+  const avgMatch = total ? Math.round(entries.reduce((s, e) => s + e.candidate.jdMatchScore, 0) / total) : null;
+  const countOf = (status) => entries.filter((e) => e.candidate.status === status).length;
+  const selectedEntry = selected && entries.find((e) => e.candidate.id === selected.candidateId && e.job.id === selected.jobId);
+  const startInterview = (jobId, candidateId) => navigate(`/jobs/${jobId}/candidates/${candidateId}/interview`);
 
   return (
-    <div className="min-h-full p-4 md:p-8 pb-20 md:pb-8" style={{ background: C.pageGray }}>
-      {/* ── Header ── */}
+    <PageContainer>
+      <PageHeader
+        title="Interviews"
+        description="Shortlisted and interview-stage candidates across all your jobs."
+      />
+
       <div className="mb-6">
-        <h1 className="text-2xl font-black text-slate-900">Interview Pipeline</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Candidates shortlisted or scheduled for interview across all job postings.
-        </p>
+        <StatStrip loading={loading} items={[
+          { label: 'In pipeline', value: total },
+          { label: 'Shortlisted', value: countOf('Shortlisted') },
+          { label: 'Interview stage', value: countOf('Interview') },
+          { label: 'Avg role match', value: avgMatch == null ? '—' : `${avgMatch}%` },
+        ]} />
       </div>
 
-      {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
-        {[
-          { label: 'Total in Pipeline', value: total, icon: Users, color: C.primary },
-          { label: 'Avg Match Score',   value: `${avgMatch}%`, icon: Star, color: C.accent },
-          { label: 'Shortlisted',       value: shortlisted, icon: CheckCircle, color: '#0e7490' },
-          { label: 'Interview Stage',   value: toInterview, icon: Calendar, color: '#059669' },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
-              <Icon className="h-4 w-4" style={{ color }} />
-            </div>
-            <p className="text-2xl font-black" style={{ color }}>{value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Filter bar ── */}
-      <div className="flex flex-col md:flex-row md:items-center gap-3 mb-6">
-        {/* Search */}
-        <div className="relative w-full md:flex-1 md:max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search candidates or jobs..."
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200"
-          />
+      {total > 0 && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Segmented label="Filter by status" value={filterStatus} onChange={setFilterStatus}
+            items={[{ id: 'All', label: 'All', count: total }, ...INTERVIEW_STATUSES.map((s) => ({ id: s, label: s, count: countOf(s) }))]} />
+          <SearchInput value={search} onChange={setSearch} placeholder="Search candidates or jobs" className="sm:w-64" />
         </div>
+      )}
 
-        {/* Status filter tabs */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 gap-1 overflow-x-auto no-scrollbar w-full md:w-auto">
-          {['All', 'Interview', 'Shortlisted'].map(s => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
-              style={filterStatus === s
-                ? { background: C.primary, color: 'white' }
-                : { background: 'transparent', color: '#64748b' }
-              }
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Cards grid ── */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <div className="h-10 w-10 rounded-xl animate-pulse" style={{ background: C.activeBg ?? '#eef2ff' }} />
-          <p className="text-slate-400 text-sm">Loading interview pipeline…</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-52 rounded-lg" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <div
-            className="h-16 w-16 rounded-2xl flex items-center justify-center"
-            style={{ background: '#eef2ff' }}
-          >
-            <Calendar className="h-8 w-8" style={{ color: C.accent }} />
-          </div>
-          <div className="text-center">
-            <p className="font-bold text-slate-900">No interview candidates yet</p>
-            <p className="text-sm text-slate-400 mt-1">
-              {search
-                ? 'No results match your search.'
-                : 'Move candidates to "Shortlisted" or "Interview" status from a job pipeline to see them here.'}
-            </p>
-          </div>
-        </div>
+        <Card>
+          {total === 0 ? (
+            <EmptyState
+              icon={CalendarCheck}
+              title="No interview candidates yet"
+              description='Set a candidate to "Shortlisted" or "Interview" in a job pipeline and they will appear here.'
+              action={<Button onClick={() => navigate('/jobs')}>Go to jobs</Button>}
+            />
+          ) : (
+            <EmptyState icon={Search} title="No matching candidates" description="Try a different search or filter."
+              action={<Button variant="secondary" onClick={() => { setSearch(''); setFilterStatus('All'); }}>Clear filters</Button>} />
+          )}
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map(({ candidate, job }) => (
             <InterviewCard
-              key={`${job?.id}-${candidate.id}`}
+              key={`${job.id}-${candidate.id}`}
               candidate={candidate}
               job={job}
-              onView={(c, j) => setSelectedEntry({ candidate: c, job: j })}
-              onStatusChange={handleStatusChange}
+              prefs={prefs}
+              onView={() => setSelected({ candidateId: candidate.id, jobId: job.id })}
+              onStart={() => startInterview(job.id, candidate.id)}
+              onMove={(status) => handleMove(candidate.id, job.id, status)}
             />
           ))}
         </div>
       )}
 
-      {/* ── AI smart tip ── */}
-      {!loading && total > 0 && (
-        <div
-          className="mt-6 rounded-2xl p-5 flex items-start gap-4"
-          style={{ background: `linear-gradient(135deg, ${C.primary} 0%, #312e81 100%)` }}
-        >
-          <Zap className="h-5 w-5 shrink-0 mt-0.5" style={{ color: C.cyan }} />
-          <div>
-            <p className="text-sm font-bold text-white mb-1">AI Interview Insight</p>
-            <p className="text-xs leading-relaxed" style={{ color: '#c7d2fe' }}>
-              You have <strong className="text-white">{total} candidates</strong> in your interview pipeline
-              with an average JD match of <strong className="text-white">{avgMatch}%</strong>.
-              {avgMatch >= 75
-                ? ' Your pipeline quality is excellent — candidates are strongly aligned with job requirements.'
-                : ' Consider reviewing match thresholds to improve pipeline quality.'}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ── Candidate Dossier Modal ── */}
-      {selectedEntry && (
-        <CandidateModal
-          candidate={selectedEntry.candidate}
-          job={selectedEntry.job}
-          onClose={() => setSelectedEntry(null)}
-          onStatusUpdate={(candidateId, status) =>
-            handleStatusChange(candidateId, selectedEntry.job?.id, status)
-          }
-          onTakeInterview={(candidate, job) => {
-            setSelectedEntry(null);
-            if (onTakeInterview) onTakeInterview(candidate, job);
-          }}
-        />
-      )}
-    </div>
+      <CandidateModal
+        open={!!selectedEntry}
+        candidate={selectedEntry?.candidate}
+        job={selectedEntry?.job}
+        prefs={prefs}
+        onClose={() => setSelected(null)}
+        onStatusUpdate={(candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status)}
+        onTakeInterview={(c) => startInterview(selectedEntry.job.id, c.id)}
+      />
+    </PageContainer>
   );
 };
 

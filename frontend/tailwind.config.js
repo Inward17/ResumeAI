@@ -1,82 +1,42 @@
 /** @type {import('tailwindcss').Config} */
+// Every colour is a CSS variable (src/index.css) so light and dark themes
+// share the same class names. `<alpha-value>` keeps /opacity modifiers working.
+const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 module.exports = {
-    darkMode: ["class"],
-    content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
-    "./public/index.html"
-  ],
+  darkMode: ['class'],
+  content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
-  	extend: {
-  		borderRadius: {
-  			lg: 'var(--radius)',
-  			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
-  		},
-  		colors: {
-  			background: 'hsl(var(--background))',
-  			foreground: 'hsl(var(--foreground))',
-  			card: {
-  				DEFAULT: 'hsl(var(--card))',
-  				foreground: 'hsl(var(--card-foreground))'
-  			},
-  			popover: {
-  				DEFAULT: 'hsl(var(--popover))',
-  				foreground: 'hsl(var(--popover-foreground))'
-  			},
-  			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
-  			},
-  			secondary: {
-  				DEFAULT: 'hsl(var(--secondary))',
-  				foreground: 'hsl(var(--secondary-foreground))'
-  			},
-  			muted: {
-  				DEFAULT: 'hsl(var(--muted))',
-  				foreground: 'hsl(var(--muted-foreground))'
-  			},
-  			accent: {
-  				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
-  			},
-  			destructive: {
-  				DEFAULT: 'hsl(var(--destructive))',
-  				foreground: 'hsl(var(--destructive-foreground))'
-  			},
-  			border: 'hsl(var(--border))',
-  			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
-  			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
-  			}
-  		},
-  		keyframes: {
-  			'accordion-down': {
-  				from: {
-  					height: '0'
-  				},
-  				to: {
-  					height: 'var(--radix-accordion-content-height)'
-  				}
-  			},
-  			'accordion-up': {
-  				from: {
-  					height: 'var(--radix-accordion-content-height)'
-  				},
-  				to: {
-  					height: '0'
-  				}
-  			}
-  		},
-  		animation: {
-  			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
-  		}
-  	}
+    extend: {
+      fontFamily: {
+        sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Display serif for page titles and headline numbers only
+        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+      },
+      colors: {
+        btn: { DEFAULT: token('btn'), hover: token('btn-hover'), fg: token('btn-fg') },
+        canvas: token('canvas'),        // page background
+        surface: token('surface'),      // cards, panels, inputs
+        subtle: token('subtle'),        // table headers, hover fills, wells
+        line: { DEFAULT: token('line'), strong: token('line-strong') },
+        ink: { DEFAULT: token('ink'), 2: token('ink-2'), 3: token('ink-3') },
+        primary: {
+          DEFAULT: token('primary'),
+          hover: token('primary-hover'),
+          text: token('primary-text'),
+          soft: token('primary-soft'),
+          'soft-fg': token('primary-soft-fg'),
+        },
+        success: { DEFAULT: token('success'), soft: token('success-soft') },
+        warning: { DEFAULT: token('warning'), soft: token('warning-soft') },
+        danger: { DEFAULT: token('danger'), soft: token('danger-soft') },
+        info: { DEFAULT: token('info'), soft: token('info-soft') },
+      },
+      boxShadow: {
+        card: '0 1px 2px rgb(0 0 0 / 0.04)',
+        pop: '0 8px 24px -4px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06)',
+      },
+    },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [require('tailwindcss-animate')],
 };

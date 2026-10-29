@@ -3,21 +3,26 @@ Local Embedding Service using FastEmbed
 Model: all-MiniLM-L6-v2 (22M params, 384-dimensional embeddings)
 Free, fast, runs locally without API calls
 """
+import threading
 from typing import List, Optional
 from math import sqrt
 
 # Lazy-loaded singleton for efficiency
 _embedding_model = None
+_model_lock = threading.Lock()
 
 
 def _get_model():
     """Lazy load the embedding model (first call downloads ~80MB model)"""
     global _embedding_model
     if _embedding_model is None:
-        from fastembed import TextEmbedding
-        _embedding_model = TextEmbedding(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        # Embeddings run in worker threads; load the model only once
+        with _model_lock:
+            if _embedding_model is None:
+                from fastembed import TextEmbedding
+                _embedding_model = TextEmbedding(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                )
     return _embedding_model
 
 

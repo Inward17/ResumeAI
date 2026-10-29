@@ -41,8 +41,6 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 dump.rdb
-architecture.md
-py
 
 # System files
 .DS_Store
@@ -96,6 +94,15 @@ android-sdk/ -e
 *.env
 *.env.*
 
-backend/resumes
+# Uploaded resumes contain personal data — never commit them
+backend/resumes/
+resumes/
 
 BE Project Report Format Guidelines.docx
+
+# Example env files are documentation, not secrets
+!.env.example
+!**/.env.example
+
+# Temporary git worktrees used by Claude Code agents
+.claude/worktrees/

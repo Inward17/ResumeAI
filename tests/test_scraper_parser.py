@@ -1,83 +1,90 @@
 """
-Tests for scraper (Apify) and parser (Gemini/langextract) services.
+Tests for the LinkedIn lookup (Firecrawl, Apify fallback) and parser (Gemini/langextract) services.
 All external API calls fully mocked.
 """
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
+SCRAPER = "app.services.linkedinScraper"
+
+
+def _apify(items=None, error=None):
+    """Mock ApifyClient whose actor run yields ``items`` (or raises ``error``)."""
+    client = MagicMock()
+    actor = MagicMock()
+    if error:
+        actor.call.side_effect = error
+    else:
+        actor.call.return_value = {"defaultDatasetId": "ds-id"}
+        client.dataset.return_value.iterate_items.return_value = items or []
+    client.actor.return_value = actor
+    return client
+
 
 # ============================================================================
-# Scraper tests (Apify)
+# LinkedIn lookup tests (Firecrawl first, Apify fallback)
 # ============================================================================
 class TestScraper:
-    @patch("app.services.linkedinScraper.client")
-    async def test_scrape_linkedin_success(self, mock_client):
-        """Successful LinkedIn scraping returns profile data."""
-        mock_dataset = MagicMock()
-        mock_dataset.iterate_items.return_value = [
-            {
-                "firstName": "Jane",
-                "lastName": "Doe",
-                "headline": "Software Engineer",
-                "positions": [{"title": "SWE", "companyName": "Google"}],
-            }
-        ]
-        mock_run = {"defaultDatasetId": "test-dataset-id"}
-        mock_actor = MagicMock()
-        mock_actor.call.return_value = mock_run
-        mock_client.actor.return_value = mock_actor
-        mock_client.dataset.return_value = mock_dataset
-
-        from app.services.linkedinScraper import scrape_linkedin_profiles
-
-        result = await scrape_linkedin_profiles(["https://linkedin.com/in/janedoe"])
+    async def test_apify_used_when_firecrawl_not_configured(self):
+        client = _apify([{"firstName": "Jane", "positions": [{"title": "SWE", "companyName": "Google"}]}])
+        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", None), patch(f"{SCRAPER}._apify", client):
+            from app.services.linkedinScraper import scrape_linkedin_profiles
+            result = await scrape_linkedin_profiles(["https://linkedin.com/in/janedoe"])
         assert result["status"] == "success"
-        assert len(result["data"]) == 1
         assert result["data"][0]["firstName"] == "Jane"
 
-    @patch("app.services.linkedinScraper.client", None)
-    async def test_scrape_no_client_configured(self):
-        """Should raise when APIFY_TOKEN is not set."""
-        from app.services.linkedinScraper import scrape_linkedin_profiles
+    async def test_raises_when_nothing_configured(self):
+        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", None), patch(f"{SCRAPER}._apify", None):
+            from app.services.linkedinScraper import scrape_linkedin_profiles
+            with pytest.raises(Exception, match="not configured"):
+                await scrape_linkedin_profiles(["https://linkedin.com/in/test"])
 
-        with pytest.raises(Exception, match="not configured"):
-            await scrape_linkedin_profiles(["https://linkedin.com/in/test"])
+    async def test_apify_error_propagates_when_it_is_the_only_source(self):
+        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", None), \
+                patch(f"{SCRAPER}._apify", _apify(error=Exception("Apify rate limit exceeded"))):
+            from app.services.linkedinScraper import scrape_linkedin_profiles
+            with pytest.raises(Exception, match="Scraping failed"):
+                await scrape_linkedin_profiles(["https://linkedin.com/in/test"])
 
-    @patch("app.services.linkedinScraper.client")
-    async def test_scrape_api_error(self, mock_client):
-        """Should propagate scraping errors."""
-        mock_actor = MagicMock()
-        mock_actor.call.side_effect = Exception("Apify rate limit exceeded")
-        mock_client.actor.return_value = mock_actor
+    async def test_firecrawl_result_skips_apify(self):
+        client = _apify([{"firstName": "Should not be used"}])
+        lookup = AsyncMock(return_value={"firstName": "Jane", "source": "firecrawl"})
+        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", "fc-test"), patch(f"{SCRAPER}._apify", client), \
+                patch(f"{SCRAPER}._firecrawl_lookup", lookup):
+            from app.services.linkedinScraper import scrape_linkedin_profiles
+            result = await scrape_linkedin_profiles(["https://linkedin.com/in/janedoe"])
+        assert [p["firstName"] for p in result["data"]] == ["Jane"]
+        client.actor.assert_not_called()
 
-        from app.services.linkedinScraper import scrape_linkedin_profiles
+    async def test_profiles_firecrawl_misses_fall_back_to_apify(self):
+        client = _apify([{"firstName": "John"}])
+        # First profile found by Firecrawl, second not found, third errors
+        lookup = AsyncMock(side_effect=[{"firstName": "Jane"}, None, Exception("HTTP 500")])
+        urls = ["https://linkedin.com/in/jane", "https://linkedin.com/in/john", "https://linkedin.com/in/err"]
+        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", "fc-test"), patch(f"{SCRAPER}._apify", client), \
+                patch(f"{SCRAPER}._firecrawl_lookup", lookup):
+            from app.services.linkedinScraper import scrape_linkedin_profiles
+            result = await scrape_linkedin_profiles(urls)
+        assert [p["firstName"] for p in result["data"]] == ["Jane", "John"]
+        run_input = client.actor.return_value.call.call_args.kwargs["run_input"]
+        assert [u["url"] for u in run_input["urls"]] == urls[1:]
 
-        with pytest.raises(Exception, match="Scraping failed"):
-            await scrape_linkedin_profiles(["https://linkedin.com/in/test"])
-
-    @patch("app.services.linkedinScraper.client")
-    async def test_scrape_multiple_profiles(self, mock_client):
-        """Multiple profiles are passed as separate URLs."""
-        profiles = [
-            {"firstName": "Jane", "lastName": "Doe"},
-            {"firstName": "John", "lastName": "Smith"},
-        ]
-        mock_dataset = MagicMock()
-        mock_dataset.iterate_items.return_value = profiles
-        mock_run = {"defaultDatasetId": "ds-id"}
-        mock_actor = MagicMock()
-        mock_actor.call.return_value = mock_run
-        mock_client.actor.return_value = mock_actor
-        mock_client.dataset.return_value = mock_dataset
-
-        from app.services.linkedinScraper import scrape_linkedin_profiles
-
-        result = await scrape_linkedin_profiles([
-            "https://linkedin.com/in/janedoe",
-            "https://linkedin.com/in/johnsmith",
-        ])
-        assert result["status"] == "success"
-        assert len(result["data"]) == 2
+    def test_firecrawl_profile_mapped_to_verifier_shape(self):
+        from app.services.linkedinScraper import _to_apify_shape, _canonical
+        person = {
+            "id": "p1", "first_name": "Jane", "last_name": "Doe", "headline": "Engineer",
+            "location": {"city": "Pune", "country": "India", "country_code": "IN"},
+            "employment": {"all": [{"title": "SWE", "company": {"name": "Acme"}, "start_at": "2021-03-01T00:00:00Z"}]},
+            "educations": [{"school_name": "VIT", "end_at": "2020-06-01T00:00:00Z"}],
+            "skills": ["Python", {"bad": 1}],
+            "social_profiles": {"professional_network": {"url": "https://www.linkedin.com/in/janedoe", "handle": "janedoe"}},
+        }
+        out = _to_apify_shape(person, "https://linkedin.com/in/janedoe")
+        assert out["positions"][0]["companyName"] == "Acme"
+        assert out["positions"][0]["timePeriod"] == {"startDate": {"month": 3, "year": 2021}, "endDate": None}
+        assert out["educations"][0]["schoolName"] == "VIT"
+        assert out["location"] == "Pune, India" and out["skills"] == ["Python"]
+        assert _canonical("linkedin.com/in/jane-doe/?trk=x") == "https://www.linkedin.com/in/jane-doe"
 
 
 # ============================================================================
