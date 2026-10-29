@@ -47,6 +47,7 @@ async def run_unified_skill_scoring(
     required_skills: List[str],
     parsed: Dict[str, Any],
     github_v2_data: Optional[Dict[str, Any]] = None,
+    preferred_skills: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Run the full unified skill-evidence scoring pipeline.
@@ -69,6 +70,9 @@ async def run_unified_skill_scoring(
 
     Args:
         required_skills:  List of skill strings from the job posting.
+        preferred_skills: Optional nice-to-have skills; scored the same way
+                          and included in jd_match_score (as the keyword
+                          fallback in routes/resume.py does).
         parsed:           Parsed resume dict (from parser.py output).
         github_v2_data:   github_v2_data field from verification_data.githubData
                           (optional — pipeline degrades gracefully without it).
@@ -84,7 +88,9 @@ async def run_unified_skill_scoring(
     """
     _empty = {"skill_scores": [], "jd_match_score": 0.0}
 
-    if not required_skills:
+    # Score required + preferred skills once each, keeping order
+    all_skills = list(dict.fromkeys((required_skills or []) + (preferred_skills or [])))
+    if not all_skills:
         return _empty
 
     try:
@@ -109,7 +115,7 @@ async def run_unified_skill_scoring(
             return _empty
 
         # ── Step 3: score each skill concurrently ──────────────────────────
-        skill_scores = await score_all_skills(required_skills, section_embeddings)
+        skill_scores = await score_all_skills(all_skills, section_embeddings)
 
         # ── Step 4: aggregate ───────────────────────────────────────────────
         if skill_scores:
@@ -133,7 +139,7 @@ async def run_unified_skill_scoring(
     except Exception as exc:
         logger.error(
             "skill_matching: pipeline failed for %d skills: %s",
-            len(required_skills),
+            len(all_skills),
             exc,
             exc_info=True,
         )

@@ -21,3 +21,5 @@ Tests: `pytest` from the repository root.
 
 - [Scalability, hosted database and OAuth 2.0 setup](docs/SCALING_DATABASE_AUTH.md)
 - [UI audit: what's real and what's only in the UI](docs/UI_AUDIT.md)
+- [Backend analysis: bugs, scoring correctness, limits](docs/BACKEND_ANALYSIS.md)
+- [UI upgrade & compatibility review](docs/UI_UPGRADE_COMPATIBILITY.md)
