@@ -151,6 +151,8 @@ class TestBE06RoleMatchIsJdMatch:
             "application_date": datetime.utcnow(),
             "score_details": {"jd_match_score": 7.25, "skills_match_score": 40, "overall_score": 66},
         })
+        await mock_db.verification_data.insert_one({"candidateId": "c1",
+                                                    "verificationStatus": {"github": "verified"}})
         resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
         c = resp.json()["candidates"][0]
         assert c["jd_match_score"] == 72.5          # was 40 (the GitHub score)
@@ -161,6 +163,13 @@ class TestBE06RoleMatchIsJdMatch:
         assert c["github_url"] == "https://github.com/janedoe"
         assert c["linkedin_url"] == "https://linkedin.com/in/janedoe"
         assert c["status"] == "Under Review"        # legacy value normalised
+
+    async def test_github_score_is_null_when_not_verified(self, client, mock_db, owned_job_id):
+        await mock_db.candidates.insert_one({"candidate_id": "c2", "parsed": {}})
+        await mock_db.applications.insert_one({"candidate_id": "c2", "job_id": owned_job_id,
+                                               "score_details": {"skills_match_score": 0}})
+        resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
+        assert resp.json()["candidates"][0]["github_score"] is None
 
     async def test_status_must_be_canonical(self, client, mock_db, owned_job_id):
         await mock_db.applications.insert_one({"candidate_id": "c1", "job_id": owned_job_id})

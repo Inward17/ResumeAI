@@ -925,7 +925,9 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             # Real job-description match, 0-100 (scored 0-10 internally). This field
             # used to carry the GitHub score, which the UI showed as "Role Match".
             "jd_match_score": round(float(score_details.get("jd_match_score") or 0) * 10, 1),
-            "github_score": score_details.get("skills_match_score", 0),
+            # None (not 0) when GitHub wasn't verified, so the UI shows "not analysed"
+            "github_score": score_details.get("skills_match_score", 0)
+            if ((verification or {}).get("verificationStatus") or {}).get("github") == "verified" else None,
             "verification_score": score_details.get("overall_score", 0),
             "skills": _split_skills(parsed.get("skills")),
             "education": [e for e in parsed.get("education") or [] if isinstance(e, str)],
