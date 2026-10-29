@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Plus, MoreVertical, Eye, Edit, Trash2, Archive, RotateCcw, MapPin, Clock, Users, ArrowUpRight, Briefcase,
+  Plus, MoreHorizontal, Eye, Pencil, Trash2, Archive, RotateCcw, MapPin, Clock, Users, Briefcase, Search,
 } from 'lucide-react';
 import { getJobs, createJob, updateJob, deleteJob } from '../services/jobService';
 import JobModal from './JobModal';
+import { ConfirmDialog } from './Modal';
 import { useToast } from '../hooks/use-toast';
-import { cn } from '../lib/utils';
-import { Card, PageContainer, PageHeader, JobStatusPill, EmptyState, PrimaryButton, formatDate } from './common';
+import {
+  Card, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, IconButton, Menu, Segmented, SearchInput, Tag, Skeleton, RelativeDate,
+} from './common';
 
 const FILTERS = [
   { id: 'All', label: 'All' },
@@ -16,103 +18,67 @@ const FILTERS = [
   { id: 'Closed', label: 'Closed' },
 ];
 
-const ActionMenu = ({ job, onEdit, onToggleClosed, onDelete }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-
-  const item = 'flex w-full items-center gap-3 px-4 py-2.5 text-sm transition-colors';
   const isClosed = job.status === 'Closed';
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={`Actions for ${job.title}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800"
-      >
-        <MoreVertical className="h-5 w-5" aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-9 z-20 w-48 rounded-xl border border-slate-200 bg-white py-1.5 shadow-xl">
-          <button role="menuitem" type="button" className={cn(item, 'text-slate-700 hover:bg-slate-50')} onClick={() => navigate(`/jobs/${job.id}`)}>
-            <Eye className="h-4 w-4 text-slate-500" aria-hidden="true" /> View candidates
-          </button>
-          <button role="menuitem" type="button" className={cn(item, 'text-slate-700 hover:bg-slate-50')} onClick={() => { setOpen(false); onEdit(job); }}>
-            <Edit className="h-4 w-4 text-slate-500" aria-hidden="true" /> Edit job
-          </button>
-          <button role="menuitem" type="button" className={cn(item, 'text-slate-700 hover:bg-slate-50')} onClick={() => { setOpen(false); onToggleClosed(job); }}>
-            {isClosed
-              ? <><RotateCcw className="h-4 w-4 text-slate-500" aria-hidden="true" /> Reopen job</>
-              : <><Archive className="h-4 w-4 text-slate-500" aria-hidden="true" /> Close job</>}
-          </button>
-          <div className="my-1 border-t border-slate-100" />
-          <button role="menuitem" type="button" className={cn(item, 'text-red-700 hover:bg-red-50')} onClick={() => { setOpen(false); onDelete(job); }}>
-            <Trash2 className="h-4 w-4" aria-hidden="true" /> Delete
-          </button>
+    <Card className="group relative flex flex-col p-5 transition-colors hover:border-line-strong">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-serif text-[1.45rem] leading-tight text-ink">
+            {/* Stretched link: the whole card opens the pipeline */}
+            <Link to={`/jobs/${job.id}`} className="outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-primary/60">
+              {job.title}
+            </Link>
+          </h3>
+          <p className="mt-0.5 truncate text-sm text-ink-3">{job.department || 'No department'}</p>
+        </div>
+        <div className="relative z-10 -mr-1.5 -mt-1 flex items-center gap-1">
+          <JobStatusPill status={job.status} />
+          <Menu
+            label={`Actions for ${job.title}`}
+            trigger={<IconButton label={`Actions for ${job.title}`}><MoreHorizontal aria-hidden="true" /></IconButton>}
+            items={[
+              { label: 'View candidates', Icon: Eye, onSelect: () => navigate(`/jobs/${job.id}`) },
+              { label: 'Edit job', Icon: Pencil, onSelect: () => onEdit(job) },
+              { label: isClosed ? 'Reopen job' : 'Close job', Icon: isClosed ? RotateCcw : Archive, onSelect: () => onToggleClosed(job) },
+              { separator: true },
+              { label: 'Delete job', Icon: Trash2, danger: true, onSelect: () => onDelete(job) },
+            ]}
+          />
+        </div>
+      </div>
+
+      <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-ink-2">{job.description}</p>
+
+      {job.requirements?.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {job.requirements.slice(0, 4).map((skill) => <Tag key={skill}>{skill}</Tag>)}
+          {job.requirements.length > 4 && <Tag className="text-ink-3">+{job.requirements.length - 4}</Tag>}
         </div>
       )}
-    </div>
+
+      <div className="min-h-4 flex-1" />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-3 text-xs text-ink-3">
+        <span className="flex items-center gap-1.5 font-medium text-ink-2">
+          <Users className="h-3.5 w-3.5" aria-hidden="true" />{job.totalCandidates} candidate{job.totalCandidates === 1 ? '' : 's'}
+        </span>
+        {job.location && <span className="flex min-w-0 items-center gap-1.5"><MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{job.location}</span></span>}
+        {job.employmentType && <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{job.employmentType}</span>}
+        <span className="ml-auto"><RelativeDate value={job.postedAt} /></span>
+      </div>
+    </Card>
   );
 };
-
-const JobCard = ({ job, ...handlers }) => (
-  <Card className="flex flex-col gap-4 p-5 transition-shadow hover:shadow-md">
-    <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0 flex-1">
-        <JobStatusPill status={job.status} />
-        <h3 className="mt-2 text-base font-bold leading-tight text-slate-900">
-          <Link to={`/jobs/${job.id}`} className="hover:text-brand-accent">{job.title}</Link>
-        </h3>
-        {job.department && <p className="mt-0.5 text-xs font-semibold text-slate-500">{job.department}</p>}
-        <p className="mt-1.5 line-clamp-2 text-sm text-slate-600">{job.description}</p>
-      </div>
-      <ActionMenu job={job} {...handlers} />
-    </div>
-
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-      {job.location && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{job.location}</span>}
-      {job.employmentType && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{job.employmentType}</span>}
-      <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" aria-hidden="true" />{job.totalCandidates} candidates</span>
-    </div>
-
-    {job.requirements?.length > 0 && (
-      <div className="flex flex-wrap gap-1.5">
-        {job.requirements.slice(0, 4).map((skill) => (
-          <span key={skill} className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand">{skill}</span>
-        ))}
-        {job.requirements.length > 4 && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">+{job.requirements.length - 4}</span>
-        )}
-      </div>
-    )}
-
-    <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
-      <span className="text-xs text-slate-500">Posted {formatDate(job.postedAt)}</span>
-      <Link to={`/jobs/${job.id}`} className="flex items-center gap-1 text-xs font-bold text-brand-accent hover:underline">
-        View pipeline <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-      </Link>
-    </div>
-  </Card>
-);
 
 const JobPostings = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
+  const [query, setQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
@@ -138,7 +104,9 @@ const JobPostings = () => {
     }
   }, [searchParams, setSearchParams]);
 
-  const filteredJobs = filter === 'All' ? jobs : jobs.filter((j) => j.status === filter);
+  const q = query.trim().toLowerCase();
+  const filteredJobs = jobs.filter((j) => (filter === 'All' || j.status === filter)
+    && (!q || [j.title, j.department, j.location, ...(j.requirements || [])].some((v) => v && v.toLowerCase().includes(q))));
   const count = (id) => (id === 'All' ? jobs.length : jobs.filter((j) => j.status === id).length);
 
   // Errors propagate so the form can show them
@@ -169,8 +137,8 @@ const JobPostings = () => {
     }
   };
 
-  const handleDelete = async (job) => {
-    if (!window.confirm(`Delete "${job.title}"? Its candidate pipeline will no longer be shown.`)) return;
+  const handleDelete = async () => {
+    const job = deleting;
     try {
       await deleteJob(job.id);
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
@@ -185,55 +153,44 @@ const JobPostings = () => {
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Job postings"
-        title="Manage your open roles"
+        title="Jobs"
         description="Create roles, upload resumes to them and review AI-ranked candidates."
-        action={<PrimaryButton onClick={openCreate} className="w-full md:w-auto"><Plus className="h-4 w-4" aria-hidden="true" /> New job posting</PrimaryButton>}
+        action={<Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>}
       />
 
-      <div className="no-scrollbar mb-6 flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist" aria-label="Filter jobs">
-        {FILTERS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={filter === id}
-            onClick={() => setFilter(id)}
-            className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors',
-              filter === id ? 'border-brand text-brand' : 'border-transparent text-slate-600 hover:text-slate-900',
-            )}
-          >
-            {label}
-            <span className={cn('ml-2 rounded-full px-1.5 py-0.5 text-xs font-bold', filter === id ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600')}>
-              {count(id)}
-            </span>
-          </button>
-        ))}
-      </div>
+      {jobs.length > 0 && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Segmented label="Filter jobs by status" value={filter} onChange={setFilter}
+            items={FILTERS.map((f) => ({ ...f, count: count(f.id) }))} />
+          <SearchInput value={query} onChange={setQuery} placeholder="Search jobs or skills" className="sm:w-64" />
+        </div>
+      )}
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
         </div>
       ) : filteredJobs.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={Briefcase}
-            title={jobs.length === 0 ? 'No job postings yet' : `No ${FILTERS.find((f) => f.id === filter).label.toLowerCase()} jobs`}
-            description={jobs.length === 0 ? 'Create your first job posting to start screening candidates.' : 'Try another filter.'}
-            action={jobs.length === 0 && <PrimaryButton onClick={openCreate}><Plus className="h-4 w-4" aria-hidden="true" /> New job posting</PrimaryButton>}
-          />
+          {jobs.length === 0 ? (
+            <EmptyState icon={Briefcase} title="No jobs yet"
+              description="Create your first job to start screening candidates."
+              action={<Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>} />
+          ) : (
+            <EmptyState icon={Search} title="No jobs match"
+              description="Try another filter or search term."
+              action={<Button variant="secondary" onClick={() => { setFilter('All'); setQuery(''); }}>Clear filters</Button>} />
+          )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredJobs.map((job) => (
             <JobCard
               key={job.id}
               job={job}
               onEdit={(j) => { setEditingJob(j); setIsModalOpen(true); }}
               onToggleClosed={handleToggleClosed}
-              onDelete={handleDelete}
+              onDelete={setDeleting}
             />
           ))}
         </div>
@@ -244,6 +201,15 @@ const JobPostings = () => {
         onClose={() => { setIsModalOpen(false); setEditingJob(null); }}
         job={editingJob}
         onSave={handleSave}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={`Delete "${deleting?.title}"?`}
+        description="The job and its candidate pipeline will no longer be shown. This can't be undone."
+        confirmLabel="Delete job"
+        onConfirm={handleDelete}
       />
     </PageContainer>
   );

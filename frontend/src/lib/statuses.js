@@ -7,13 +7,14 @@ export const CANDIDATE_STATUSES = ['Under Review', 'Shortlisted', 'Interview', '
 /** Statuses shown on the Interviews page */
 export const INTERVIEW_STATUSES = ['Shortlisted', 'Interview'];
 
+/** Dot colour per status (statuses render as a dot + label, not a filled pill) */
 export const STATUS_STYLES = {
-  'Under Review': 'bg-amber-50 text-amber-800 ring-amber-200',
-  Shortlisted: 'bg-indigo-50 text-indigo-800 ring-indigo-200',
-  Interview: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
-  Offer: 'bg-sky-50 text-sky-800 ring-sky-200',
-  Hired: 'bg-green-50 text-green-800 ring-green-200',
-  Rejected: 'bg-red-50 text-red-700 ring-red-200',
+  'Under Review': 'bg-ink-3',
+  Shortlisted: 'bg-primary',
+  Interview: 'bg-info',
+  Offer: 'bg-warning',
+  Hired: 'bg-success',
+  Rejected: 'bg-danger',
 };
 
 // Values written by older versions of the app
@@ -35,7 +36,7 @@ export const normalizeStatus = (status) =>
 export const JOB_STATUSES = ['Active', 'Draft', 'Closed'];
 
 export const JOB_STATUS_STYLES = {
-  Active: 'bg-cyan-50 text-cyan-800 ring-cyan-200',
-  Draft: 'bg-amber-50 text-amber-800 ring-amber-200',
-  Closed: 'bg-slate-100 text-slate-600 ring-slate-200',
+  Active: 'bg-success',
+  Draft: 'bg-warning',
+  Closed: 'bg-ink-3',
 };

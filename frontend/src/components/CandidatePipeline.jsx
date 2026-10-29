@@ -1,58 +1,54 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Upload, Clock, Users, MapPin, ChevronRight, FileText, Calendar, AlertTriangle, CheckCircle, Search, Briefcase,
+  Upload, Clock, Users, MapPin, FileText, AlertTriangle, Search, Briefcase, ArrowDown, ArrowUp, Loader2, ChevronRight,
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import CandidateModal from './CandidateModal';
 import {
   getJob, getJobCandidates, getJobTasks, uploadResumes, updateCandidateStatus,
 } from '../services/jobService';
-import { CANDIDATE_STATUSES, INTERVIEW_STATUSES } from '../lib/statuses';
+import { CANDIDATE_STATUSES } from '../lib/statuses';
 import { loadPreferences } from '../lib/preferences';
 import { cn } from '../lib/utils';
 import {
-  Card, CardHeader, PageContainer, StatusPill, ScoreBadge, ScoreRing, Initials, EmptyState, JobStatusPill, PrimaryButton,
+  Card, CardHeader, PageContainer, PageHeader, ScoreBar, ScoreRing, Initials, EmptyState, JobStatusPill, Button,
+  Segmented, SearchInput, Tag, Skeleton, StatusSelect,
 } from './common';
 
 const ACCEPTED_TYPES = '.pdf,.docx,.doc,.txt';
 
-const CandidateRow = ({ candidate, prefs, onOpen, onMoveToInterview }) => {
-  const needsReview = candidate.verificationScore < prefs.verificationThreshold;
-  const inInterviewTrack = INTERVIEW_STATUSES.includes(candidate.status);
+const SORTS = {
+  match: (a, b) => b.jdMatchScore - a.jdMatchScore,
+  credibility: (a, b) => (b.verificationScore ?? -1) - (a.verificationScore ?? -1),
+  name: (a, b) => a.name.localeCompare(b.name),
+};
+
+const SortHeader = ({ id, label, sort, setSort, className }) => {
+  const active = sort === id;
+  const Arrow = id === 'name' ? ArrowUp : ArrowDown;
   return (
-    <li className="group flex flex-col gap-3 border-b border-slate-100 px-5 py-4 transition-colors last:border-0 hover:bg-brand-light/50 md:flex-row md:items-center md:justify-between">
-      <button type="button" onClick={() => onOpen(candidate)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-        <Initials name={candidate.name} />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-900">{candidate.name}</p>
-          <p className="truncate text-xs text-slate-500">{candidate.email || 'No email on resume'}</p>
-        </div>
+    <th scope="col" aria-sort={active ? (id === 'name' ? 'ascending' : 'descending') : 'none'} className={cn('px-3 py-2.5 font-medium', className)}>
+      <button type="button" onClick={() => setSort(id)}
+        className={cn('inline-flex items-center gap-1 rounded uppercase tracking-[0.08em] transition-colors hover:text-ink', active && 'text-ink')}>
+        {label}
+        <Arrow className={cn('h-3.5 w-3.5', active ? 'opacity-100' : 'opacity-0')} aria-hidden="true" />
       </button>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 pl-12 md:justify-end md:pl-0">
-        <ScoreBadge value={candidate.jdMatchScore} strong={prefs.matchThreshold} />
-        <StatusPill status={candidate.status} />
-        {needsReview ? (
-          <span title={`Verification ${candidate.verificationScore}% — below your ${prefs.verificationThreshold}% threshold`}>
-            <AlertTriangle className="h-4 w-4 text-amber-600" aria-label="Verification needs review" />
-          </span>
-        ) : (
-          <span title={`Verification ${candidate.verificationScore}%`}>
-            <CheckCircle className="h-4 w-4 text-emerald-600" aria-label="Verification above threshold" />
-          </span>
-        )}
-        {!inInterviewTrack && (
-          <button
-            type="button"
-            onClick={() => onMoveToInterview(candidate.id)}
-            className="flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800 ring-1 ring-inset ring-emerald-200 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
-          >
-            <Calendar className="h-3 w-3" aria-hidden="true" /> Move to interview
-          </button>
-        )}
-        <ChevronRight className="hidden h-4 w-4 text-slate-400 md:block" aria-hidden="true" />
-      </div>
-    </li>
+    </th>
+  );
+};
+
+const CredibilityCell = ({ candidate, prefs }) => {
+  const low = candidate.verificationScore != null && candidate.verificationScore < prefs.verificationThreshold;
+  return (
+    <div className="flex items-center gap-1.5">
+      <ScoreBar value={candidate.verificationScore} strong={prefs.verificationThreshold} label="Credibility" className="flex-1" />
+      {low && (
+        <span title={`Below your ${prefs.verificationThreshold}% review threshold`}>
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-label="Needs manual review" />
+        </span>
+      )}
+    </div>
   );
 };
 
@@ -73,11 +69,13 @@ const CandidatePipeline = () => {
   const [batch, setBatch] = useState(null); // {base, total} — progress of the latest upload
   const [pollKey, setPollKey] = useState(0);
   const [dragOver, setDragOver] = useState(false);
-  const [mobileTab, setMobileTab] = useState('pipeline');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [sort, setSort] = useState('match');
+  const [showFullDescription, setShowFullDescription] = useState(false);
   const lastFinished = useRef(null);
   const fileInputRef = useRef(null);
+  const dragDepth = useRef(0);
 
   const selectedId = searchParams.get('candidate');
   const selectedCandidate = candidates.find((c) => c.id === selectedId) || null;
@@ -125,13 +123,13 @@ const CandidatePipeline = () => {
 
   const uploadFiles = async (fileList) => {
     const files = Array.from(fileList || []);
-    if (files.length === 0) return;
+    if (files.length === 0 || uploading) return;
     setUploading(true);
     setUploadProgress({ processed: 0, total: files.length });
     setBatch({ base: taskCounts ? taskCounts.done + taskCounts.failed : 0, total: files.length });
     try {
       await uploadResumes(jobId, files, (processed, total) => setUploadProgress({ processed, total }));
-      toast({ title: 'Resumes queued', description: `${files.length} resume(s) uploaded. Screening runs in the background.` });
+      toast({ title: `${files.length} resume${files.length === 1 ? '' : 's'} uploaded`, description: 'Screening runs in the background — candidates appear as each one finishes.' });
     } catch (err) {
       toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
     } finally {
@@ -143,17 +141,27 @@ const CandidatePipeline = () => {
   };
 
   const handleStatusUpdate = async (candidateId, status) => {
+    const previous = candidates.find((c) => c.id === candidateId)?.status;
+    setCandidates((prev) => prev.map((c) => (c.id === candidateId ? { ...c, status } : c)));
     try {
       await updateCandidateStatus(jobId, candidateId, status);
-      setCandidates((prev) => prev.map((c) => (c.id === candidateId ? { ...c, status } : c)));
       toast({ title: `Moved to ${status}` });
     } catch (err) {
+      setCandidates((prev) => prev.map((c) => (c.id === candidateId ? { ...c, status: previous } : c)));
       toast({ title: 'Could not update status', description: err.message, variant: 'destructive' });
     }
   };
 
   const openCandidate = (c) => setSearchParams({ candidate: c.id });
   const closeCandidate = () => setSearchParams({}, { replace: true });
+
+  // Page-wide drag and drop (dragenter/leave fire for every child, so count depth)
+  const dragProps = {
+    onDragEnter: (e) => { if (e.dataTransfer.types.includes('Files')) { dragDepth.current += 1; setDragOver(true); } },
+    onDragOver: (e) => e.preventDefault(),
+    onDragLeave: () => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDragOver(false); },
+    onDrop: (e) => { e.preventDefault(); dragDepth.current = 0; setDragOver(false); uploadFiles(e.dataTransfer.files); },
+  };
 
   const activeTasks = taskCounts ? taskCounts.queued + taskCounts.processing : 0;
   const processingPct = (() => {
@@ -165,204 +173,249 @@ const CandidatePipeline = () => {
     return Math.round(((taskCounts.done + taskCounts.failed) / (taskCounts.total || 1)) * 100);
   })();
 
-  const ranked = [...candidates].sort((a, b) => b.jdMatchScore - a.jdMatchScore);
-  const visible = ranked.filter((c) => {
-    const q = query.trim().toLowerCase();
-    return (statusFilter === 'All' || c.status === statusFilter)
-      && (!q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
-  });
-  const avg = (key) => (candidates.length ? Math.round(candidates.reduce((s, c) => s + (c[key] || 0), 0) / candidates.length) : null);
-  const topMatch = candidates.length ? ranked[0].jdMatchScore : null;
+  const q = query.trim().toLowerCase();
+  const visible = [...candidates].sort(SORTS[sort]).filter((c) => (statusFilter === 'All' || c.status === statusFilter)
+    && (!q || c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q)));
+  const rankOf = new Map([...candidates].sort(SORTS.match).map((c, i) => [c.id, i + 1]));
+  const avg = (key) => {
+    const vals = candidates.map((c) => c[key]).filter((v) => v != null);
+    return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+  };
+  const topMatch = candidates.length ? Math.max(...candidates.map((c) => c.jdMatchScore)) : null;
   const strongMatches = candidates.filter((c) => c.jdMatchScore >= prefs.matchThreshold).length;
+  const needsReview = candidates.filter((c) => c.verificationScore != null && c.verificationScore < prefs.verificationThreshold).length;
+  const statusItems = [
+    { id: 'All', label: 'All', count: candidates.length },
+    ...CANDIDATE_STATUSES.map((s) => ({ id: s, label: s, count: candidates.filter((c) => c.status === s).length }))
+      .filter((s) => s.count > 0 || s.id === statusFilter),
+  ];
 
   if (jobError) {
     return (
       <PageContainer>
         <Card>
           <EmptyState icon={Briefcase} title="Job not found" description="It may have been deleted, or it belongs to another account."
-            action={<PrimaryButton onClick={() => navigate('/jobs')}>Back to job postings</PrimaryButton>} />
+            action={<Button onClick={() => navigate('/jobs')}>Back to jobs</Button>} />
         </Card>
       </PageContainer>
     );
   }
 
+  const chooseFiles = () => fileInputRef.current?.click();
+  const showBigDropzone = !loading && candidates.length === 0 && activeTasks === 0 && !uploading;
+
   return (
-    <PageContainer>
-      <Link to="/jobs" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to postings
-      </Link>
+    <div className="relative min-h-full" {...dragProps}>
+      <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_TYPES} className="sr-only" tabIndex={-1}
+        aria-hidden="true" onChange={(e) => uploadFiles(e.target.files)} />
 
-      <div className="mb-6">
-        {job ? (
-          <>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-[1.75rem]">{job.title}</h1>
-              <JobStatusPill status={job.status} />
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
-              {job.department && <span className="flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" aria-hidden="true" />{job.department}</span>}
-              {job.location && <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{job.location}</span>}
-              {job.employmentType && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{job.employmentType}</span>}
-              <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" aria-hidden="true" />{candidates.length} candidates</span>
-            </div>
-          </>
-        ) : (
-          <div className="space-y-2"><div className="h-8 w-72 animate-pulse rounded-lg bg-slate-200" /><div className="h-4 w-48 animate-pulse rounded bg-slate-200" /></div>
-        )}
-      </div>
-
-      {/* Mobile tab switcher */}
-      <div className="mb-5 flex rounded-xl bg-slate-200/60 p-1 lg:hidden" role="tablist">
-        {[['pipeline', 'Pipeline'], ['analysis', 'Analysis']].map(([id, label]) => (
-          <button key={id} type="button" role="tab" aria-selected={mobileTab === id} onClick={() => setMobileTab(id)}
-            className={cn('flex-1 rounded-lg py-2 text-sm font-bold transition-all', mobileTab === id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600')}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className={cn('flex-col gap-5', mobileTab === 'pipeline' ? 'flex' : 'hidden lg:flex')}>
-          {/* Upload zone */}
-          <div
-            className={cn(
-              'flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center transition-colors',
-              dragOver ? 'border-brand-accent bg-brand-light' : 'border-brand-soft bg-white',
-            )}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => { e.preventDefault(); setDragOver(false); uploadFiles(e.dataTransfer.files); }}
-          >
-            <input ref={fileInputRef} id="resume-upload" type="file" multiple accept={ACCEPTED_TYPES} className="sr-only"
-              onChange={(e) => uploadFiles(e.target.files)} />
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-light">
-              <Upload className="h-6 w-6 text-brand-accent" aria-hidden="true" />
-            </div>
-            <div>
-              <p className="font-bold text-slate-900">Upload resumes</p>
-              <p className="mt-0.5 text-sm text-slate-600">Drag and drop PDF, DOCX or TXT files, or choose them. Large batches are fine.</p>
-            </div>
-            <PrimaryButton onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              {uploading ? 'Uploading…' : 'Choose files'}
-            </PrimaryButton>
-
-            {uploading && uploadProgress && (
-              <div className="w-full" aria-live="polite">
-                <div className="mb-1 flex justify-between text-xs text-slate-600">
-                  <span>Uploading… {uploadProgress.processed}/{uploadProgress.total}</span>
-                  <span>{Math.round((uploadProgress.processed / uploadProgress.total) * 100)}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-brand-accent transition-all" style={{ width: `${(uploadProgress.processed / uploadProgress.total) * 100}%` }} />
-                </div>
-              </div>
-            )}
-            {!uploading && activeTasks > 0 && (
-              <div className="w-full" aria-live="polite">
-                <div className="mb-1 flex justify-between text-xs text-slate-600">
-                  <span>AI screening… {taskCounts.processing} in progress · {taskCounts.queued} queued</span>
-                  <span>{processingPct}%</span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-brand-accent transition-all" style={{ width: `${processingPct}%` }} />
-                </div>
-              </div>
-            )}
-            {taskCounts?.failed > 0 && (
-              <p className="text-xs text-red-700">{taskCounts.failed} resume(s) could not be processed. Re-upload them to retry.</p>
-            )}
-          </div>
-
-          {/* Candidate list */}
-          <Card className="overflow-hidden">
-            <CardHeader title="Candidates" subtitle="Ranked by role match" action={<span className="text-sm text-slate-500">{visible.length} of {candidates.length}</span>} />
-            {candidates.length > 0 && (
-              <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-3 md:flex-row md:items-center">
-                <div className="relative md:w-64">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
-                  <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or email" aria-label="Search candidates"
-                    className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-accent focus:ring-2 focus:ring-brand-soft" />
-                </div>
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status"
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand-accent focus:ring-2 focus:ring-brand-soft">
-                  <option value="All">All statuses</option>
-                  {CANDIDATE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            )}
-            {loading ? (
-              <div className="space-y-3 p-5">{[1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-xl bg-slate-100" />)}</div>
-            ) : candidates.length === 0 ? (
-              <EmptyState icon={FileText} title="No candidates yet"
-                description={activeTasks > 0 ? 'Resumes are being screened — candidates appear here as each one finishes.' : 'Upload resumes above to get started.'} />
-            ) : visible.length === 0 ? (
-              <EmptyState icon={Search} title="No matching candidates" description="Try a different search or status." />
-            ) : (
-              <ul>
-                {visible.map((c) => (
-                  <CandidateRow key={c.id} candidate={c} prefs={prefs} onOpen={openCandidate}
-                    onMoveToInterview={(id) => handleStatusUpdate(id, 'Interview')} />
-                ))}
-              </ul>
-            )}
-          </Card>
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-3 z-30 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary-soft/85 backdrop-blur-sm">
+          <p className="flex items-center gap-2 text-base font-semibold text-primary-soft-fg"><Upload className="h-5 w-5" aria-hidden="true" />Drop resumes to upload</p>
         </div>
+      )}
 
-        {/* Analysis column */}
-        <div className={cn('flex-col gap-5', mobileTab === 'analysis' ? 'flex' : 'hidden lg:flex')}>
-          <div className="rounded-2xl bg-brand-gradient p-5 text-white">
-            <p className="mb-3 text-xs font-bold uppercase tracking-widest text-indigo-200">Screening status</p>
-            <div className="mb-4 flex items-center gap-5">
-              <div>
-                <p className="text-xs font-semibold text-indigo-200">Top match</p>
-                <p className="font-display text-3xl font-extrabold">{topMatch == null ? '—' : `${topMatch}%`}</p>
-              </div>
-              <div className="h-10 w-px bg-white/20" />
-              <div>
-                <p className="text-xs font-semibold text-indigo-200">In queue</p>
-                <p className="font-display text-3xl font-extrabold">{activeTasks}</p>
-              </div>
-            </div>
-            {activeTasks > 0 ? (
-              <div>
-                <div className="mb-1.5 flex justify-between text-xs text-indigo-100"><span>AI processing</span><span>{processingPct}%</span></div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
-                  <div className="h-full rounded-full bg-brand-cyan transition-all" style={{ width: `${processingPct}%` }} />
+      <PageContainer>
+        <PageHeader
+          back={{ to: '/jobs', label: 'Jobs' }}
+          title={job ? (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{job.title}<JobStatusPill status={job.status} /></span>
+          ) : <Skeleton className="h-8 w-64" />}
+          meta={job && (
+            <>
+              {job.department && <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5" aria-hidden="true" />{job.department}</span>}
+              {job.location && <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{job.location}</span>}
+              {job.employmentType && <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{job.employmentType}</span>}
+              <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" aria-hidden="true" />{candidates.length} candidate{candidates.length === 1 ? '' : 's'}</span>
+            </>
+          )}
+          action={!showBigDropzone && (
+            <Button onClick={chooseFiles} disabled={uploading}>
+              {uploading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Upload aria-hidden="true" />}
+              {uploading ? 'Uploading…' : 'Upload resumes'}
+            </Button>
+          )}
+        />
+
+        {/* Upload / screening progress */}
+        {(uploading || activeTasks > 0 || taskCounts?.failed > 0) && (
+          <Card className="mb-5 p-4" aria-live="polite">
+            {(uploading && uploadProgress) || activeTasks > 0 ? (
+              <>
+                <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                  <span className="flex items-center gap-2 font-medium text-ink">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary-text" aria-hidden="true" />
+                    {uploading
+                      ? `Uploading ${uploadProgress.processed} of ${uploadProgress.total}…`
+                      : `Screening resumes — ${taskCounts.processing} in progress, ${taskCounts.queued} queued`}
+                  </span>
+                  <span className="tabular-nums text-ink-3">
+                    {uploading ? Math.round((uploadProgress.processed / uploadProgress.total) * 100) : processingPct}%
+                  </span>
                 </div>
-              </div>
-            ) : (
-              <p className="text-sm leading-relaxed text-indigo-100">
-                {candidates.length > 0
-                  ? `${strongMatches} of ${candidates.length} candidates have a role match of ${prefs.matchThreshold}% or more.`
-                  : 'Upload resumes to begin screening.'}
+                <div className="h-1.5 overflow-hidden rounded-full bg-subtle">
+                  <div className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${uploading ? (uploadProgress.processed / uploadProgress.total) * 100 : processingPct}%` }} />
+                </div>
+                {!uploading && <p className="mt-2 text-xs text-ink-3">You can leave this page — screening continues in the background.</p>}
+              </>
+            ) : null}
+            {taskCounts?.failed > 0 && !uploading && (
+              <p className={cn('flex items-center gap-2 text-sm text-danger', activeTasks > 0 && 'mt-3 border-t border-line pt-3')}>
+                <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {taskCounts.failed} resume{taskCounts.failed === 1 ? '' : 's'} could not be processed. Re-upload to retry.
               </p>
             )}
-          </div>
-
-          {candidates.length > 0 && (
-            <Card className="p-5">
-              <p className="mb-4 font-semibold text-slate-900">Score overview</p>
-              <div className="grid grid-cols-3 gap-2">
-                <ScoreRing value={topMatch} label="Top match" />
-                <ScoreRing value={avg('jdMatchScore')} label="Avg match" />
-                <ScoreRing value={avg('verificationScore')} label="Avg verified" />
-              </div>
-            </Card>
-          )}
-
-          <Card className="p-5">
-            <p className="mb-2 font-semibold text-slate-900">About this role</p>
-            <p className="line-clamp-6 text-sm leading-relaxed text-slate-600">{job?.description || 'No description provided.'}</p>
-            {job?.requirements?.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {job.requirements.map((skill) => (
-                  <span key={skill} className="rounded-full bg-brand-light px-2 py-0.5 text-[11px] font-semibold text-brand">{skill}</span>
-                ))}
-              </div>
-            )}
           </Card>
-        </div>
-      </div>
+        )}
+
+        {showBigDropzone ? (
+          <Card className="border-dashed border-line-strong">
+            <div className="flex flex-col items-center px-6 py-14 text-center">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-line bg-canvas">
+                <Upload className="h-5 w-5 text-ink-2" aria-hidden="true" />
+              </div>
+              <p className="font-serif text-3xl text-ink">Upload resumes to start screening</p>
+              <p className="mt-1 max-w-md text-sm text-ink-3">
+                Drag and drop PDF, DOCX or TXT files anywhere on this page. Each resume is parsed, verified and ranked against this job.
+              </p>
+              <Button onClick={chooseFiles} className="mt-5"><Upload aria-hidden="true" /> Choose files</Button>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
+            {/* Candidates */}
+            <Card className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line p-3">
+                <Segmented label="Filter by status" items={statusItems} value={statusFilter} onChange={setStatusFilter} />
+                <SearchInput value={query} onChange={setQuery} placeholder="Search name or email" className="w-full sm:w-56" />
+              </div>
+
+              {loading ? (
+                <div className="space-y-3 p-5">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10" />)}</div>
+              ) : candidates.length === 0 ? (
+                <EmptyState icon={FileText} title="No candidates yet"
+                  description="Resumes are being screened — candidates appear here as each one finishes." />
+              ) : visible.length === 0 ? (
+                <EmptyState icon={Search} title="No matching candidates" description="Try a different search or status."
+                  action={<Button variant="secondary" onClick={() => { setQuery(''); setStatusFilter('All'); }}>Clear filters</Button>} />
+              ) : (
+                <>
+                  {/* Desktop table */}
+                  <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead className="border-b border-line text-left text-[11px] uppercase tracking-[0.08em] text-ink-3">
+                      <tr>
+                        <th scope="col" className="w-12 py-2.5 pl-5 pr-1 font-medium">#</th>
+                        <SortHeader id="name" label="Candidate" sort={sort} setSort={setSort} />
+                        <SortHeader id="match" label="Role match" sort={sort} setSort={setSort} className="w-[22%]" />
+                        <SortHeader id="credibility" label="Credibility" sort={sort} setSort={setSort} className="w-[22%]" />
+                        <th scope="col" className="w-36 px-3 py-2.5 font-medium">Status</th>
+                        <th scope="col" className="w-8"><span className="sr-only">Open</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {visible.map((c) => (
+                        <tr key={c.id} onClick={() => openCandidate(c)} className="group cursor-pointer transition-colors hover:bg-subtle/70">
+                          <td className="py-3 pl-5 pr-1 text-xs tabular-nums text-ink-3">{rankOf.get(c.id)}</td>
+                          <td className="px-3 py-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                              <Initials name={c.name} className="h-8 w-8" />
+                              <div className="min-w-0">
+                                <button type="button" onClick={(e) => { e.stopPropagation(); openCandidate(c); }}
+                                  className="block max-w-full truncate rounded text-left font-medium text-ink hover:text-primary-text">
+                                  {c.name}
+                                </button>
+                                <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3"><ScoreBar value={c.jdMatchScore} strong={prefs.matchThreshold} label="Role match" /></td>
+                          <td className="px-3 py-3"><CredibilityCell candidate={c} prefs={prefs} /></td>
+                          <td className="px-3 py-3"><StatusSelect candidate={c} onChange={handleStatusUpdate} /></td>
+                          <td className="pr-4"><ChevronRight className="h-4 w-4 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  </div>
+
+                  {/* Phone list */}
+                  <ul className="divide-y divide-line md:hidden">
+                    {visible.map((c) => (
+                      <li key={c.id} className="space-y-3 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <button type="button" onClick={() => openCandidate(c)} className="flex min-w-0 items-center gap-3 text-left">
+                            <Initials name={c.name} />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-ink">{c.name}</p>
+                              <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}</p>
+                            </div>
+                          </button>
+                          <StatusSelect candidate={c} onChange={handleStatusUpdate} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-xs text-ink-3">
+                          <div><p className="mb-1">Role match</p><ScoreBar value={c.jdMatchScore} strong={prefs.matchThreshold} /></div>
+                          <div><p className="mb-1">Credibility</p><CredibilityCell candidate={c} prefs={prefs} /></div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </Card>
+
+            {/* Summary */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:sticky xl:top-6 xl:grid-cols-1">
+              {candidates.length > 0 && (
+                <Card>
+                  <CardHeader title="Score overview" />
+                  <div className="grid grid-cols-3 gap-2 p-4">
+                    <ScoreRing value={topMatch} label="Top match" strong={prefs.matchThreshold} />
+                    <ScoreRing value={avg('jdMatchScore')} label="Avg match" strong={prefs.matchThreshold} />
+                    <ScoreRing value={avg('verificationScore')} label="Avg credibility" strong={prefs.verificationThreshold} />
+                  </div>
+                  <dl className="divide-y divide-line border-t border-line text-sm">
+                    <div className="flex justify-between px-4 py-2.5">
+                      <dt className="text-ink-3">Strong matches (≥{prefs.matchThreshold}%)</dt>
+                      <dd className="font-medium tabular-nums text-ink">{strongMatches}</dd>
+                    </div>
+                    <div className="flex justify-between px-4 py-2.5">
+                      <dt className="text-ink-3">Need manual review</dt>
+                      <dd className={cn('font-medium tabular-nums', needsReview ? 'text-warning' : 'text-ink')}>{needsReview}</dd>
+                    </div>
+                  </dl>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader title="About this role" />
+                <div className="p-4">
+                  {job ? (
+                    <>
+                      <p className={cn('whitespace-pre-line text-sm leading-relaxed text-ink-2', !showFullDescription && 'line-clamp-5')}>
+                        {job.description || 'No description provided.'}
+                      </p>
+                      {job.description?.length > 280 && (
+                        <button type="button" onClick={() => setShowFullDescription((v) => !v)}
+                          className="mt-1.5 text-sm font-medium text-primary-text hover:underline">
+                          {showFullDescription ? 'Show less' : 'Show more'}
+                        </button>
+                      )}
+                      {job.requirements?.length > 0 && (
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs font-medium text-ink-3">Required skills</p>
+                          <div className="flex flex-wrap gap-1.5">{job.requirements.map((skill) => <Tag key={skill}>{skill}</Tag>)}</div>
+                        </div>
+                      )}
+                    </>
+                  ) : <div className="space-y-2"><Skeleton className="h-4" /><Skeleton className="h-4 w-4/5" /><Skeleton className="h-4 w-3/5" /></div>}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+      </PageContainer>
 
       <CandidateModal
         open={!!selectedCandidate}
@@ -373,7 +426,7 @@ const CandidatePipeline = () => {
         onStatusUpdate={handleStatusUpdate}
         onTakeInterview={(c) => navigate(`/jobs/${jobId}/candidates/${c.id}/interview`)}
       />
-    </PageContainer>
+    </div>
   );
 };
 

@@ -3,28 +3,72 @@
 @tailwind utilities;
 
 @layer base {
-  /* shadcn/ui tokens (components/ui/*) mapped onto the brand palette */
+  /*
+   * "Oak & fern" — warm paper neutrals, ink-black actions, forest-green accent.
+   * Tokens are RGB triplets; see tailwind.config.js.
+   */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 39% 13%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 39% 13%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 39% 13%;
-    --primary: 233 57% 37%;          /* #283593 */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 226 100% 97%;
-    --secondary-foreground: 233 57% 37%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 40%;
-    --accent: 243 75% 59%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 233 57% 37%;
-    --radius: 0.75rem;
+    color-scheme: light;
+    --canvas: 246 243 237;
+    --surface: 255 254 251;
+    --subtle: 239 235 227;
+    --line: 229 223 212;
+    --line-strong: 211 203 189;
+    --ink: 28 26 23;
+    --ink-2: 74 69 61;
+    --ink-3: 112 105 94;
+
+    /* Solid buttons */
+    --btn: 28 26 23;
+    --btn-hover: 58 54 48;
+    --btn-fg: 255 254 251;
+
+    /* Accent: nav, links, focus, progress */
+    --primary: 47 94 64;
+    --primary-hover: 38 78 52;
+    --primary-text: 39 85 57;
+    --primary-soft: 228 236 226;
+    --primary-soft-fg: 33 72 47;
+
+    --success: 37 110 62;
+    --success-soft: 226 239 227;
+    --warning: 160 86 18;
+    --warning-soft: 249 236 216;
+    --danger: 170 46 34;
+    --danger-soft: 248 229 224;
+    --info: 46 92 138;
+    --info-soft: 228 236 244;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --canvas: 20 19 17;
+    --surface: 28 27 24;
+    --subtle: 37 35 32;
+    --line: 49 47 43;
+    --line-strong: 70 67 61;
+    --ink: 237 233 225;
+    --ink-2: 199 193 183;
+    --ink-3: 152 146 135;
+
+    --btn: 237 233 225;
+    --btn-hover: 255 252 245;
+    --btn-fg: 20 19 17;
+
+    --primary: 64 128 88;
+    --primary-hover: 76 145 102;
+    --primary-text: 143 198 160;
+    --primary-soft: 33 48 38;
+    --primary-soft-fg: 172 215 184;
+
+    --success: 122 196 142;
+    --success-soft: 27 45 32;
+    --warning: 226 162 82;
+    --warning-soft: 53 39 21;
+    --danger: 236 124 104;
+    --danger-soft: 57 27 23;
+    --info: 134 172 222;
+    --info-soft: 26 36 51;
   }
 
   html {
@@ -33,16 +77,16 @@
   }
 
   body {
-    @apply bg-page font-sans text-slate-900;
-  }
-
-  h1, h2, h3 {
-    @apply font-display;
+    @apply bg-canvas font-sans text-ink;
   }
 
   /* Visible keyboard focus everywhere */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-accent/60 ring-offset-1;
+    @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-canvas;
+  }
+
+  ::selection {
+    @apply bg-primary/20;
   }
 }
 
@@ -51,7 +95,11 @@
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #c6c5d4; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-thumb { background: rgb(var(--line-strong)); border-radius: 9999px; border: 2px solid rgb(var(--canvas)); }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink-3)); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

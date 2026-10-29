@@ -3,8 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { Checkbox } from '../ui/checkbox';
-import { AuthShell, authInput, GoogleIcon, Divider } from './AuthShell';
-import { PrimaryButton, SecondaryButton } from '../common';
+import { AuthShell, AuthAlert, authInput, GoogleIcon, Divider } from './AuthShell';
+import { Button } from '../common';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -60,57 +60,53 @@ const Login = () => {
         <AuthShell
             title="Welcome back"
             subtitle="Sign in to your ResumeAI workspace."
-            footer={<>Don&apos;t have an account? <Link to="/register" className="font-semibold text-brand-accent hover:underline">Create one</Link></>}
+            footer={<>Don&apos;t have an account? <Link to="/register" state={location.state} className="font-medium text-primary-text hover:underline">Create one</Link></>}
         >
             {error && (
-                <div role="alert" className="mb-4 flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-800 ring-1 ring-inset ring-red-200">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}
-                </div>
+                <AuthAlert><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{error}</AuthAlert>
             )}
             {notice && (
-                <div role="status" className="mb-4 flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{notice}
-                </div>
+                <AuthAlert tone="success"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{notice}</AuthAlert>
             )}
 
-            <SecondaryButton onClick={handleGoogleLogin} disabled={busy} className="w-full">
+            <Button variant="secondary" size="lg" onClick={handleGoogleLogin} disabled={busy} className="w-full">
                 {googleLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <GoogleIcon />}
                 Continue with Google
-            </SecondaryButton>
+            </Button>
 
             <Divider />
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label htmlFor="email" className="mb-1.5 block text-sm font-semibold text-slate-700">Email</label>
+                    <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-ink-2">Email</label>
                     <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+                        <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" aria-hidden="true" />
                         <input id="email" type="email" autoComplete="email" required placeholder="name@company.com"
                             value={email} onChange={(e) => setEmail(e.target.value)} className={authInput} />
                     </div>
                 </div>
                 <div>
                     <div className="mb-1.5 flex items-center justify-between">
-                        <label htmlFor="password" className="text-sm font-semibold text-slate-700">Password</label>
-                        <button type="button" onClick={handleForgotPassword} className="text-sm font-semibold text-brand-accent hover:underline">
+                        <label htmlFor="password" className="text-sm font-medium text-ink-2">Password</label>
+                        <button type="button" onClick={handleForgotPassword} className="text-sm font-medium text-primary-text hover:underline">
                             Forgot password?
                         </button>
                     </div>
                     <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" aria-hidden="true" />
                         <input id="password" type="password" autoComplete="current-password" required placeholder="Your password"
                             value={password} onChange={(e) => setPassword(e.target.value)} className={authInput} />
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <Checkbox id="remember" checked={rememberMe} onCheckedChange={(v) => setRememberMe(v === true)}
-                        className="border-slate-300 data-[state=checked]:border-brand data-[state=checked]:bg-brand" />
-                    <label htmlFor="remember" className="cursor-pointer text-sm text-slate-700">Keep me signed in</label>
+                         />
+                    <label htmlFor="remember" className="cursor-pointer text-sm text-ink-2">Keep me signed in</label>
                 </div>
-                <PrimaryButton type="submit" disabled={busy} className="w-full">
+                <Button type="submit" size="lg" disabled={busy} className="w-full">
                     {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                     {loading ? 'Signing in…' : 'Sign in'}
-                </PrimaryButton>
+                </Button>
             </form>
         </AuthShell>
     );

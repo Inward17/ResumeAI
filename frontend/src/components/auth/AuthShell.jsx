@@ -8,41 +8,56 @@ const POINTS = [
   { Icon: ListChecks, text: 'Generates tailored interview questions for each candidate.' },
 ];
 
+// Photo by Caroline Badran on Unsplash (Unsplash License) — credited on the panel
+const PHOTO = 'https://images.unsplash.com/photo-1765371512707-9e0e96fd9e5b?auto=format&fit=crop&w=1200&q=75';
+const PHOTO_CREDIT = 'https://unsplash.com/photos/modern-room-with-wood-paneling-and-large-windows-agz5hQ0rXUc';
+
 /** Two-column layout shared by the sign-in and sign-up pages */
 export const AuthShell = ({ title, subtitle, children, footer }) => (
-  <div className="flex min-h-screen bg-page">
-    <aside className="relative hidden w-[44%] max-w-xl flex-col justify-between overflow-hidden bg-brand-gradient p-10 text-white lg:flex">
-      <BrandMark inverted />
-      <div>
-        <h2 className="font-display text-3xl font-extrabold leading-tight">Screen resumes with evidence, not guesswork.</h2>
-        <ul className="mt-8 space-y-4">
+  <div className="flex min-h-[100dvh] bg-canvas">
+    <aside className="relative m-3 hidden w-[44%] max-w-2xl flex-col justify-between overflow-hidden rounded-xl bg-[#2a2620] p-10 text-white lg:flex">
+      <img src={PHOTO} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/30" aria-hidden="true" />
+
+      <BrandMark inverted className="relative" />
+      <div className="relative">
+        <h2 className="font-serif text-[2.75rem] leading-[1.05] tracking-[-0.01em]">
+          Screen resumes with <em>evidence</em>, not guesswork.
+        </h2>
+        <ul className="mt-7 space-y-2.5 text-sm text-white/80">
           {POINTS.map(({ Icon, text }) => (
-            <li key={text} className="flex items-start gap-3 text-indigo-100">
-              <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-cyan" aria-hidden="true" />
+            <li key={text} className="flex items-start gap-3">
+              <Icon className="mt-0.5 h-4 w-4 shrink-0 text-white/60" strokeWidth={1.75} aria-hidden="true" />
               <span>{text}</span>
             </li>
           ))}
         </ul>
+        <p className="mt-10 text-[11px] text-white/50">
+          Photo by <a href={PHOTO_CREDIT} target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">Caroline Badran on Unsplash</a>
+        </p>
       </div>
-      <p className="text-xs text-indigo-200">© {new Date().getFullYear()} ResumeAI</p>
-      <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/5" aria-hidden="true" />
     </aside>
 
-    <main className="flex flex-1 items-center justify-center p-4 sm:p-8">
-      <div className="w-full max-w-md">
-        <BrandMark className="mb-8 lg:hidden" />
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{title}</h1>
-          {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
-          <div className="mt-6">{children}</div>
-        </div>
-        {footer && <p className="mt-6 text-center text-sm text-slate-600">{footer}</p>}
+    <main className="flex flex-1 items-center justify-center px-4 py-10 sm:px-8">
+      <div className="w-full max-w-sm">
+        <BrandMark className="mb-10" />
+        <h1 className="font-serif text-[2.5rem] leading-tight text-ink">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-ink-3">{subtitle}</p>}
+        <div className="mt-8">{children}</div>
+        {footer && <p className="mt-8 text-center text-sm text-ink-3">{footer}</p>}
       </div>
     </main>
   </div>
 );
 
-export const authInput = 'w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-brand-accent focus:ring-2 focus:ring-brand-soft';
+export const authInput = 'h-10 w-full rounded-md border border-line-strong bg-surface pl-10 pr-3 text-sm text-ink placeholder:text-ink-3 outline-none transition focus:border-primary focus:ring-[3px] focus:ring-primary/15';
+
+export const AuthAlert = ({ tone = 'error', children }) => (
+  <div role={tone === 'error' ? 'alert' : 'status'}
+    className={`mb-5 flex items-start gap-2 rounded-md px-3 py-2.5 text-sm ring-1 ring-inset ${tone === 'error' ? 'bg-danger-soft text-danger ring-danger/25' : 'bg-success-soft text-success ring-success/25'}`}>
+    {children}
+  </div>
+);
 
 export const GoogleIcon = () => (
   <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
@@ -54,8 +69,8 @@ export const GoogleIcon = () => (
 );
 
 export const Divider = () => (
-  <div className="relative my-5">
-    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-200" /></div>
-    <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-500">or</span></div>
+  <div className="relative my-6">
+    <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-line" /></div>
+    <div className="relative flex justify-center text-xs"><span className="bg-canvas px-3 text-ink-3">or continue with email</span></div>
   </div>
 );

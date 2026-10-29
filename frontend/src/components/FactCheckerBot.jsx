@@ -1,119 +1,114 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, X, Loader2 } from 'lucide-react';
 import { factCheck } from '../services/jobService';
+import { cn } from '../lib/utils';
+import { IconButton } from './common';
+
+const SUGGESTIONS = ['Is their most recent role verified?', 'Do their GitHub projects match the resume?', 'Which resume claims have no supporting evidence?'];
 
 const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: `Hi! I'm your AI Assistant. What claim would you like me to verify about ${candidateName}?` }
+    { role: 'assistant', text: `Ask me to check any claim about ${candidateName}. I'll look at the resume and the verification evidence.` },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  const inputRef = useRef(null);
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isTyping) return;
-    
-    // Add user message
-    const userMsg = inputValue.trim();
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const send = async (text) => {
+    const userMsg = text.trim();
+    if (!userMsg || isTyping) return;
+    setMessages((prev) => [...prev, { role: 'user', text: userMsg }]);
     setInputValue('');
     setIsTyping(true);
-
     try {
       const data = await factCheck(candidateId, userMsg, candidateName);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        text: data.response,
-        condition: data.condition,
-      }]);
+      setMessages((prev) => [...prev, { role: 'assistant', text: data.response, condition: data.condition }]);
     } catch (err) {
       console.error('Fact check failed:', err);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        text: 'Sorry, I encountered an error while verifying that claim. Please try again.' 
-      }]);
+      setMessages((prev) => [...prev, { role: 'assistant', error: true, text: 'Something went wrong while checking that claim. Please try again.' }]);
     } finally {
       setIsTyping(false);
     }
   };
 
   return (
-    <div className="flex-1 w-full h-full bg-white flex flex-col z-50">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-brand">
-        <div className="flex items-center gap-2 text-white">
-          <Bot className="h-4 w-4" />
-          <h3 className="text-sm font-bold">AI Fact Checker</h3>
+    <div className="flex h-full w-full flex-1 flex-col bg-surface">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-soft">
+            <Bot className="h-4 w-4 text-primary-text" aria-hidden="true" />
+          </div>
+          <div className="leading-tight">
+            <h3 className="font-serif text-lg leading-none text-ink">Fact checker</h3>
+            <p className="text-xs text-ink-3">{candidateName}</p>
+          </div>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close fact checker" className="p-1 hover:bg-white/20 rounded-md transition-colors text-indigo-100 hover:text-white">
-          <X className="h-4 w-4" />
-        </button>
+        <IconButton label="Close fact checker" onClick={onClose}><X aria-hidden="true" /></IconButton>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+      <div className="flex-1 space-y-3 overflow-y-auto bg-canvas p-4" aria-live="polite">
         {messages.map((msg, idx) => (
-          <div key={idx} className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' && (
-              <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-1 bg-brand-accent text-white" aria-hidden="true">
-                <Bot className="h-3.5 w-3.5" />
-              </div>
-            )}
-            <div 
-              className={`p-3 rounded-xl text-sm leading-relaxed max-w-[85%] ${
-                msg.role === 'user' 
-                  ? 'bg-brand-accent text-white rounded-tr-none' 
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none shadow-sm'
-              }`}
-              style={{ whiteSpace: 'pre-wrap' }}
+          <div key={idx} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+            <div
+              className={cn(
+                'max-w-[88%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
+                msg.role === 'user' && 'rounded-br-md bg-primary text-white',
+                msg.role === 'assistant' && !msg.error && 'rounded-bl-md border border-line bg-surface text-ink-2',
+                msg.error && 'rounded-bl-md bg-danger-soft text-danger',
+              )}
             >
               {msg.text}
             </div>
           </div>
         ))}
+        {messages.length === 1 && !isTyping && (
+          <div className="space-y-1.5 pt-1">
+            <p className="text-xs text-ink-3">Try asking</p>
+            {SUGGESTIONS.map((s) => (
+              <button key={s} type="button" onClick={() => send(s)}
+                className="block w-full rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:border-primary/40 hover:text-ink">
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
         {isTyping && (
-          <div className="flex gap-2 justify-start">
-            <div className="h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-1 bg-brand-accent text-white" aria-hidden="true">
-              <Bot className="h-3.5 w-3.5" />
-            </div>
-            <div className="bg-white border border-slate-200 p-3 rounded-xl rounded-tl-none shadow-sm flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" aria-hidden="true" />
-              <span className="text-xs text-slate-600 font-medium tracking-wide">Verifying claim...</span>
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-line bg-surface px-3.5 py-2.5">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-3" aria-hidden="true" />
+              <span className="text-sm text-ink-3">Checking…</span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="p-3 bg-white border-t border-slate-100 flex items-center gap-2">
-        <input 
-          type="text" 
+      <form className="flex shrink-0 items-center gap-2 border-t border-line p-3" onSubmit={(e) => { e.preventDefault(); send(inputValue); }}>
+        <input
+          ref={inputRef}
+          type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Ask, e.g. 'Has this candidate used Next.js?'"
+          placeholder="Ask about a claim…"
           aria-label="Claim to verify"
-          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-soft transition-all text-slate-800 placeholder:text-slate-500"
+          className="h-10 flex-1 rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
-        <button 
-          type="button"
+        <button
+          type="submit"
           aria-label="Send"
-          onClick={handleSend}
           disabled={!inputValue.trim() || isTyping}
-          className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Send className="h-4 w-4" />
+          <Send className="h-4 w-4" aria-hidden="true" />
         </button>
-      </div>
+      </form>
     </div>
   );
 };

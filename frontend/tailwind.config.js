@@ -1,47 +1,40 @@
 /** @type {import('tailwindcss').Config} */
+// Every colour is a CSS variable (src/index.css) so light and dark themes
+// share the same class names. `<alpha-value>` keeps /opacity modifiers working.
+const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 module.exports = {
   darkMode: ['class'],
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['Manrope', 'Inter', 'ui-sans-serif', 'sans-serif'],
+        sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Display serif for page titles and headline numbers only
+        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
       },
       colors: {
-        // ResumeAI brand palette — the single source for app colours
-        brand: {
-          DEFAULT: '#283593',   // deep indigo: nav, primary buttons, headings
-          dark: '#000b60',
-          deep: '#312e81',      // gradient midpoint
-          accent: '#4338ca',    // links, highlights
-          light: '#eef2ff',     // active nav, tints
-          soft: '#e0e7ff',      // borders on tints, ring track
-          cyan: '#00e5ff',      // AI / live indicators (decorative only)
-          'cyan-text': '#0e7490',
+        btn: { DEFAULT: token('btn'), hover: token('btn-hover'), fg: token('btn-fg') },
+        canvas: token('canvas'),        // page background
+        surface: token('surface'),      // cards, panels, inputs
+        subtle: token('subtle'),        // table headers, hover fills, wells
+        line: { DEFAULT: token('line'), strong: token('line-strong') },
+        ink: { DEFAULT: token('ink'), 2: token('ink-2'), 3: token('ink-3') },
+        primary: {
+          DEFAULT: token('primary'),
+          hover: token('primary-hover'),
+          text: token('primary-text'),
+          soft: token('primary-soft'),
+          'soft-fg': token('primary-soft-fg'),
         },
-        page: '#f2f3fb',        // app background
-        // shadcn/ui tokens (used by components/ui/*)
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
-        popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
-        primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
-        secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
-        muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
-        accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
-        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
+        success: { DEFAULT: token('success'), soft: token('success-soft') },
+        warning: { DEFAULT: token('warning'), soft: token('warning-soft') },
+        danger: { DEFAULT: token('danger'), soft: token('danger-soft') },
+        info: { DEFAULT: token('info'), soft: token('info-soft') },
       },
-      backgroundImage: {
-        'brand-gradient': 'linear-gradient(135deg, #283593 0%, #312e81 60%, #4338ca 100%)',
-      },
-      borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
+      boxShadow: {
+        card: '0 1px 2px rgb(0 0 0 / 0.04)',
+        pop: '0 8px 24px -4px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06)',
       },
     },
   },

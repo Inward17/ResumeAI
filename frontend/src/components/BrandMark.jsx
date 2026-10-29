@@ -1,23 +1,18 @@
 import React from 'react';
 import { cn } from '../lib/utils';
 
-/** ResumeAI logo + wordmark, used in the sidebar, top bar and auth pages */
+/** ResumeAI mark + serif wordmark, used in the sidebar, mobile header and auth pages */
 const BrandMark = ({ compact = false, inverted = false, className }) => (
-  <div className={cn('flex items-center gap-2.5', className)}>
-    <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', inverted ? 'bg-white' : 'bg-brand')}>
-      <svg viewBox="0 0 24 24" fill="none" className={cn('h-4 w-4', inverted ? 'stroke-brand' : 'stroke-white')} strokeWidth="2.5" aria-hidden="true">
+  <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px]', inverted ? 'bg-white/90' : 'bg-btn')}>
+      <svg viewBox="0 0 24 24" fill="none" className={cn('h-3.5 w-3.5', inverted ? 'stroke-[#1c1a17]' : 'stroke-btn-fg')} strokeWidth="2.4" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 2L2 7l10 5 10-5-10-5z" />
         <path d="M2 17l10 5 10-5" />
         <path d="M2 12l10 5 10-5" />
       </svg>
     </div>
     {!compact && (
-      <div className="leading-tight">
-        <p className={cn('font-display text-sm font-extrabold', inverted ? 'text-white' : 'text-brand')}>ResumeAI</p>
-        <p className={cn('text-[10px] font-semibold uppercase tracking-widest', inverted ? 'text-indigo-200' : 'text-slate-500')}>
-          AI resume screening
-        </p>
-      </div>
+      <span className={cn('font-serif text-[1.35rem] leading-none tracking-[-0.01em]', inverted ? 'text-white' : 'text-ink')}>ResumeAI</span>
     )}
   </div>
 );

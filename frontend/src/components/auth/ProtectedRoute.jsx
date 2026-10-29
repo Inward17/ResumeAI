@@ -4,10 +4,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 
 const FullPageLoader = () => (
-    <div className="flex min-h-screen items-center justify-center bg-page" role="status">
+    <div className="flex min-h-screen items-center justify-center bg-canvas" role="status">
         <div className="text-center">
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand" aria-hidden="true" />
-            <p className="mt-2 text-sm text-slate-600">Loading…</p>
+            <Loader2 className="mx-auto h-6 w-6 animate-spin text-ink-3" aria-hidden="true" />
+            <p className="mt-2 text-sm text-ink-3">Loading…</p>
         </div>
     </div>
 );

@@ -1,81 +1,44 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Users, Star, CheckCircle, Search, Mail, User, Briefcase, ChevronDown } from 'lucide-react';
+import { CalendarCheck, Briefcase, Mail, ArrowRight, Search } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { getJobs, getJobCandidates, updateCandidateStatus } from '../services/jobService';
-import { CANDIDATE_STATUSES, INTERVIEW_STATUSES } from '../lib/statuses';
+import { INTERVIEW_STATUSES } from '../lib/statuses';
 import { loadPreferences } from '../lib/preferences';
-import { cn } from '../lib/utils';
 import CandidateModal from './CandidateModal';
-import { Card, PageContainer, PageHeader, StatusPill, Initials, EmptyState, PrimaryButton } from './common';
+import {
+  Card, PageContainer, PageHeader, Initials, EmptyState, Button, StatStrip, ScoreBar, Segmented, SearchInput, StatusSelect, Skeleton,
+} from './common';
 
-const MoveMenu = ({ candidate, onMove }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-  return (
-    <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}
-        className="flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50">
-        Move to <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" className="absolute bottom-full right-0 z-20 mb-1 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-xl">
-          {CANDIDATE_STATUSES.filter((s) => s !== candidate.status).map((s) => (
-            <button key={s} role="menuitem" type="button" onClick={() => { setOpen(false); onMove(s); }}
-              className="w-full px-4 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-slate-50">
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-const InterviewCard = ({ candidate, job, onView, onMove }) => (
-  <Card className="p-5 transition-shadow hover:shadow-md">
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-3">
+const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
+  <Card className="flex flex-col p-4 transition-colors hover:border-line-strong">
+    <div className="flex items-start justify-between gap-3">
+      <button type="button" onClick={onView} className="flex min-w-0 items-center gap-3 rounded-lg text-left">
         <Initials name={candidate.name} className="h-10 w-10 text-sm" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-slate-900">{candidate.name}</p>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-600">
+          <p className="truncate text-sm font-semibold text-ink hover:text-primary-text">{candidate.name}</p>
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-3">
             <Briefcase className="h-3 w-3 shrink-0" aria-hidden="true" />{job.title}
           </p>
         </div>
-      </div>
-      <StatusPill status={candidate.status} />
+      </button>
+      <StatusSelect candidate={candidate} onChange={(_, status) => onMove(status)} />
     </div>
 
-    <div className="mb-3">
-      <div className="mb-1 flex justify-between text-xs">
-        <span className="font-semibold text-slate-600">Role match</span>
-        <span className="font-bold text-brand">{candidate.jdMatchScore}%</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-        <div className={cn('h-full rounded-full', candidate.jdMatchScore >= 75 ? 'bg-emerald-500' : candidate.jdMatchScore >= 50 ? 'bg-brand-accent' : 'bg-amber-500')}
-          style={{ width: `${candidate.jdMatchScore}%` }} />
-      </div>
-    </div>
+    <dl className="mt-4 grid grid-cols-2 gap-4 text-xs">
+      <div><dt className="mb-1 text-ink-3">Role match</dt><dd><ScoreBar value={candidate.jdMatchScore} strong={prefs.matchThreshold} /></dd></div>
+      <div><dt className="mb-1 text-ink-3">Credibility</dt><dd><ScoreBar value={candidate.verificationScore} strong={prefs.verificationThreshold} /></dd></div>
+    </dl>
 
-    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
-      {candidate.email && <span className="flex min-w-0 items-center gap-1"><Mail className="h-3 w-3 shrink-0" aria-hidden="true" /><span className="truncate">{candidate.email}</span></span>}
-      <span className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-emerald-600" aria-hidden="true" />{candidate.verificationScore}% credibility</span>
-    </div>
+    {candidate.email && (
+      <a href={`mailto:${candidate.email}`} className="mt-3 flex min-w-0 items-center gap-1.5 text-xs text-ink-3 hover:text-primary-text">
+        <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="truncate">{candidate.email}</span>
+      </a>
+    )}
 
-    <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
-      <PrimaryButton onClick={onView} className="flex-1 py-2 text-xs">
-        <User className="h-3.5 w-3.5" aria-hidden="true" /> View dossier
-      </PrimaryButton>
-      <MoveMenu candidate={candidate} onMove={onMove} />
+    <div className="mt-4 flex gap-2 border-t border-line pt-3">
+      <Button variant="secondary" size="sm" onClick={onView} className="flex-1">View dossier</Button>
+      <Button size="sm" onClick={onStart} className="flex-1">Start interview <ArrowRight aria-hidden="true" /></Button>
     </div>
   </Card>
 );
@@ -112,14 +75,18 @@ const Interviews = () => {
     load();
   }, [toast]);
 
+  // Candidates moved out of the interview track stay visible (with their new status)
+  // until the next visit, so a mis-click can be undone from the same card.
   const handleMove = async (candidateId, jobId, status) => {
+    const update = (s) => setEntries((prev) => prev.map((e) => (
+      e.candidate.id === candidateId && e.job.id === jobId ? { ...e, candidate: { ...e.candidate, status: s } } : e)));
+    const previous = entries.find((e) => e.candidate.id === candidateId && e.job.id === jobId)?.candidate.status;
+    update(status);
     try {
       await updateCandidateStatus(jobId, candidateId, status);
-      setEntries((prev) => prev
-        .map((e) => (e.candidate.id === candidateId && e.job.id === jobId ? { ...e, candidate: { ...e.candidate, status } } : e))
-        .filter((e) => INTERVIEW_STATUSES.includes(e.candidate.status)));
       toast({ title: `Moved to ${status}` });
     } catch (err) {
+      update(previous);
       toast({ title: 'Could not update status', description: err.message, variant: 'destructive' });
     }
   };
@@ -127,69 +94,55 @@ const Interviews = () => {
   const q = search.trim().toLowerCase();
   const filtered = entries.filter(({ candidate, job }) =>
     (filterStatus === 'All' || candidate.status === filterStatus)
-    && (!q || candidate.name.toLowerCase().includes(q) || job.title.toLowerCase().includes(q) || candidate.email.toLowerCase().includes(q)));
+    && (!q || candidate.name.toLowerCase().includes(q) || job.title.toLowerCase().includes(q) || (candidate.email || '').toLowerCase().includes(q)));
 
   const total = entries.length;
   const avgMatch = total ? Math.round(entries.reduce((s, e) => s + e.candidate.jdMatchScore, 0) / total) : null;
   const countOf = (status) => entries.filter((e) => e.candidate.status === status).length;
   const selectedEntry = selected && entries.find((e) => e.candidate.id === selected.candidateId && e.job.id === selected.jobId);
+  const startInterview = (jobId, candidateId) => navigate(`/jobs/${jobId}/candidates/${candidateId}/interview`);
 
   return (
     <PageContainer>
       <PageHeader
-        eyebrow="Interviews"
-        title="Interview pipeline"
-        description="Shortlisted and interview-stage candidates across all your job postings."
+        title="Interviews"
+        description="Shortlisted and interview-stage candidates across all your jobs."
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        {[
-          { label: 'In pipeline', value: total, Icon: Users },
-          { label: 'Avg role match', value: avgMatch == null ? '—' : `${avgMatch}%`, Icon: Star },
-          { label: 'Shortlisted', value: countOf('Shortlisted'), Icon: CheckCircle },
-          { label: 'Interview stage', value: countOf('Interview'), Icon: Calendar },
-        ].map(({ label, value, Icon }) => (
-          <Card key={label} className="p-5">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</p>
-              <Icon className="h-4 w-4 text-brand-accent" aria-hidden="true" />
-            </div>
-            <p className="font-display text-2xl font-extrabold text-slate-900">{loading ? '…' : value}</p>
-          </Card>
-        ))}
+      <div className="mb-6">
+        <StatStrip loading={loading} items={[
+          { label: 'In pipeline', value: total },
+          { label: 'Shortlisted', value: countOf('Shortlisted') },
+          { label: 'Interview stage', value: countOf('Interview') },
+          { label: 'Avg role match', value: avgMatch == null ? '—' : `${avgMatch}%` },
+        ]} />
       </div>
 
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
-        <div className="relative w-full md:max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search candidates or jobs" aria-label="Search candidates or jobs"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-4 text-sm outline-none focus:border-brand-accent focus:ring-2 focus:ring-brand-soft" />
+      {total > 0 && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Segmented label="Filter by status" value={filterStatus} onChange={setFilterStatus}
+            items={[{ id: 'All', label: 'All', count: total }, ...INTERVIEW_STATUSES.map((s) => ({ id: s, label: s, count: countOf(s) }))]} />
+          <SearchInput value={search} onChange={setSearch} placeholder="Search candidates or jobs" className="sm:w-64" />
         </div>
-        <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1" role="tablist" aria-label="Filter by status">
-          {['All', ...INTERVIEW_STATUSES].map((s) => (
-            <button key={s} type="button" role="tab" aria-selected={filterStatus === s} onClick={() => setFilterStatus(s)}
-              className={cn('whitespace-nowrap rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors',
-                filterStatus === s ? 'bg-brand text-white' : 'text-slate-600 hover:text-slate-900')}>
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((i) => <div key={i} className="h-52 animate-pulse rounded-2xl border border-slate-200 bg-white" />)}
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-52 rounded-lg" />)}
         </div>
       ) : filtered.length === 0 ? (
         <Card>
-          <EmptyState
-            icon={Calendar}
-            title={total === 0 ? 'No interview candidates yet' : 'No matching candidates'}
-            description={total === 0
-              ? 'Move candidates to "Shortlisted" or "Interview" from a job pipeline and they will appear here.'
-              : 'Try a different search or filter.'}
-            action={total === 0 && <PrimaryButton onClick={() => navigate('/jobs')}>Go to job postings</PrimaryButton>}
-          />
+          {total === 0 ? (
+            <EmptyState
+              icon={CalendarCheck}
+              title="No interview candidates yet"
+              description='Set a candidate to "Shortlisted" or "Interview" in a job pipeline and they will appear here.'
+              action={<Button onClick={() => navigate('/jobs')}>Go to jobs</Button>}
+            />
+          ) : (
+            <EmptyState icon={Search} title="No matching candidates" description="Try a different search or filter."
+              action={<Button variant="secondary" onClick={() => { setSearch(''); setFilterStatus('All'); }}>Clear filters</Button>} />
+          )}
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -198,7 +151,9 @@ const Interviews = () => {
               key={`${job.id}-${candidate.id}`}
               candidate={candidate}
               job={job}
+              prefs={prefs}
               onView={() => setSelected({ candidateId: candidate.id, jobId: job.id })}
+              onStart={() => startInterview(job.id, candidate.id)}
               onMove={(status) => handleMove(candidate.id, job.id, status)}
             />
           ))}
@@ -212,7 +167,7 @@ const Interviews = () => {
         prefs={prefs}
         onClose={() => setSelected(null)}
         onStatusUpdate={(candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status)}
-        onTakeInterview={(c) => navigate(`/jobs/${selectedEntry.job.id}/candidates/${c.id}/interview`)}
+        onTakeInterview={(c) => startInterview(selectedEntry.job.id, c.id)}
       />
     </PageContainer>
   );
