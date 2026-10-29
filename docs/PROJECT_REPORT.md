@@ -45,12 +45,12 @@ The system avoids monolithic AI frameworks (LangChain, CrewAI) in favour of dete
 
 ### 2.1 The Two-Tiered Separation of Concerns
 The system comprises a fully decoupled client-server architecture:
-- **Frontend (React 19 / Tailwind / Radix UI):** Pure SPA utilizing HTTP long-polling and specific Service classes manipulating state logic. The color palette follows an "Indigo Neural" theme binding strict gradient layers programmatically.
+- **Frontend (React 19 / Vite / Tailwind / Radix UI):** A single-page app that polls the backend for screening progress and talks to it through small service modules. Colours are semantic CSS-variable tokens with light and dark themes (warm neutrals, ink buttons, forest-green accent).
 - **Backend (Python / FastAPI / Motor / Uvicorn):** Operates purely asynchronously using ASGI. It guarantees that an HTTP worker evaluating heavy NLP doesn't permanently block port `8000`.
 
 ### 2.2 The Custom Orchestrator Pattern
 ResumeAI explicitly bypasses `LangChain` orchestration layers within the active logic. Instead, the backend employs **Deterministic Python Orchestration**, split into:
-1. **Parallel Execution (Wide)**: Launching GitHub REST trees, LinkedIn scraping requests, and Google Searches simultaneously using `asyncio.gather()`.
+1. **Parallel Execution (Wide)**: Launching GitHub REST trees, LinkedIn lookups (Firecrawl, with Apify as fallback) and web searches simultaneously using `asyncio.gather()`.
 2. **Sequential Pipelines (Deep)**: Inside the GitHub block, a strict 15-step pipeline operates rigidly to circumvent 3rd-party API rate limit blocking.
 
 ---
@@ -61,10 +61,15 @@ ResumeAI explicitly bypasses `LangChain` orchestration layers within the active 
 ```text
 backend/app/
 ├── main.py                          # Initializer of FastAPI, CORS limits, and Routing Trees.
+├── auth.py                          # Firebase / Google ID tokens + workspace API keys.
+├── org.py                           # Workspaces, roles, invitations (Composio Gmail).
 ├── database.py                      # Async MotorClient (MongoDB) Connection Singleton.
 ├── routes/                          # Translates network routes /api/v1/ to logic endpoints.
 ├── services/
+│   ├── task_queue.py                # Durable MongoDB-backed queue for bulk resume processing.
 │   ├── unified_verification.py      # Central Concurrency Hub (asyncio.gather).
+│   ├── linkedinScraper.py           # LinkedIn lookup: Firecrawl (fullenrich) first, Apify fallback.
+│   ├── usage_service.py             # Live limits of the external API keys.
 │   ├── parser.py                    # Gemini 2.x API Wrapper / JSON extraction.
 │   ├── embedding_service.py         # MiniLM-L6-v2 (384-dim) embeddings + cosine similarity.
 │   ├── skill_matching/              # Unified, evidence-weighted semantic skill scoring.
@@ -94,15 +99,22 @@ backend/app/
 ### 3.2 Frontend Application Space (`frontend/src/`)
 ```text
 frontend/src/
-├── App.js / theme.js             # Route bindings and global CSS variable declarations.
+├── App.jsx                       # Routes (lazy-loaded pages) and the signed-in layout.
+├── index.css                     # Design tokens (light + dark) as CSS variables.
 ├── components/
-│   ├── Dashboard.jsx             # Top level executive view.
-│   ├── CandidatePipeline.jsx     # Kanban drag/drop.
-│   ├── Settings.jsx              # Extensive Admin control using Lucide-React arrays.
-│   ├── ui/                       # Radix UI primitives.
+│   ├── common.jsx                # Shared UI kit: buttons, fields, status dots, score bars/rings.
+│   ├── Dashboard.jsx             # Overview: headline numbers and recent jobs.
+│   ├── CandidatePipeline.jsx     # Ranked, sortable candidate table with inline status changes.
+│   ├── CandidateModal.jsx        # Candidate dossier: scores, verification, skill matches.
+│   ├── QAPage.jsx                # Interview kit + fact checker.
+│   ├── Settings.jsx              # General, Team, API keys, Plan & usage sections.
+│   └── ui/                       # Radix UI primitives.
 ├── services/
-│   └── jobService.js             # AXIOS interceptors & Snake → Camel Case transformers.
-├── hooks/ / context/             # Custom state lifecycles / React Stores.
+│   ├── api.js                    # fetch wrapper that attaches the Firebase ID token.
+│   ├── jobService.js             # Jobs/candidates API + snake_case → camelCase transformers.
+│   └── orgService.js             # Workspace, invitations, API keys, usage.
+├── lib/                          # Theme, statuses, per-browser preferences.
+└── hooks/ / context/             # Auth context and toasts.
 ```
 
 ---
@@ -769,38 +781,28 @@ async def test_all_three_sources_concurrent(self, mock_web, mock_li, mock_gh, mo
 Because the API models variables heavily in standard python configuration (`snake_case`), directly placing them onto the React V-DOM causes structural messiness and typing errors (`myVar.total_candidates` vs `myVar.totalCandidates`).
 
 ### 10.1 Interceptor and Transformation Adapters
-Located in `src/services/jobService.js`, the React code defines explicit boundary layers mapping fields out:
+Located in `src/services/jobService.js`, the React code defines explicit boundary layers mapping fields out. Every request goes through `services/api.js`, which attaches the signed-in user's Firebase ID token:
 ```javascript
 const transformJobFromAPI = (job) => ({
     id: job.id,
     title: job.job_title,
     description: job.job_description,
-    status: job.is_active ? 'Active' : 'Closed',
+    // Older backends only send is_active
+    status: job.status || (job.is_active ? 'Active' : 'Closed'),
     totalCandidates: job.total_candidates || 0,
 });
 ```
 
-### 10.2 Component Modularity & UI State Machines (`Settings.jsx`)
-In modern components, logic loops render arrays dynamically utilizing custom atomic blocks `<Panel>` and `<PanelHeader>` ensuring consistency.
-```javascript
-const TABS = [
-  { id: 'users',         label: 'Users',         Icon: Users },
-  { id: 'billing',       label: 'Billing',        Icon: CreditCard },
-  { id: 'integrations',  label: 'Integrations',   Icon: Plug },
-  { id: 'api',           label: 'API Keys',        Icon: Key },
-];
-
-{TABS.map(({ id, label }) => (
-  <button
-    key={id}
-    onClick={() => setActiveTab(id)}
-    className={`px-5 py-2.5 text-sm font-semibold border-b-2`}
-  >
-    {label}
-  </button>
-))}
+### 10.2 Shared UI Kit and Design Tokens
+Screens are composed from one kit in `src/components/common.jsx` (`Button`, `Field`, `Card`, `StatusPill`, `ScoreBar`, `ScoreRing`, `StatStrip`, `Menu`, `Segmented`), so behaviour and styling stay consistent. Colours are semantic tokens defined once in `src/index.css` and exposed to Tailwind:
+```css
+:root { --canvas: 246 243 237; --ink: 28 26 23; --primary: 47 94 64; }   /* light */
+.dark { --canvas: 20 19 17;  --ink: 237 233 225; --primary: 64 128 88; } /* dark  */
 ```
-This forces all UI updates to cascade from standard color configurations (`COLOR.primary`) bridging CSS Root parameters dynamically.
+Components only use names such as `bg-surface`, `text-ink-3` or `bg-primary`, so switching the theme is a single class on `<html>`. Score colours are derived from the user's thresholds (Settings → General): at or above the "strong match" threshold is green, below 50% is amber.
+
+### 10.3 Settings as Routed Sections
+`Settings.jsx` renders one of four sections chosen by the `?tab=` query parameter (General, Team, API keys, Plan & usage), so each section has a shareable URL and the browser's back button works.
 
 ---
 

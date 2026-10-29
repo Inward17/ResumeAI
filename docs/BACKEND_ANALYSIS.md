@@ -1,5 +1,7 @@
 # Backend analysis
 
+> **Review record (28 Oct 2026).** Findings describe the code at that date. Since then: the legacy root scripts (`server.py`, `resume_parser.py`, `extra/test.py`, `check_db.py`, `test_tasks.py`, `profile_github.py`, the root `test_*.py` files) were deleted, `requirements.txt` was converted to UTF-8, LinkedIn verification moved to Firecrawl with Apify as fallback, and jobs became shared per workspace. Fix status is tracked in [BUGS_FOUND_2026-10-28.md](BUGS_FOUND_2026-10-28.md); the current design is in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 Scope: everything under `backend/app` (~10.6k lines), plus the legacy files beside it.
 
 Every finding marked **verified** was reproduced by running the code. Others come from reading the code, with file references.
@@ -107,11 +109,10 @@ Turning the flag on breaks verification for every candidate. Either commit the m
   - `services/jd_matching_service.py`
   - `models/github_writer.py`
   - `routes/ai_analysis_routes.py` (never mounted)
-  - `backend/server.py` (old duplicate API with its own upload route), `resume_parser.py`, `extra/test.py`, `check_db.py`, `test_tasks.py` (hard-coded to the `resumeai` DB, not `resume_validator`)
-  - `profile_github.py`
+  - ~~`backend/server.py` (old duplicate API with its own upload route), `resume_parser.py`, `extra/test.py`, `check_db.py`, `test_tasks.py` (hard-coded to the `resumeai` DB, not `resume_validator`), `profile_github.py`~~ — deleted
 - **Two copies of the same logic**: legacy vs agent verification, keyword vs embedding skill scoring, `DUAL_RUN` shadow mode. Pick one path per concern.
 - **Tests mock the integration points** (`run_unified_skill_scoring`, verification service), which is how P0 #1 slipped through. Add a few contract tests that run the real functions with only network I/O stubbed, like the one added on this branch.
-- **`requirements.txt`** is UTF-16 encoded and pins Windows-only packages (`win32_setctime`, `pyreadline3`) plus `torch` and `pytest` in the same file. Split it into `requirements.txt` (runtime) and `requirements-dev.txt`, and pin a CPU-only torch wheel for servers.
+- **`requirements.txt`** ~~is UTF-16 encoded~~ (now UTF-8) and pins Windows-only packages (`win32_setctime`, `pyreadline3`) plus `torch` and `pytest` in the same file. Split it into `requirements.txt` (runtime) and `requirements-dev.txt`, and pin a CPU-only torch wheel for servers.
 - No Dockerfile, no CI workflow, no lint config.
 
 ## Suggested order of work

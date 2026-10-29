@@ -1,5 +1,7 @@
 # Phase 1: LangGraph Migration - Complete Implementation Plan
 
+> **Status: proposal, not implemented.** Verification still runs as deterministic `asyncio.gather()` orchestration in `backend/app/services/unified_verification.py`, and LangGraph is not a dependency. The optional agent path (`backend/app/agent/`, `USE_AGENT_SYSTEM`) uses its own loop. Kept for reference if the migration is picked up.
+
 ## 🎯 Overview
 
 **Goal:** Migrate UnifiedVerificationService from asyncio.gather() to LangGraph orchestration
