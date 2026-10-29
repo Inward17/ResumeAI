@@ -2,7 +2,8 @@
 Unified Verification Routes - API endpoints for running unified verification
 """
 from typing import Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from app.auth import AuthUser, get_current_user, require_candidate_access
 from pydantic import BaseModel
 
 from app.services.unified_verification import unified_verification_service
@@ -124,7 +125,7 @@ async def _run_verification_background(
 
 
 @router.post("/verification-status")
-async def get_verification_status(request: VerificationStatusRequest):
+async def get_verification_status(request: VerificationStatusRequest, user: AuthUser = Depends(get_current_user)):
     """
     Check verification status for a candidate
     
@@ -133,6 +134,8 @@ async def get_verification_status(request: VerificationStatusRequest):
     Returns verification status and data if available.
     """
     from app.database import db
+    
+    await require_candidate_access(request.candidate_id, user)
     
     result = await db.verification_data.find_one(
         {"candidateId": request.candidate_id}
@@ -154,7 +157,7 @@ async def get_verification_status(request: VerificationStatusRequest):
     }
 
 
-@router.get("/verification-status/{candidate_id}")
+@router.get("/verification-status/{candidate_id}", dependencies=[Depends(require_candidate_access)])
 async def get_verification_status_get(candidate_id: str):
     """GET endpoint for verification status (for easy testing)"""
     from app.database import db

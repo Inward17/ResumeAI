@@ -2,7 +2,8 @@
 Evaluation Routes — Store interview evaluation scores in the evaluations collection.
 """
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from app.auth import require_job_owner
 from pydantic import BaseModel
 from typing import List, Dict
 
@@ -28,7 +29,7 @@ class EvaluationSubmission(BaseModel):
     total_possible: int
 
 
-@router.post("/{job_id}/candidates/{candidate_id}/evaluation")
+@router.post("/{job_id}/candidates/{candidate_id}/evaluation", dependencies=[Depends(require_job_owner)])
 async def submit_evaluation(job_id: str, candidate_id: str, evaluation: EvaluationSubmission):
     """
     Store the interviewer's evaluation of a candidate.
@@ -62,7 +63,7 @@ async def submit_evaluation(job_id: str, candidate_id: str, evaluation: Evaluati
     }
 
 
-@router.get("/{job_id}/candidates/{candidate_id}/evaluation")
+@router.get("/{job_id}/candidates/{candidate_id}/evaluation", dependencies=[Depends(require_job_owner)])
 async def get_evaluation(job_id: str, candidate_id: str):
     """Retrieve a stored evaluation for a candidate+job pair."""
     doc = await db.evaluations.find_one(

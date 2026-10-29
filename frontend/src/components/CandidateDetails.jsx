@@ -5,8 +5,8 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { apiFetch } from '../services/api';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const CandidateDetails = ({ job, onBack, onViewCandidate }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,7 +21,7 @@ const CandidateDetails = ({ job, onBack, onViewCandidate }) => {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/api/v1/jobs/${job.id}/candidates`);
+        const response = await apiFetch(`/api/v1/jobs/${job.id}/candidates`);
 
         if (!response.ok) {
           throw new Error('Failed to fetch candidates');

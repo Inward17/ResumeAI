@@ -4,7 +4,8 @@ Uses exactly 1 Gemini API call per candidate, then caches the result.
 """
 import json
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from app.auth import require_job_owner
 from app.database import db
 from bson import ObjectId
 
@@ -83,7 +84,7 @@ Scores: overall={overall_score}%, skills={skills_score}%
 Return JSON: {{"recommendation":"Strongly Recommended"|"Recommended"|"Not Recommended","reasoning":"<2 sentence summary of fit>","strengths":["<1>","<2>"],"concerns":["<1>"]}}"""
 
 
-@router.get("/{job_id}/candidates/{candidate_id}/analysis")
+@router.get("/{job_id}/candidates/{candidate_id}/analysis", dependencies=[Depends(require_job_owner)])
 async def get_candidate_analysis(job_id: str, candidate_id: str):
     """
     Get AI-generated analysis for a candidate. 
