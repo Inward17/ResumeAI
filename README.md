@@ -19,6 +19,7 @@ Tests: `pytest` from the repository root.
 
 ## Docs
 
+- [Bugs found — 28 Oct 2026 (tracking checklist)](docs/BUGS_FOUND_2026-10-28.md)
 - [Scalability, hosted database and OAuth 2.0 setup](docs/SCALING_DATABASE_AUTH.md)
 - [UI audit: what's real and what's only in the UI](docs/UI_AUDIT.md)
 - [Backend analysis: bugs, scoring correctness, limits](docs/BACKEND_ANALYSIS.md)
