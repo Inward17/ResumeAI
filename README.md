@@ -21,6 +21,10 @@ AI resume screening for hiring teams. ResumeAI parses every resume with Gemini, 
 | Backend | Python 3.11+, FastAPI, Motor (MongoDB), asyncio task queue |
 | AI & data | Google Gemini (parsing), Groq (questions, fact checking), MiniLM / CodeBERT / BGE embeddings, Firecrawl + Apify (LinkedIn), GitHub REST API, DuckDuckGo |
 
+## Live demo
+
+The `main` branch deploys automatically: the app to **GitHub Pages** (<https://inward17.github.io/ResumeAI/>) and the API to a Hugging Face Space. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the CI/CD pipeline and one-time setup.
+
 ## Run locally
 
 Prerequisites: Python 3.11+, Node 20+ with Yarn 1, a MongoDB database (local or Atlas) and a Firebase project with Google sign-in enabled.
@@ -94,6 +98,7 @@ docs/                    Architecture, setup guides, reports
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md): components, request flow, data model
+- [Deployment](docs/DEPLOYMENT.md): CI/CD, GitHub Pages and Hugging Face setup
 - [Scalability, database, authentication and teams](docs/SCALING_DATABASE_AUTH.md): setup guide
 - [Project report](docs/PROJECT_REPORT.md): algorithms and implementation in depth
 - [Evaluation results](docs/EVALUATION_RESULTS.md)

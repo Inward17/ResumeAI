@@ -13,6 +13,7 @@ import {
   listApiKeys, createApiKey, revokeApiKey, getUsage,
 } from '../services/orgService';
 import { ConfirmDialog } from './Modal';
+import { API_BASE_URL } from '../services/api';
 import {
   Card, CardHeader, Button, IconButton, Field, Input, Select, Initials, EmptyState, Skeleton, Menu, StatStrip, RelativeDate, formatDate,
 } from './common';
@@ -161,7 +162,7 @@ export const TeamSettings = () => {
             const actions = [];
             if (self && m.role !== 'owner') {
               actions.push({ label: 'Leave workspace', Icon: LogOut, danger: true,
-                onSelect: () => setConfirm({ title: 'Leave this workspace?', description: 'You’ll lose access to its jobs and candidates until someone invites you again.', label: 'Leave', run: () => removeMember(m.uid).then(() => window.location.assign('/dashboard')) }) });
+                onSelect: () => setConfirm({ title: 'Leave this workspace?', description: 'You’ll lose access to its jobs and candidates until someone invites you again.', label: 'Leave', run: () => removeMember(m.uid).then(() => window.location.assign(`${import.meta.env.BASE_URL}dashboard`)) }) });
             } else if (manager && !self && m.role !== 'owner') {
               actions.push({ label: m.role === 'admin' ? 'Make member' : 'Make admin', onSelect: run(() => changeMemberRole(m.uid, m.role === 'admin' ? 'member' : 'admin'), 'Role updated') });
               actions.push({ separator: true });
@@ -264,7 +265,7 @@ export const ApiKeysSettings = () => {
         <CardHeader title="Workspace API keys" subtitle="Call the ResumeAI API from your own tools. A key acts as the person who created it, inside this workspace." />
         <div className="space-y-4 p-5">
           <pre className="overflow-x-auto rounded-md bg-subtle px-3 py-2.5 text-xs leading-relaxed text-ink-2">
-{`curl ${window.location.protocol}//${window.location.hostname}:8000/api/jobs \\
+{`curl ${API_BASE_URL}/api/jobs \\
   -H "Authorization: Bearer rai_…"`}
           </pre>
           {canManage ? (
