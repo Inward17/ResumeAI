@@ -1208,7 +1208,7 @@ class TestMatchScoreCalculation:
 
         svc = self._make_service()
         gh = GitHubDataModel(success=True, score=80.0)
-        li = LinkedInDataModel(profileId="li-1")
+        li = 100.0  # LinkedIn fully agrees with the resume
         web = WebSearchDataModel(
             status="success",
             results=[WebSearchResult(

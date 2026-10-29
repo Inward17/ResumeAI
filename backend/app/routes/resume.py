@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 import uuid
 from bson import ObjectId
@@ -18,6 +19,29 @@ from app.services.task_queue import task_queue, TERMINAL_STATUSES
 # RESUME_WORKERS in app.services.task_queue.
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+
+# The one list of application statuses shared with the frontend
+CANDIDATE_STATUSES = ["Under Review", "Shortlisted", "Interview", "Offer", "Hired", "Rejected"]
+_STATUS_LOOKUP = {s.lower(): s for s in CANDIDATE_STATUSES}
+# Values written by older UI versions
+_STATUS_LOOKUP.update({"new": "Under Review", "reviewing": "Under Review", "pending review": "Under Review"})
+
+
+def normalize_status(status) -> str | None:
+    """Canonical status for any accepted spelling, or None if unknown."""
+    if not isinstance(status, str):
+        return None
+    return _STATUS_LOOKUP.get(status.strip().lower())
+
+
+def _split_skills(skills) -> List[str]:
+    if isinstance(skills, list):
+        items = skills
+    elif isinstance(skills, str):
+        items = skills.split(",")
+    else:
+        return []
+    return list(dict.fromkeys(s.strip() for s in items if isinstance(s, str) and s.strip()))
 
 
 router = APIRouter(prefix="/jobs", tags=["resume"])
@@ -352,6 +376,63 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         )
 
 
+_agent_loop_unavailable = False
+
+
+def _load_agent_loop():
+    """Import the agent loop for USE_AGENT_SYSTEM=true; None if it can't be loaded.
+
+    Several agent modules (config, memory, planner, executor, ...) are not in the
+    repository, so importing it fails. Failing every candidate's verification
+    because of a feature flag is worse than running the standard pipeline.
+    """
+    global _agent_loop_unavailable
+    if _agent_loop_unavailable:
+        return None
+    try:
+        from app.agent.core.agent_loop import run
+        return run
+    except ImportError as exc:
+        _agent_loop_unavailable = True
+        print(f"[VERIFY] USE_AGENT_SYSTEM=true but the agent system can't be loaded ({exc}); "
+              f"using standard verification instead")
+        return None
+
+
+_INSTITUTION_WORDS = ("university", "institute", "college", "school", "academy", "polytechnic")
+_INSTITUTION_ACRONYMS = {"iit", "nit", "iiit", "bits", "mit"}
+
+
+def _institution_from_education(line: str) -> str | None:
+    """Pick the institution out of a free-text education line."""
+    for part in line.replace("|", ",").split(","):
+        part = re.sub(r"\s*\(.*?\)", "", part).strip()
+        lower = part.lower()
+        if any(w in lower for w in _INSTITUTION_WORDS) or _INSTITUTION_ACRONYMS & set(re.findall(r"[a-z]+", lower)):
+            # Drop a leading "B.Tech in CS from ..." style prefix
+            return part.split(" from ")[-1].split(" at ")[-1].strip()
+    return None
+
+
+def _verification_entities(parsed: Dict[str, Any]) -> tuple[List[str], List[str]]:
+    """Universities and companies to verify, preferring the parser's clean lists."""
+    universities = [u.strip() for u in parsed.get("university") or [] if isinstance(u, str) and u.strip()]
+    if not universities:
+        universities = [i for i in (_institution_from_education(e) for e in parsed.get("education") or []
+                                    if isinstance(e, str)) if i]
+
+    companies = [c.strip() for c in parsed.get("company") or [] if isinstance(c, str) and c.strip()]
+    if not companies:
+        for exp in parsed.get("experience") or []:
+            if isinstance(exp, str) and " at " in exp:
+                company = exp.split(" at ", 1)[1].split("(")[0].split("|")[0].split(" - ")[0].strip()
+                if company:
+                    companies.append(company)
+
+    # Keep order, drop duplicates
+    return list(dict.fromkeys(universities)), list(dict.fromkeys(companies))
+
+
 async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str = None):
     """Background task to run unified verification after parsing"""
     if not task_id:
@@ -369,14 +450,18 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         parsed = candidate.get("parsed", {})
         
         # Build profile data for web search verification
-        # Use LinkedIn-like structure for compatibility with verifier
+        # Use LinkedIn-like structure for compatibility with verifier.
+        # Search the institution/company names, not whole resume lines
+        # ("B.Tech in CS, IIT Delhi, 2021" used to be searched as "B.Tech in CS").
         profile_data = None
         if parsed:
-            profile_data = {
-                "publicIdentifier": candidate_id,
-                "educations": [{"title": edu} for edu in (parsed.get("education") or [])],
-                "experiences": [{"subtitle": exp} for exp in (parsed.get("experience") or [])]
-            }
+            universities, companies = _verification_entities(parsed)
+            if universities or companies:
+                profile_data = {
+                    "publicIdentifier": candidate_id,
+                    "educations": [{"schoolName": u} for u in universities],
+                    "experiences": [{"companyName": c} for c in companies],
+                }
         
         # Update task status
         await db.tasks.update_one(
@@ -387,6 +472,9 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         # Run verification
         if github_username or linkedin_url or profile_data:
             use_agent = os.environ.get("USE_AGENT_SYSTEM", "false").lower() == "true"
+            run_agent_loop = _load_agent_loop() if use_agent else None
+            # Fall back to the standard pipeline if agent mode can't be loaded
+            use_agent = run_agent_loop is not None
             dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
             
             result = None
@@ -394,7 +482,6 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
             verification_dict = None
 
             if use_agent:
-                from app.agent.core.agent_loop import run as run_agent_loop
                 
                 if dual_run:
                     # Shadow Mode: Run both concurrently
@@ -746,9 +833,9 @@ async def get_job_tasks(job_id: str, limit: int = 200):
 @router.put("/{job_id}/candidates/{candidate_id}/status", dependencies=[Depends(require_job_owner)])
 async def update_candidate_status(job_id: str, candidate_id: str, status_update: dict):
     """Update candidate application status"""
-    new_status = status_update.get("status")
+    new_status = normalize_status(status_update.get("status"))
     if not new_status:
-        raise HTTPException(400, "Status is required")
+        raise HTTPException(400, f"Status must be one of: {', '.join(CANDIDATE_STATUSES)}")
         
     result = await db.applications.update_one(
         {"job_id": job_id, "candidate_id": candidate_id},
@@ -788,7 +875,8 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         c["candidate_id"]: c
         async for c in db.candidates.find(
             {"candidate_id": {"$in": candidate_ids}},
-            {"candidate_id": 1, "parsed.personal_info": 1, "filename": 1},
+            {"candidate_id": 1, "parsed.personal_info": 1, "parsed.skills": 1, "parsed.education": 1,
+             "parsed.experience": 1, "filename": 1, "github_username": 1, "linkedin_url": 1},
         )
     }
 
@@ -822,7 +910,8 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             verification = verification_by_id.get(candidate_id)
         
         # Read stored skill_matches from application document (computed at upload time)
-        skill_matches = app.get("score_details", {}).get("skill_matches", [])
+        score_details = app.get("score_details") or {}
+        skill_matches = score_details.get("skill_matches", [])
 
         result.append({
             "candidate_id": candidate_id,
@@ -830,11 +919,19 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             "email": personal_info.get("email", ""),
             # The parser stores "phone_number"; "phone" kept for older records
             "phone": personal_info.get("phone_number") or personal_info.get("phone", ""),
-            "status": app.get("status", "Under Review"),
+            "status": normalize_status(app.get("status")) or "Under Review",
             "application_date": app.get("application_date"),
-            "score_details": app.get("score_details", {}),
-            "jd_match_score": app.get("score_details", {}).get("skills_match_score", 0),
-            "verification_score": app.get("score_details", {}).get("overall_score", 0),
+            "score_details": score_details,
+            # Real job-description match, 0-100 (scored 0-10 internally). This field
+            # used to carry the GitHub score, which the UI showed as "Role Match".
+            "jd_match_score": round(float(score_details.get("jd_match_score") or 0) * 10, 1),
+            "github_score": score_details.get("skills_match_score", 0),
+            "verification_score": score_details.get("overall_score", 0),
+            "skills": _split_skills(parsed.get("skills")),
+            "education": [e for e in parsed.get("education") or [] if isinstance(e, str)],
+            "experience": [e for e in parsed.get("experience") or [] if isinstance(e, str)],
+            "github_url": f"https://github.com/{candidate['github_username']}" if candidate and candidate.get("github_username") else None,
+            "linkedin_url": candidate.get("linkedin_url") if candidate else None,
             "filename": candidate.get("filename") if candidate else None,
             "verification_status": verification.get("verificationStatus") if verification else None,
             "skill_matches": skill_matches  # NEW: Real skill matches

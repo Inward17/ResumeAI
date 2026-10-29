@@ -300,10 +300,12 @@ def _compute_repo_stats(
     non_trivial_ratio = non_trivial / total
 
     # Approximate avg commits/repo from repo sizes (heuristic when we don't
-    # fetch all commits up front — will be refined during deep analysis)
-    avg_size = total_size / total if total > 0 else 0
-    # Rough: 1 commit ~ 10KB
-    avg_commits = min(avg_size / 10_000, 200.0)
+    # fetch all commits up front — will be refined during deep analysis).
+    # GitHub reports ``size`` in KILOBYTES; it was divided as if it were bytes,
+    # which made this sub-signal ~0 for everyone.
+    avg_size_kb = total_size / total if total > 0 else 0
+    # Rough: 1 commit ~ 10 KB
+    avg_commits = min(avg_size_kb / 10, 200.0)
     commit_depth_score = min(1.0, avg_commits / COMMIT_DEPTH_CAP)
 
     # Recency

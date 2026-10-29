@@ -188,6 +188,7 @@ class VerificationStatusModel(BaseModel):
 class MatchScoreModel(BaseModel):
     experienceMatch: float = 0
     skillsMatch: float = 0
+    linkedinMatch: float = 0  # how well LinkedIn agrees with the resume (0-100)
     overallCredibility: float = 0
 
 
