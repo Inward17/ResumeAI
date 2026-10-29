@@ -103,3 +103,6 @@ BE Project Report Format Guidelines.docx
 # Example env files are documentation, not secrets
 !.env.example
 !**/.env.example
+
+# Temporary git worktrees used by Claude Code agents
+.claude/worktrees/
