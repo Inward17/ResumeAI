@@ -77,6 +77,13 @@ _INDEXES = [
     ("verification_data", [("candidate_id", ASCENDING)], {}),
     ("jobs", [("owner_uid", ASCENDING), ("posted_at", DESCENDING)], {}),
     ("users", [("uid", ASCENDING)], {"unique": True}),
+    ("jobs", [("org_id", ASCENDING), ("posted_at", DESCENDING)], {}),
+    ("org_members", [("org_id", ASCENDING), ("uid", ASCENDING)], {"unique": True}),
+    ("org_members", [("uid", ASCENDING)], {}),
+    ("invites", [("token", ASCENDING)], {"unique": True}),
+    ("invites", [("org_id", ASCENDING), ("status", ASCENDING)], {}),
+    ("api_keys", [("key_hash", ASCENDING)], {"unique": True}),
+    ("api_keys", [("org_id", ASCENDING)], {}),
 ]
 
 

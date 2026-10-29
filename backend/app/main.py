@@ -12,7 +12,7 @@ load_dotenv()
 from app.auth import AUTH_DISABLED, get_current_user
 from app.database import client, ensure_indexes, ping_database
 from app.services.task_queue import RESUME_WORKERS, task_queue
-from app.routes import resume, linkedin, verification, github_routes, unified_verification_routes, search_routes, job_routes, interview_questions_routes, evaluation_routes, fact_checker_routes, auth_routes
+from app.routes import resume, linkedin, verification, github_routes, unified_verification_routes, search_routes, job_routes, interview_questions_routes, evaluation_routes, fact_checker_routes, auth_routes, org_routes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -60,6 +60,7 @@ app.include_router(job_routes.router, prefix="/api", dependencies=authenticated)
 app.include_router(interview_questions_routes.router, prefix="/api", dependencies=authenticated)
 app.include_router(evaluation_routes.router, prefix="/api", dependencies=authenticated)
 app.include_router(fact_checker_routes.router, prefix="/api", dependencies=authenticated)
+app.include_router(org_routes.router, prefix="/api", dependencies=authenticated)
 
 
 @app.get("/")

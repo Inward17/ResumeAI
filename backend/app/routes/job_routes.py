@@ -10,6 +10,7 @@ from bson import ObjectId
 
 from app.auth import AuthUser, get_current_user
 from app.database import db
+from app.org import ensure_org
 
 SHORTLISTED_STATUSES = ["Shortlisted", "Interview", "Offer"]
 JobStatus = Literal["Active", "Draft", "Closed"]
@@ -125,18 +126,20 @@ def _sync_status(data: dict) -> dict:
     return data
 
 
-def _owned_job_filter(job_id: str, user: AuthUser) -> dict:
+async def _owned_job_filter(job_id: str, user: AuthUser) -> dict:
+    """Jobs are shared by everyone in the caller's organization."""
     try:
-        return {"_id": ObjectId(job_id), "owner_uid": user.uid}
+        obj_id = ObjectId(job_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid job ID format")
+    return {"_id": obj_id, "org_id": await ensure_org(user)}
 
 
 @router.get("", response_model=List[JobResponse])
 async def get_jobs(user: AuthUser = Depends(get_current_user)):
-    """Fetch the signed-in user's jobs"""
+    """Fetch the organization's jobs"""
     jobs = []
-    async for job in db.jobs.find({"owner_uid": user.uid}, {"jd_embedding": 0}).sort("posted_at", -1):
+    async for job in db.jobs.find({"org_id": await ensure_org(user)}, {"jd_embedding": 0}).sort("posted_at", -1):
         jobs.append(job_helper(job))
     return await _with_candidate_counts(jobs)
 
@@ -144,7 +147,7 @@ async def get_jobs(user: AuthUser = Depends(get_current_user)):
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     """Fetch a single job by ID"""
-    job = await db.jobs.find_one(_owned_job_filter(job_id, user))
+    job = await db.jobs.find_one(await _owned_job_filter(job_id, user))
     
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -159,6 +162,7 @@ async def create_job(job: JobCreate, user: AuthUser = Depends(get_current_user))
     
     job_data = _sync_status(job.model_dump())
     job_data["owner_uid"] = user.uid
+    job_data["org_id"] = await ensure_org(user)
     job_data["posted_at"] = datetime.utcnow()
     job_data["total_candidates"] = 0
     job_data["screened"] = 0
@@ -179,7 +183,7 @@ async def create_job(job: JobCreate, user: AuthUser = Depends(get_current_user))
 @router.put("/{job_id}", response_model=JobResponse)
 async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_current_user)):
     """Update an existing job posting"""
-    owned = _owned_job_filter(job_id, user)
+    owned = await _owned_job_filter(job_id, user)
     obj_id = owned["_id"]
     
     # Get existing job
@@ -200,7 +204,7 @@ async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_c
 @router.delete("/{job_id}")
 async def delete_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     """Delete a job posting"""
-    result = await db.jobs.delete_one(_owned_job_filter(job_id, user))
+    result = await db.jobs.delete_one(await _owned_job_filter(job_id, user))
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Job not found")

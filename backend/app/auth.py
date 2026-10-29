@@ -31,6 +31,7 @@ from google.auth import exceptions as google_auth_exceptions
 from google.auth import jwt as google_jwt
 
 from app.database import db
+from app.org import API_KEY_PREFIX, ensure_org, user_for_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,8 @@ class AuthUser:
     name: Optional[str] = None
     picture: Optional[str] = None
     provider: Optional[str] = None
+    # Set for workspace API keys, which always act inside their own organization
+    org_id: Optional[str] = None
 
 
 class _CertCache:
@@ -140,6 +143,12 @@ async def get_current_user(
     """FastAPI dependency: the authenticated user, or 401."""
     if AUTH_DISABLED:
         return AuthUser(uid="dev-user", email="dev@localhost", name="Local Developer", provider="disabled")
+    # Workspace API keys don't depend on the identity provider being configured
+    if credentials is not None and credentials.credentials.startswith(API_KEY_PREFIX):
+        user = await user_for_api_key(credentials.credentials)
+        if not user:
+            raise _unauthorized("Invalid or revoked API key")
+        return user
     if not FIREBASE_PROJECT_ID and not GOOGLE_OAUTH_CLIENT_IDS:
         logger.error("Auth is enabled but neither FIREBASE_PROJECT_ID nor GOOGLE_OAUTH_CLIENT_IDS is set")
         raise HTTPException(status_code=500, detail="Authentication is not configured on the server")
@@ -154,15 +163,15 @@ async def require_job_owner(job_id: str, user: AuthUser = Depends(get_current_us
         obj_id = ObjectId(job_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid job ID format")
-    job = await db.jobs.find_one({"_id": obj_id, "owner_uid": user.uid})
+    job = await db.jobs.find_one({"_id": obj_id, "org_id": await ensure_org(user)})
     if not job:
-        # 404 rather than 403 so job ids of other users aren't revealed
+        # 404 rather than 403 so job ids of other organizations aren't revealed
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
 async def require_candidate_access(candidate_id: str, user: AuthUser = Depends(get_current_user)) -> None:
-    """Dependency for candidate routes: the candidate must have applied to one of the caller's jobs."""
+    """Dependency for candidate routes: the candidate must have applied to one of the organization's jobs."""
     job_ids = await db.applications.distinct("job_id", {"candidate_id": candidate_id})
     owned = []
     for job_id in job_ids:
@@ -170,7 +179,7 @@ async def require_candidate_access(candidate_id: str, user: AuthUser = Depends(g
             owned.append(ObjectId(job_id))
         except Exception:
             continue
-    if not owned or not await db.jobs.find_one({"_id": {"$in": owned}, "owner_uid": user.uid}):
+    if not owned or not await db.jobs.find_one({"_id": {"$in": owned}, "org_id": await ensure_org(user)}):
         raise HTTPException(status_code=404, detail="Candidate not found")
 
 
