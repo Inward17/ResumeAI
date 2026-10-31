@@ -31,8 +31,7 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
       const data = await factCheck(candidateId, userMsg, candidateName);
       setMessages((prev) => [...prev, { role: 'assistant', text: data.response, condition: data.condition }]);
     } catch (err) {
-      console.error('Fact check failed:', err);
-      setMessages((prev) => [...prev, { role: 'assistant', error: true, text: 'Something went wrong while checking that claim. Please try again.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', error: true, text: err.message }]);
     } finally {
       setIsTyping(false);
     }

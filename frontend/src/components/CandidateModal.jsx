@@ -65,9 +65,16 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
             </Select>
           </div>
           {onTakeInterview && (
-            <Button onClick={() => onTakeInterview(candidate)}>
-              Start interview <ArrowRight aria-hidden="true" />
-            </Button>
+            <div className="flex items-center gap-3">
+              {candidate.interviewScore != null && (
+                <span className="text-sm text-ink-3">
+                  Interview <span className="font-medium tabular-nums text-ink">{candidate.interviewScore}%</span>
+                </span>
+              )}
+              <Button onClick={() => onTakeInterview(candidate)}>
+                {candidate.interviewScore != null ? 'Open interview' : 'Start interview'} <ArrowRight aria-hidden="true" />
+              </Button>
+            </div>
           )}
         </div>
       )}

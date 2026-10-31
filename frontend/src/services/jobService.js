@@ -137,7 +137,10 @@ const transformCandidateFromAPI = (c) => ({
     // All scores are 0–100
     jdMatchScore: pct(c.jd_match_score),
     githubScore: c.github_score == null ? null : pct(c.github_score),
-    verificationScore: pct(c.verification_score),
+    // null = no source could be checked (shown as "—", not 0%)
+    verificationScore: c.verification_score == null ? null : pct(c.verification_score),
+    interviewScore: c.interview_score == null ? null : pct(c.interview_score),
+    interviewedAt: c.interviewed_at || null,
     scoreDetails: c.score_details || {},
     filename: c.filename,
     verificationStatus: c.verification_status || null,
@@ -214,7 +217,10 @@ export const getInterviewQuestions = async (jobId, candidateId) => {
     const response = await apiFetch(
         `/api/jobs/${jobId}/candidates/${candidateId}/interview-questions`
     );
-    if (!response.ok) throw new Error('Failed to fetch interview questions');
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to fetch interview questions');
+    }
     return response.json();
 };
 
@@ -232,6 +238,14 @@ export const submitEvaluation = async (jobId, candidateId, evaluationData) => {
     return response.json();
 };
 
+/** The last submitted evaluation, or null (GET /api/jobs/:jobId/candidates/:candidateId/evaluation) */
+export const getEvaluation = async (jobId, candidateId) => {
+    const response = await apiFetch(`/api/jobs/${jobId}/candidates/${candidateId}/evaluation`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error('Failed to fetch evaluation');
+    return (await response.json()).evaluation;
+};
+
 /** AI Fact Checker (POST /api/fact-checker/:candidateId) */
 export const factCheck = async (candidateId, message, candidateName) => {
     const response = await apiFetch(
@@ -242,6 +256,9 @@ export const factCheck = async (candidateId, message, candidateName) => {
             body: JSON.stringify({ message, candidate_name: candidateName }),
         }
     );
-    if (!response.ok) throw new Error('Fact check request failed');
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Something went wrong while checking that claim. Please try again.');
+    }
     return response.json();
 };

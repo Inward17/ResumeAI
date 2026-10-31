@@ -139,7 +139,7 @@ async def _call_gemini(api_key: str, user_message: str) -> Optional[Dict[str, An
     """Call Gemini via REST (httpx)."""
     import httpx
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     payload = {
         "contents": [
             {"role": "user", "parts": [{"text": _SYSTEM_PROMPT + "\n\n" + user_message}]}
@@ -180,7 +180,7 @@ async def _call_groq(api_key: str, user_message: str) -> Optional[Dict[str, Any]
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_message},

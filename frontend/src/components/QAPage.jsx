@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw } from 'lucide-react';
-import { getJob, getJobCandidate, getInterviewQuestions, submitEvaluation, updateCandidateStatus } from '../services/jobService';
+import {
+  getJob, getJobCandidate, getInterviewQuestions, getEvaluation, submitEvaluation, updateCandidateStatus,
+} from '../services/jobService';
 import { useToast } from '../hooks/use-toast';
 import { cn } from '../lib/utils';
 import FactCheckerBot from './FactCheckerBot';
 import { ConfirmDialog } from './Modal';
 import {
-  Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, Skeleton,
+  Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, Skeleton, formatDate,
 } from './common';
 
 const TopicTag = ({ label, selected, onClick }) => (
@@ -57,8 +59,12 @@ const QuestionCard = ({ index, question, tags, selectedTags, onToggleTag }) => {
 const QAPage = () => {
   const { jobId, candidateId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
-  const pipelineUrl = `/jobs/${jobId}?candidate=${candidateId}`;
+  // Go back to wherever the interview was started from (pipeline or Interviews page)
+  const returnTo = location.state?.from || `/jobs/${jobId}?candidate=${candidateId}`;
+  const returnLabel = location.state?.fromLabel || 'Back to pipeline';
+  const leave = () => navigate(returnTo, { replace: true });
 
   const [job, setJob] = useState(null);
   const [candidate, setCandidate] = useState(null);
@@ -69,6 +75,7 @@ const QAPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [isFactCheckerOpen, setIsFactCheckerOpen] = useState(false);
   const [selectedKeywords, setSelectedKeywords] = useState({}); // { [questionId]: ["tag", ...] }
+  const [lastSubmitted, setLastSubmitted] = useState(null);
   const [confirmReject, setConfirmReject] = useState(false);
 
   useEffect(() => {
@@ -81,10 +88,24 @@ const QAPage = () => {
     setLoadingQuestions(true);
     setQuestionError(null);
     try {
-      const data = await getInterviewQuestions(jobId, candidateId);
-      setQuestions(data.questions || []);
-    } catch {
-      setQuestionError('Could not generate interview questions.');
+      const [data, previous] = await Promise.all([
+        getInterviewQuestions(jobId, candidateId),
+        getEvaluation(jobId, candidateId).catch(() => null),
+      ]);
+      const qs = data.questions || [];
+      setQuestions(qs);
+      // Re-opening an interview restores the ticks from the last submission
+      if (previous) {
+        const restored = {};
+        (previous.questions || []).forEach((pq) => {
+          const q = qs.find((x) => x.id === pq.question_id && x.question === pq.question);
+          if (q) restored[q.id] = (pq.selected_tags || []).filter((t) => q.tags?.includes(t));
+        });
+        setSelectedKeywords(restored);
+        setLastSubmitted(previous.submitted_at);
+      }
+    } catch (err) {
+      setQuestionError(err.message || 'Could not generate interview questions.');
     } finally {
       setLoadingQuestions(false);
     }
@@ -102,6 +123,8 @@ const QAPage = () => {
   const totalPossible = questions.reduce((sum, q) => sum + (q.tags?.length || 0), 0);
   const totalSelected = Object.values(selectedKeywords).reduce((sum, tags) => sum + tags.length, 0);
   const aggregatePercent = totalPossible > 0 ? Math.round((totalSelected / totalPossible) * 100) : 0;
+  // No questions (still loading or AI down) means there's no score to show yet
+  const hasScore = !loadingQuestions && !questionError && totalPossible > 0;
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -121,7 +144,7 @@ const QAPage = () => {
         total_possible: totalPossible,
       });
       toast({ title: 'Evaluation submitted', description: `${candidate?.name}: ${aggregatePercent}% of key points covered.` });
-      navigate(pipelineUrl);
+      leave();
     } catch (err) {
       toast({ title: 'Could not submit evaluation', description: err.message, variant: 'destructive' });
     } finally {
@@ -133,7 +156,7 @@ const QAPage = () => {
     try {
       await updateCandidateStatus(jobId, candidateId, 'Rejected');
       toast({ title: 'Candidate rejected', description: candidate?.name });
-      navigate(pipelineUrl);
+      leave();
     } catch (err) {
       toast({ title: 'Could not reject candidate', description: err.message, variant: 'destructive' });
     }
@@ -144,7 +167,7 @@ const QAPage = () => {
       <PageContainer>
         <Card>
           <EmptyState icon={HelpCircle} title="Candidate not found" description={loadError}
-            action={<Button onClick={() => navigate(`/jobs/${jobId}`)}>Back to pipeline</Button>} />
+            action={<Button onClick={leave}>{returnLabel}</Button>} />
         </Card>
       </PageContainer>
     );
@@ -155,7 +178,7 @@ const QAPage = () => {
   return (
     <div className={cn('flex min-h-full flex-col', isFactCheckerOpen && 'md:pr-[380px]')}>
       <PageContainer className="flex-1 pb-8 md:pb-8">
-        <BackLink to={pipelineUrl}>Back to pipeline</BackLink>
+        <BackLink to={returnTo}>{returnLabel}</BackLink>
 
         {/* Candidate header */}
         <div className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-center md:justify-between">
@@ -193,9 +216,11 @@ const QAPage = () => {
             <Card>
               <CardHeader title="Interview score" />
               <div className="p-4">
-                <div className="flex justify-center"><ScoreRing value={loadingQuestions ? null : aggregatePercent} size={96} stroke={8} /></div>
+                <div className="flex justify-center"><ScoreRing value={hasScore ? aggregatePercent : null} size={96} stroke={8} /></div>
                 <p className="mt-3 text-center text-sm text-ink-3">
-                  <span className="font-medium tabular-nums text-ink">{totalSelected}</span> of <span className="font-medium tabular-nums text-ink">{totalPossible}</span> key points covered
+                  {hasScore ? (
+                    <><span className="font-medium tabular-nums text-ink">{totalSelected}</span> of <span className="font-medium tabular-nums text-ink">{totalPossible}</span> key points covered</>
+                  ) : questionError ? 'No score without interview questions' : 'Waiting for questions'}
                 </p>
                 {questions.length > 0 && (
                   <ul className="mt-4 space-y-2 border-t border-line pt-4">
@@ -230,6 +255,11 @@ const QAPage = () => {
           {/* Questions */}
           <div>
             <h2 className="mb-4 text-base font-semibold text-ink">Questions for this candidate</h2>
+            {!loadingQuestions && lastSubmitted && (
+              <p className="mb-4 rounded-md border border-line bg-subtle px-3 py-2 text-sm text-ink-2">
+                Evaluation submitted on {formatDate(lastSubmitted)}. Your ticks are restored; submitting again replaces it.
+              </p>
+            )}
 
             {loadingQuestions && (
               <div className="space-y-4" role="status">
@@ -246,7 +276,8 @@ const QAPage = () => {
 
             {!loadingQuestions && questionError && (
               <Card>
-                <EmptyState icon={XCircle} title={questionError} description="The AI service may be temporarily unavailable."
+                <EmptyState icon={XCircle} title="Interview questions unavailable"
+                  description={`${questionError} Scoring and submitting the evaluation need the questions, so they're disabled too.`}
                   action={<Button variant="secondary" onClick={loadQuestions}><RefreshCw aria-hidden="true" /> Try again</Button>} />
               </Card>
             )}
@@ -267,9 +298,13 @@ const QAPage = () => {
       <div className="sticky bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-8">
           <p className="hidden text-sm text-ink-3 sm:block">
-            Score <span className="font-semibold tabular-nums text-ink">{aggregatePercent}%</span>
-            <span className="mx-2 text-line-strong">·</span>
-            {totalSelected}/{totalPossible} points
+            {hasScore ? (
+              <>
+                Score <span className="font-semibold tabular-nums text-ink">{aggregatePercent}%</span>
+                <span className="mx-2 text-line-strong">·</span>
+                {totalSelected}/{totalPossible} points
+              </>
+            ) : questionError ? 'Scoring unavailable without questions' : 'Generating questions…'}
           </p>
           <div className="flex w-full gap-2 sm:w-auto">
             <Button variant="danger-outline" onClick={() => setConfirmReject(true)} disabled={!candidate} className="flex-1 sm:flex-none">
@@ -277,7 +312,7 @@ const QAPage = () => {
             </Button>
             <Button onClick={handleSubmit} disabled={!canSubmit} className="flex-[2] sm:flex-none">
               {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
-              {submitting ? 'Submitting…' : `Submit evaluation${loadingQuestions ? '' : ` · ${aggregatePercent}%`}`}
+              {submitting ? 'Submitting…' : `Submit evaluation${hasScore ? ` · ${aggregatePercent}%` : ''}`}
             </Button>
           </div>
         </div>

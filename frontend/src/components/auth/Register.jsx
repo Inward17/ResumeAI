@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { cn } from '../../lib/utils';
 import { AuthShell, AuthAlert, authInput, GoogleIcon, Divider } from './AuthShell';
 import { Button } from '../common';
+import { redirectTarget } from './ProtectedRoute';
 
 const strengthOf = (password) => {
     if (!password) return null;
@@ -27,7 +28,7 @@ const Register = () => {
     const navigate = useNavigate();
     const location = useLocation();
     // e.g. back to an invitation link after signing up
-    const destination = location.state?.from?.pathname || '/dashboard';
+    const destination = redirectTarget(location);
     const strength = strengthOf(password);
 
     const handleSubmit = async (e) => {

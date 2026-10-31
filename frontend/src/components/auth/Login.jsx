@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Checkbox } from '../ui/checkbox';
 import { AuthShell, AuthAlert, authInput, GoogleIcon, Divider } from './AuthShell';
 import { Button } from '../common';
+import { redirectTarget } from './ProtectedRoute';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -18,7 +19,7 @@ const Login = () => {
     const { login, loginWithGoogle, resetPassword } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const destination = location.state?.from?.pathname || '/dashboard';
+    const destination = redirectTarget(location);
 
     const finish = (result) => {
         if (result.success) navigate(destination, { replace: true });

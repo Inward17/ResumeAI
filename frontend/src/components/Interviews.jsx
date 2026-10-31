@@ -36,9 +36,17 @@ const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
       </a>
     )}
 
+    {candidate.interviewScore != null && (
+      <p className="mt-3 text-xs text-ink-3">
+        Interviewed · <span className="font-medium tabular-nums text-ink-2">{candidate.interviewScore}%</span> of key points covered
+      </p>
+    )}
+
     <div className="mt-4 flex gap-2 border-t border-line pt-3">
       <Button variant="secondary" size="sm" onClick={onView} className="flex-1">View dossier</Button>
-      <Button size="sm" onClick={onStart} className="flex-1">Start interview <ArrowRight aria-hidden="true" /></Button>
+      <Button size="sm" onClick={onStart} className="flex-1">
+        {candidate.interviewScore != null ? 'Open interview' : 'Start interview'} <ArrowRight aria-hidden="true" />
+      </Button>
     </div>
   </Card>
 );
@@ -100,7 +108,8 @@ const Interviews = () => {
   const avgMatch = total ? Math.round(entries.reduce((s, e) => s + e.candidate.jdMatchScore, 0) / total) : null;
   const countOf = (status) => entries.filter((e) => e.candidate.status === status).length;
   const selectedEntry = selected && entries.find((e) => e.candidate.id === selected.candidateId && e.job.id === selected.jobId);
-  const startInterview = (jobId, candidateId) => navigate(`/jobs/${jobId}/candidates/${candidateId}/interview`);
+  const startInterview = (jobId, candidateId) => navigate(`/jobs/${jobId}/candidates/${candidateId}/interview`,
+    { state: { from: '/interviews', fromLabel: 'Back to interviews' } });
 
   return (
     <PageContainer>

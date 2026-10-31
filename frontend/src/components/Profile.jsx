@@ -101,7 +101,7 @@ const Profile = () => {
           </dl>
           <p className="flex items-start gap-2 border-t border-line px-5 py-3 text-xs text-ink-3">
             <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            Your jobs and candidates are private to your account. Every request to the API is verified with your sign-in token.
+            Jobs and candidates are shared only with members of your workspace. Every request to the API is verified with your sign-in token.
           </p>
         </Card>
 

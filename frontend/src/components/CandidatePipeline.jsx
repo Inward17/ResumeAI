@@ -18,6 +18,12 @@ import {
 
 const ACCEPTED_TYPES = '.pdf,.docx,.doc,.txt';
 
+// Failed uploads stay in the task log, so remember how many the user already dismissed
+const dismissedKey = (jobId) => `resumeai:dismissed-failures:${jobId}`;
+const readDismissed = (jobId) => {
+  try { return Number(localStorage.getItem(dismissedKey(jobId))) || 0; } catch { return 0; }
+};
+
 const SORTS = {
   match: (a, b) => b.jdMatchScore - a.jdMatchScore,
   credibility: (a, b) => (b.verificationScore ?? -1) - (a.verificationScore ?? -1),
@@ -73,6 +79,7 @@ const CandidatePipeline = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [sort, setSort] = useState('match');
   const [showFullDescription, setShowFullDescription] = useState(false);
+  const [dismissedFailures, setDismissedFailures] = useState(() => readDismissed(jobId));
   const lastFinished = useRef(null);
   const fileInputRef = useRef(null);
   const dragDepth = useRef(0);
@@ -81,6 +88,7 @@ const CandidatePipeline = () => {
   const selectedCandidate = candidates.find((c) => c.id === selectedId) || null;
 
   useEffect(() => {
+    setDismissedFailures(readDismissed(jobId));
     setJob(null);
     setJobError(null);
     getJob(jobId).then(setJob).catch((err) => setJobError(err.message));
@@ -164,6 +172,11 @@ const CandidatePipeline = () => {
   };
 
   const activeTasks = taskCounts ? taskCounts.queued + taskCounts.processing : 0;
+  const newFailures = taskCounts ? Math.max(0, taskCounts.failed - dismissedFailures) : 0;
+  const dismissFailures = () => {
+    setDismissedFailures(taskCounts.failed);
+    try { localStorage.setItem(dismissedKey(jobId), String(taskCounts.failed)); } catch { /* storage blocked: hides until reload */ }
+  };
   const processingPct = (() => {
     if (!taskCounts || activeTasks === 0) return 100;
     if (batch) {
@@ -238,7 +251,7 @@ const CandidatePipeline = () => {
         />
 
         {/* Upload / screening progress */}
-        {(uploading || activeTasks > 0 || taskCounts?.failed > 0) && (
+        {(uploading || activeTasks > 0 || newFailures > 0) && (
           <Card className="mb-5 p-4" aria-live="polite">
             {(uploading && uploadProgress) || activeTasks > 0 ? (
               <>
@@ -260,11 +273,12 @@ const CandidatePipeline = () => {
                 {!uploading && <p className="mt-2 text-xs text-ink-3">You can leave this page — screening continues in the background.</p>}
               </>
             ) : null}
-            {taskCounts?.failed > 0 && !uploading && (
-              <p className={cn('flex items-center gap-2 text-sm text-danger', activeTasks > 0 && 'mt-3 border-t border-line pt-3')}>
+            {newFailures > 0 && !uploading && (
+              <div className={cn('flex items-center gap-2 text-sm text-danger', activeTasks > 0 && 'mt-3 border-t border-line pt-3')}>
                 <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {taskCounts.failed} resume{taskCounts.failed === 1 ? '' : 's'} could not be processed. Re-upload to retry.
-              </p>
+                <p className="flex-1">{newFailures} resume{newFailures === 1 ? '' : 's'} could not be processed. Re-upload to retry.</p>
+                <Button variant="ghost" size="sm" onClick={dismissFailures}>Dismiss</Button>
+              </div>
             )}
           </Card>
         )}

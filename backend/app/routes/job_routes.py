@@ -12,7 +12,8 @@ from app.auth import AuthUser, get_current_user
 from app.database import db
 from app.org import ensure_org
 
-SHORTLISTED_STATUSES = ["Shortlisted", "Interview", "Offer"]
+# Everyone who made it past screening, so hiring someone doesn't lower the shortlist rate
+SHORTLISTED_STATUSES = ["Shortlisted", "Interview", "Offer", "Hired"]
 JobStatus = Literal["Active", "Draft", "Closed"]
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -191,9 +192,25 @@ async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_c
     if not existing_job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # Build update data (only non-None fields)
-    update_data = _sync_status({k: v for k, v in job.model_dump().items() if v is not None})
-    
+    # Fields sent as null clear optional values (department, salary, ...);
+    # required fields and the skill lists can't be cleared to null
+    update_data = job.model_dump(exclude_unset=True)
+    for key in ("job_title", "job_description", "required_skills", "preferred_skills", "status", "is_active"):
+        if update_data.get(key) is None:
+            update_data.pop(key, None)
+    update_data = _sync_status(update_data)
+
+    # Candidates are scored against the embedding, so keep it in step with the text
+    # (the frontend sends every field, so compare values rather than keys)
+    if any(key in update_data and update_data[key] != existing_job.get(key)
+           for key in ("job_title", "job_description", "required_skills", "preferred_skills")):
+        from app.services.embedding_service import generate_embedding
+        merged = {**existing_job, **update_data}
+        jd_text = f"{merged.get('job_title', '')} {merged.get('job_description', '')} " + \
+                  f"required skills: {', '.join(merged.get('required_skills') or [])} " + \
+                  f"preferred skills: {', '.join(merged.get('preferred_skills') or [])}"
+        update_data["jd_embedding"] = await asyncio.to_thread(generate_embedding, jd_text)
+
     if update_data:
         await db.jobs.update_one({"_id": obj_id}, {"$set": update_data})
     
@@ -205,8 +222,14 @@ async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_c
 async def delete_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     """Delete a job posting"""
     result = await db.jobs.delete_one(await _owned_job_filter(job_id, user))
-    
+
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
+    # Drop the job's pipeline and stop screening resumes still waiting in the queue.
+    # Candidate records stay: the same person can be in other jobs' pipelines.
+    await db.applications.delete_many({"job_id": job_id})
+    await db.evaluations.delete_many({"job_id": job_id})
+    await db.tasks.delete_many({"job_id": job_id, "status": "queued"})
+
     return {"message": "Job deleted successfully"}
