@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.auth import require_candidate_access
 from pydantic import BaseModel
 
-from app.services.fact_checker_service import fact_check
+from app.services.fact_checker_service import AIServiceUnavailable, fact_check
 
 router = APIRouter(prefix="/fact-checker", tags=["fact-checker"])
 
@@ -32,11 +32,14 @@ async def check_fact(candidate_id: str, body: FactCheckRequest):
     if not body.message.strip():
         raise HTTPException(400, "Message cannot be empty")
 
-    result = await fact_check(
-        candidate_id=candidate_id,
-        user_message=body.message.strip(),
-        candidate_name=body.candidate_name,
-    )
+    try:
+        result = await fact_check(
+            candidate_id=candidate_id,
+            user_message=body.message.strip(),
+            candidate_name=body.candidate_name,
+        )
+    except AIServiceUnavailable:
+        raise HTTPException(503, "The AI service is down, so the fact checker can't answer right now. Try again later.")
 
     return {
         "status": "success",

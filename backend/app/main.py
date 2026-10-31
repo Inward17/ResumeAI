@@ -1,5 +1,6 @@
 import os
 import logging
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import Depends, FastAPI
@@ -8,6 +9,12 @@ from dotenv import load_dotenv
 
 # Load environment variables before app modules read them
 load_dotenv()
+
+# Windows consoles default to cp1252, and logging an emoji there raises inside
+# request handlers; never let a log line break a request
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from app.auth import AUTH_DISABLED, get_current_user
 from app.database import client, ensure_indexes, ping_database

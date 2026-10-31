@@ -12,6 +12,12 @@ const FullPageLoader = () => (
     </div>
 );
 
+/** Where to go after signing in: the page that sent the user to /login, query string included */
+export const redirectTarget = (location) => {
+    const from = location.state?.from;
+    return from?.pathname ? `${from.pathname}${from.search || ''}${from.hash || ''}` : '/dashboard';
+};
+
 /** Signed-in pages; remembers where the user was going */
 const ProtectedRoute = ({ children }) => {
     const { user, loading } = useAuth();
@@ -28,7 +34,7 @@ export const PublicOnlyRoute = () => {
     const location = useLocation();
 
     if (loading) return <FullPageLoader />;
-    if (user) return <Navigate to={location.state?.from?.pathname || '/dashboard'} replace />;
+    if (user) return <Navigate to={redirectTarget(location)} replace />;
     return <Outlet />;
 };
 

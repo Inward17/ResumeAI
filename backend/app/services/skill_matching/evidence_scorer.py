@@ -7,13 +7,15 @@ For each required skill, we:
   1. Normalise to canonical form  (GCP → google cloud platform)
   2. Build a skill-phrase embedding  ("candidate experienced with <skill>")
   3. Compute cosine similarity against every resume section embedding
-  4. Apply evidence-weighted scoring with a max-evidence bonus
+  4. Turn each section into evidence 0–1: 1.0 if the skill is written there,
+     otherwise the similarity rescaled from SIM_FLOOR..SIM_FULL
+  5. Apply evidence-weighted scoring with a max-evidence bonus
 
-Score formula (industry-standard, as recommended):
-    weighted_sum = Σ(section_weight_i × similarity_i)
-    max_bonus    = max(similarity_i) × MAX_BONUS_WEIGHT
-    raw          = weighted_sum + max_bonus      # theoretical max = 1.25
-    score        = clamp(raw / 1.25, 0, 1) × 10 # → 0–10
+Score formula:
+    weighted_sum = Σ(section_weight_i × evidence_i)
+    max_bonus    = max(evidence_i) × MAX_BONUS_WEIGHT
+    score        = clamp((weighted_sum + max_bonus) / max_possible, 0, 1) × 10
+    max_possible = weights of the sections this resume has + MAX_BONUS_WEIGHT
 
 The max-bonus prevents a strong single signal (e.g. 0.90 GitHub similarity)
 from being diluted by zero values in weaker sections.
@@ -29,7 +31,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List
+import re
+from typing import Any, Dict, List, Optional
 
 from .normalizer import normalize_skill
 
@@ -46,11 +49,29 @@ SECTION_WEIGHTS: Dict[str, float] = {
 # Bonus for the single strongest evidence signal (prevents dilution)
 MAX_BONUS_WEIGHT: float = 0.25
 
-# Theoretical maximum of weighted_sum + max_bonus (all sections = 1.0)
-_SCORE_MAX: float = sum(SECTION_WEIGHTS.values()) + MAX_BONUS_WEIGHT  # = 1.25
 
 # Minimum score to consider the skill "found"
 _FOUND_THRESHOLD: float = 3.0
+
+# MiniLM similarity between the skill phrase and a whole section sits around
+# 0.3-0.45 for unrelated skills, so only similarity above SIM_FLOOR counts, and
+# SIM_FULL or more counts as full evidence. A literal mention is always full evidence.
+SIM_FLOOR: float = 0.35
+SIM_FULL: float = 0.75
+
+
+def _mentions(text: str, terms: List[str]) -> bool:
+    """True if any term appears as a whole word ("C++", "Node.js" and "Go" included)."""
+    for term in terms:
+        # Short names like "Go" or "R" only count with the job's own capitalisation
+        flags = 0 if len(term) <= 2 else re.IGNORECASE
+        if re.search(rf"(?<![\w+#.]){re.escape(term)}(?![\w+#])", text, flags):
+            return True
+    return False
+
+
+def _evidence(sim: float) -> float:
+    return min(max((sim - SIM_FLOOR) / (SIM_FULL - SIM_FLOOR), 0.0), 1.0)
 
 
 def _skill_phrase(canonical: str) -> str:
@@ -69,6 +90,7 @@ def _skill_phrase(canonical: str) -> str:
 async def score_skill(
     skill: str,
     section_embeddings: Dict[str, List[float]],
+    section_texts: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Compute the evidence-weighted score (0–10) for a single *skill*.
@@ -119,19 +141,20 @@ async def score_skill(
             "evidence": {},
         }
 
-    # ── Weighted sum ─────────────────────────────────────────────────────────
-    weighted_sum = sum(
-        SECTION_WEIGHTS.get(sec, 0.0) * sim
+    # ── Evidence per section: literal mention, else calibrated similarity ──
+    terms = list(dict.fromkeys([skill.strip(), canonical]))
+    section_evidence = {
+        sec: 1.0 if _mentions((section_texts or {}).get(sec, ""), terms) else _evidence(sim)
         for sec, sim in section_sims.items()
-    )
+    }
 
-    # ── Max-evidence bonus ───────────────────────────────────────────────────
-    max_sim = max(section_sims.values())
-    max_bonus = max_sim * MAX_BONUS_WEIGHT
+    weighted_sum = sum(SECTION_WEIGHTS.get(sec, 0.0) * ev for sec, ev in section_evidence.items())
+    max_bonus = max(section_evidence.values()) * MAX_BONUS_WEIGHT
 
-    # ── Normalise to 0–10 ────────────────────────────────────────────────────
-    raw = weighted_sum + max_bonus
-    score = round(min(raw / _SCORE_MAX, 1.0) * 10, 2)
+    # ── Normalise to 0–10 over the sections this resume has ─────────────────
+    # (no GitHub or projects section must not cap the score)
+    score_max = sum(SECTION_WEIGHTS.get(sec, 0.0) for sec in section_evidence) + MAX_BONUS_WEIGHT
+    score = round(min((weighted_sum + max_bonus) / score_max, 1.0) * 10, 2)
     found = score >= _FOUND_THRESHOLD
 
     return {
@@ -146,13 +169,14 @@ async def score_skill(
 async def score_all_skills(
     required_skills: List[str],
     section_embeddings: Dict[str, List[float]],
+    section_texts: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Score all required skills concurrently against pre-computed section
     embeddings.  Returns a list in the same order as *required_skills*.
     """
     results = await asyncio.gather(
-        *[score_skill(skill, section_embeddings) for skill in required_skills],
+        *[score_skill(skill, section_embeddings, section_texts) for skill in required_skills],
         return_exceptions=True,
     )
 

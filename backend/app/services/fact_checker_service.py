@@ -57,7 +57,8 @@ logger = logging.getLogger(__name__)
 
 # ── Groq config ─────────────────────────────────────────────────────
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# Groq retires models; override with GROQ_MODEL when this one goes
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
@@ -82,12 +83,16 @@ Return ONLY a JSON object with these fields:
 Return ONLY the JSON, no markdown, no explanation."""
 
 
+class AIServiceUnavailable(Exception):
+    """Groq is unreachable or not configured, so the fact checker can't answer."""
+
+
 async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Optional[str]:
-    """Make a single Groq chat completion call. Returns the assistant text or None."""
+    """Make a single Groq chat completion call. Returns the assistant text; raises AIServiceUnavailable."""
     api_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     if not api_key:
         logger.error("[FactChecker] No GROQ_API_KEY configured")
-        return None
+        raise AIServiceUnavailable("GROQ_API_KEY is not configured")
 
     payload = {
         "model": GROQ_MODEL,
@@ -108,16 +113,18 @@ async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Option
             resp = await client.post(GROQ_URL, json=payload, headers=headers)
         if resp.status_code != 200:
             logger.error("[FactChecker] Groq HTTP %d: %s", resp.status_code, resp.text[:300])
-            return None
+            raise AIServiceUnavailable(f"Groq returned HTTP {resp.status_code}")
         data = resp.json()
         return (
             data.get("choices", [{}])[0]
             .get("message", {})
             .get("content", "")
         )
+    except AIServiceUnavailable:
+        raise
     except Exception as e:
         logger.error("[FactChecker] Groq call failed: %s", e)
-        return None
+        raise AIServiceUnavailable(str(e)) from e
 
 
 async def _classify_intent(user_message: str, candidate_name: str) -> Dict[str, str]:

@@ -11,6 +11,9 @@ from app.database import db
 
 router = APIRouter(prefix="/jobs", tags=["evaluations"])
 
+# Statuses (old spellings included) that move to "Interview" once an evaluation is submitted
+EARLY_STATUSES = ["Under Review", "Shortlisted", "New", "Reviewing", "Pending Review", "new", "shortlisted", None]
+
 
 class QuestionEvaluation(BaseModel):
     question_id: int
@@ -54,12 +57,19 @@ async def submit_evaluation(job_id: str, candidate_id: str, evaluation: Evaluati
         upsert=True,
     )
 
+    # An interviewed candidate is at the Interview stage; later stages are left alone
+    moved = await db.applications.update_one(
+        {"job_id": job_id, "candidate_id": candidate_id, "status": {"$in": EARLY_STATUSES}},
+        {"$set": {"status": "Interview", "updated_at": datetime.utcnow()}},
+    )
+
     print(f"[Evaluation] ✅ Stored evaluation for {candidate_id} → job {job_id}: {evaluation.total_score:.1f}%")
 
     return {
         "status": "success",
         "message": "Evaluation submitted",
         "total_score": evaluation.total_score,
+        "candidate_status": "Interview" if moved.modified_count else None,
     }
 
 

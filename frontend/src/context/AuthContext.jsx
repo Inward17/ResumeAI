@@ -16,13 +16,22 @@ import { apiFetch } from '../services/api';
 
 export const AuthContext = createContext(null);
 
+// Local testing only: skip sign-in and act as the backend's AUTH_DISABLED user.
+// import.meta.env.DEV is false in production builds, so this never ships.
+const AUTH_BYPASS = import.meta.env.DEV && import.meta.env.VITE_AUTH_DISABLED === 'true';
+const DEV_USER = { uid: 'dev-user', email: 'dev@localhost', displayName: 'Local Developer', photoURL: null };
+
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(AUTH_BYPASS ? DEV_USER : null);
+    const [loading, setLoading] = useState(!AUTH_BYPASS);
     const [, setProfileVersion] = useState(0);
 
     // Listen for auth state changes
     useEffect(() => {
+        if (AUTH_BYPASS) {
+            apiFetch('/api/auth/me').catch(() => {});
+            return undefined;
+        }
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             setUser(user);
             setLoading(false);

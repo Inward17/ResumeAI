@@ -317,7 +317,7 @@ export const ApiKeysSettings = () => {
         title={`Revoke “${revoking?.name}”?`} description="Anything using this key stops working immediately. This can't be undone."
         confirmLabel="Revoke key"
         onConfirm={async () => {
-          try { await revokeApiKey(revoking.id); toast({ title: 'Key revoked' }); await load(); } catch (err) { toast({ title: 'Could not revoke', description: err.message, variant: 'destructive' }); }
+          try { await revokeApiKey(revoking.id); if (newKey?.id === revoking.id) setNewKey(null); toast({ title: 'Key revoked' }); await load(); } catch (err) { toast({ title: 'Could not revoke', description: err.message, variant: 'destructive' }); }
         }} />
     </div>
   );

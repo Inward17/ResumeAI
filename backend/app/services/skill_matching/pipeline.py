@@ -115,7 +115,7 @@ async def run_unified_skill_scoring(
             return _empty
 
         # ── Step 3: score each skill concurrently ──────────────────────────
-        skill_scores = await score_all_skills(all_skills, section_embeddings)
+        skill_scores = await score_all_skills(all_skills, section_embeddings, section_texts)
 
         # ── Step 4: aggregate ───────────────────────────────────────────────
         if skill_scores:

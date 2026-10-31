@@ -79,7 +79,12 @@ async def _gemini(http):
 async def _groq(http):
     r = await http.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}"})
     r.raise_for_status()
-    return {"metrics": [], "note": "Key is valid. Groq reports rate limits per model on each request, not through an API."}
+    # A valid key isn't enough: Groq retires models, and then every AI call fails
+    from app.services.interview_questions_service import GROQ_MODEL
+    if GROQ_MODEL not in {m.get("id") for m in r.json().get("data", [])}:
+        return {"metrics": [], "status": "error",
+                "error": f"Model {GROQ_MODEL} is no longer available. Set GROQ_MODEL to a current Groq model."}
+    return {"metrics": [], "note": f"Key is valid and {GROQ_MODEL} is available. Groq reports rate limits per model on each request, not through an API."}
 
 
 async def _composio(http):
@@ -114,7 +119,7 @@ async def _check(http, pid, name, purpose, env, fn):
     try:
         result = await fn(http)
         status = "ok" if os.getenv(env) else "limited"
-        return {**row, **result, "status": status}
+        return {**row, "status": status, **result}
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code
         return {**row, "status": "error", "error": "Key rejected" if code in (401, 403) else f"HTTP {code}"}

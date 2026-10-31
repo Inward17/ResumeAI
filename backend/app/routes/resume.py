@@ -881,6 +881,13 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
     }
 
     dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
+    evaluations_by_id = {
+        e["candidate_id"]: e
+        async for e in db.evaluations.find(
+            {"job_id": job_id, "candidate_id": {"$in": candidate_ids}},
+            {"candidate_id": 1, "total_score": 1, "submitted_at": 1},
+        )
+    }
     verification_by_id = await _verification_by_candidate("verification_data", candidate_ids)
     agent_verification_by_id = (
         await _verification_by_candidate("verification_data_agent", candidate_ids) if dual_run else {}
@@ -928,7 +935,11 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             # None (not 0) when GitHub wasn't verified, so the UI shows "not analysed"
             "github_score": score_details.get("skills_match_score", 0)
             if ((verification or {}).get("verificationStatus") or {}).get("github") == "verified" else None,
-            "verification_score": score_details.get("overall_score", 0),
+            # None when no source could be checked: "not verified" is not "0% credible"
+            "verification_score": None if score_details.get("score_source") == "unverified"
+            else score_details.get("overall_score", 0),
+            "interview_score": (evaluations_by_id.get(candidate_id) or {}).get("total_score"),
+            "interviewed_at": (evaluations_by_id.get(candidate_id) or {}).get("submitted_at"),
             "skills": _split_skills(parsed.get("skills")),
             "education": [e for e in parsed.get("education") or [] if isinstance(e, str)],
             "experience": [e for e in parsed.get("experience") or [] if isinstance(e, str)],

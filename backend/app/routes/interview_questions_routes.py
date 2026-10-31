@@ -69,23 +69,5 @@ async def get_interview_questions(job_id: str, candidate_id: str):
         )
         print(f"[InterviewQ] ✅ Cached {len(questions)} questions for {candidate_id}")
         return {"status": "success", "questions": questions, "cached": False}
-    else:
-        # Groq failed — return a fallback set
-        fallback = [
-            {
-                "id": 1,
-                "question": "Tell us about your most challenging technical project and how you overcame the key obstacles.",
-                "tags": ["Problem Solving", "Technical Depth", "Resilience"],
-            },
-            {
-                "id": 2,
-                "question": "How do you approach learning a new technology or framework when joining a new team?",
-                "tags": ["Learning Agility", "Adaptability", "Self-Motivation"],
-            },
-            {
-                "id": 3,
-                "question": "Describe a time you had to make a trade-off between code quality and delivery speed.",
-                "tags": ["Pragmatism", "Code Quality", "Time Management"],
-            },
-        ]
-        return {"status": "fallback", "questions": fallback, "cached": False}
+    # No made-up fallback: the interviewer should know the AI part isn't working
+    raise HTTPException(503, "The AI service is down, so interview questions can't be generated right now. Try again later.")

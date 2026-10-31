@@ -11,11 +11,18 @@ Set RESUME_WORKERS=0 on the API process to make it API-only.
 """
 import asyncio
 import logging
+import sys
 import signal
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Windows consoles default to cp1252, and logging an emoji there raises inside
+# request handlers; never let a log line break a request
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 from app.database import client, ensure_indexes, ping_database
 from app.routes.resume import process_resume_task
