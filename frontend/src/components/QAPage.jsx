@@ -4,6 +4,7 @@ import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check,
 import {
   getJob, getJobCandidate, getInterviewQuestions, getEvaluation, submitEvaluation, updateCandidateStatus,
 } from '../services/jobService';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/use-toast';
 import { cn } from '../lib/utils';
 import FactCheckerBot from './FactCheckerBot';
@@ -11,6 +12,15 @@ import { ConfirmDialog } from './Modal';
 import {
   Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, Skeleton, formatDate,
 } from './common';
+
+// ponytail: drafts for abandoned interviews stay in this browser, add an expiry if they pile up
+const readDraft = (key) => {
+  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+};
+
+const removeDraft = (key) => {
+  try { localStorage.removeItem(key); } catch { /* storage blocked: nothing was saved */ }
+};
 
 const TopicTag = ({ label, selected, onClick }) => (
   <button
@@ -45,7 +55,7 @@ const QuestionCard = ({ index, question, tags, selectedTags, onToggleTag }) => {
           {selected}/{total} covered
         </span>
       </div>
-      <p className="mb-4 font-serif text-[1.45rem] leading-snug text-ink">{question}</p>
+      <p className="mb-4 font-serif text-[1.2rem] font-light leading-snug text-ink md:text-[1.35rem]">{question}</p>
       <p className="mb-2 text-xs text-ink-3">Tick each point the candidate covered</p>
       <div className="flex flex-wrap gap-2">
         {tags.map((tag, i) => (
@@ -61,6 +71,8 @@ const QAPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const draftKey = `resumeai:interview-draft:${user?.uid}:${jobId}:${candidateId}`;
   // Go back to wherever the interview was started from (pipeline or Interviews page)
   const returnTo = location.state?.from || `/jobs/${jobId}?candidate=${candidateId}`;
   const returnLabel = location.state?.fromLabel || 'Back to pipeline';
@@ -77,6 +89,10 @@ const QAPage = () => {
   const [selectedKeywords, setSelectedKeywords] = useState({}); // { [questionId]: ["tag", ...] }
   const [lastSubmitted, setLastSubmitted] = useState(null);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [factMessages, setFactMessages] = useState([]);
+  const [ticksEdited, setTicksEdited] = useState(false); // ticks only join the draft once they differ from the submission
+  const [restoredDraft, setRestoredDraft] = useState(null); // 'ticks' | 'chat' | null
+  const [draftReadyFor, setDraftReadyFor] = useState(null); // draft key already restored; nothing is saved before that
 
   useEffect(() => {
     Promise.all([getJob(jobId), getJobCandidate(jobId, candidateId)])
@@ -104,16 +120,47 @@ const QAPage = () => {
         setSelectedKeywords(restored);
         setLastSubmitted(previous.submitted_at);
       }
+      // An unsubmitted draft wins over the last submission
+      const draft = readDraft(draftKey);
+      if (draft?.ticks) {
+        const restored = {};
+        qs.forEach((q) => {
+          restored[q.id] = (draft.ticks[q.id] || []).filter((t) => q.tags?.includes(t));
+        });
+        setSelectedKeywords(restored);
+        setTicksEdited(true);
+      }
+      if (draft?.messages?.length) setFactMessages((prev) => (prev.length ? prev : draft.messages));
+      if (draft?.open) setIsFactCheckerOpen(true);
+      setRestoredDraft(draft?.ticks ? 'ticks' : draft?.messages?.length ? 'chat' : null);
+      setDraftReadyFor(draftKey);
     } catch (err) {
       setQuestionError(err.message || 'Could not generate interview questions.');
     } finally {
       setLoadingQuestions(false);
     }
-  }, [jobId, candidateId]);
+  }, [jobId, candidateId, draftKey]);
 
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
 
+  useEffect(() => {
+    if (draftReadyFor !== draftKey) return;
+    // Merely opening an interview must not create a draft, or the next load would claim one was restored
+    if (!ticksEdited && !factMessages.length && !isFactCheckerOpen) {
+      removeDraft(draftKey);
+      return;
+    }
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({
+        ticks: ticksEdited ? selectedKeywords : null,
+        messages: factMessages,
+        open: isFactCheckerOpen,
+      }));
+    } catch { /* storage blocked or full: the page still works, without a draft */ }
+  }, [draftKey, draftReadyFor, ticksEdited, selectedKeywords, factMessages, isFactCheckerOpen]);
+
   const handleToggleTag = (questionId, tag) => {
+    setTicksEdited(true);
     setSelectedKeywords((prev) => {
       const current = prev[questionId] || [];
       return { ...prev, [questionId]: current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag] };
@@ -143,6 +190,7 @@ const QAPage = () => {
         total_selected: totalSelected,
         total_possible: totalPossible,
       });
+      removeDraft(draftKey);
       toast({ title: 'Evaluation submitted', description: `${candidate?.name}: ${aggregatePercent}% of key points covered.` });
       leave();
     } catch (err) {
@@ -155,6 +203,7 @@ const QAPage = () => {
   const handleReject = async () => {
     try {
       await updateCandidateStatus(jobId, candidateId, 'Rejected');
+      removeDraft(draftKey);
       toast({ title: 'Candidate rejected', description: candidate?.name });
       leave();
     } catch (err) {
@@ -174,6 +223,16 @@ const QAPage = () => {
   }
 
   const canSubmit = !submitting && !loadingQuestions && !questionError && !!candidate;
+  let restoreNote = null;
+  if (restoredDraft === 'ticks') {
+    restoreNote = lastSubmitted
+      ? `Unsubmitted draft restored. It replaces the evaluation submitted on ${formatDate(lastSubmitted)}; submit to keep it.`
+      : 'Unsubmitted draft restored. Submit the evaluation to keep it.';
+  } else if (lastSubmitted) {
+    restoreNote = `Evaluation submitted on ${formatDate(lastSubmitted)}. Your ticks are restored; submitting again replaces it.`;
+  } else if (restoredDraft === 'chat') {
+    restoreNote = 'Your fact checker conversation was restored.';
+  }
 
   return (
     <div className={cn('flex min-h-full flex-col', isFactCheckerOpen && 'md:pr-[380px]')}>
@@ -255,10 +314,8 @@ const QAPage = () => {
           {/* Questions */}
           <div>
             <h2 className="mb-4 text-base font-semibold text-ink">Questions for this candidate</h2>
-            {!loadingQuestions && lastSubmitted && (
-              <p className="mb-4 rounded-md border border-line bg-subtle px-3 py-2 text-sm text-ink-2">
-                Evaluation submitted on {formatDate(lastSubmitted)}. Your ticks are restored; submitting again replaces it.
-              </p>
+            {!loadingQuestions && restoreNote && (
+              <p className="mb-4 rounded-md border border-line bg-subtle px-3 py-2 text-sm text-ink-2">{restoreNote}</p>
             )}
 
             {loadingQuestions && (
@@ -321,7 +378,8 @@ const QAPage = () => {
       {isFactCheckerOpen && candidate && (
         <aside className="fixed inset-0 z-[45] flex flex-col bg-surface md:inset-y-0 md:left-auto md:right-0 md:w-[380px] md:border-l md:border-line md:shadow-pop"
           aria-label="AI fact checker">
-          <FactCheckerBot candidateId={candidate.id} candidateName={candidate.name} onClose={() => setIsFactCheckerOpen(false)} />
+          <FactCheckerBot candidateId={candidate.id} candidateName={candidate.name} messages={factMessages} setMessages={setFactMessages}
+            onClose={() => setIsFactCheckerOpen(false)} />
         </aside>
       )}
 

@@ -11,7 +11,7 @@ module.exports = {
       fontFamily: {
         sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         // Display serif for page titles and headline numbers only
-        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+        serif: ['Fraunces', 'ui-serif', 'Georgia', 'serif'],
       },
       colors: {
         btn: { DEFAULT: token('btn'), hover: token('btn-hover'), fg: token('btn-fg') },

@@ -6,10 +6,12 @@ import { IconButton } from './common';
 
 const SUGGESTIONS = ['Is their most recent role verified?', 'Do their GitHub projects match the resume?', 'Which resume claims have no supporting evidence?'];
 
-const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
-  const [messages, setMessages] = useState([
+// `messages` lives in QAPage so the conversation can be saved in the interview draft
+const FactCheckerBot = ({ candidateId, candidateName, messages, setMessages, onClose }) => {
+  const chat = [
     { role: 'assistant', text: `Ask me to check any claim about ${candidateName}. I'll look at the resume and the verification evidence.` },
-  ]);
+    ...messages,
+  ];
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
@@ -53,7 +55,7 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto bg-canvas p-4" aria-live="polite">
-        {messages.map((msg, idx) => (
+        {chat.map((msg, idx) => (
           <div key={idx} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
             <div
               className={cn(
@@ -67,7 +69,7 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
             </div>
           </div>
         ))}
-        {messages.length === 1 && !isTyping && (
+        {messages.length === 0 && !isTyping && (
           <div className="space-y-1.5 pt-1">
             <p className="text-xs text-ink-3">Try asking</p>
             {SUGGESTIONS.map((s) => (
