@@ -59,4 +59,4 @@ Colours are CSS variables in `src/index.css` (light under `:root`, dark under `.
 | `primary` (`-text`, `-soft`, `-soft-fg`) | Forest-green accent: links, focus, progress, active states |
 | `success`, `warning`, `danger`, `info` (+ `-soft`) | Status colours |
 
-Type: Geist for the interface, Fraunces (`font-serif`) for page titles and headline numbers only.
+Type: Geist for the interface, Instrument Serif (`font-serif`) for page titles and headline numbers only.

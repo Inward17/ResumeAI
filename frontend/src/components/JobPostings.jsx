@@ -25,7 +25,7 @@ const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
     <Card className="group relative flex flex-col p-5 transition-colors hover:border-line-strong">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-serif text-[1.25rem] leading-tight text-ink">
+          <h3 className="font-serif text-[1.45rem] leading-tight text-ink">
             {/* Stretched link: the whole card opens the pipeline */}
             <Link to={`/jobs/${job.id}`} className="outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-primary/60">
               {job.title}
