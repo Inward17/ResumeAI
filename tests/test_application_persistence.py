@@ -136,6 +136,15 @@ class TestSuccessfulPaths:
         assert task["completed_at"]
         assert (await mock_db.applications.find_one({}))["score_details"]["score_source"] == "unverified"
 
+    async def test_verification_failure_without_a_message_is_still_a_failure(self, mock_db):
+        await _candidate(mock_db, github_username="jane")
+        run = AsyncMock(side_effect=TimeoutError())
+        with patch.object(resume.unified_verification_service, "run_unified_verification", run):
+            await resume._run_unified_verification("c1", JOB_ID)
+        task = await _task(mock_db)
+        assert task["status"] == "verification_failed" and task["error"] == "TimeoutError"
+        assert await mock_db.applications.count_documents({}) == 1
+
     @pytest.mark.parametrize("verification", [_verified, _verification_down])
     async def test_terminal_status_is_written_after_the_save(self, mock_db, verification):
         await _candidate(mock_db, github_username="jane")

@@ -577,7 +577,8 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
     except Exception as e:
         print(f"[VERIFY] Verification failed for {candidate_id}: {e}")
         traceback.print_exc()
-        verification_error = str(e)
+        # str(e) is empty for exceptions like TimeoutError()
+        verification_error = str(e) or type(e).__name__
         # The application is still created, with scores re-read from the DB
         verification_dict = None
 
@@ -597,7 +598,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         )
         return
 
-    if verification_error:
+    if verification_error is not None:
         await db.tasks.update_one(
             {"task_id": task_id},
             {"$set": {"status": "verification_failed", "completed_at": datetime.utcnow(), "error": verification_error}}
