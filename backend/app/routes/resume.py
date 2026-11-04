@@ -1,5 +1,6 @@
 import os
 import re
+import traceback
 import asyncio
 import uuid
 from bson import ObjectId
@@ -438,11 +439,20 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
     if not task_id:
         task_id = candidate_id
 
+    verification_dict = None
+    verification_error = None
+    task_result = {"verified": False, "reason": "No verification sources"}
+
     try:
         # Get candidate data
         candidate = await db.candidates.find_one({"candidate_id": candidate_id})
         if not candidate:
             print(f"Candidate {candidate_id} not found for verification")
+            await db.tasks.update_one(
+                {"task_id": task_id},
+                {"$set": {"status": "failed", "completed_at": datetime.utcnow(),
+                          "error": "The parsed candidate could not be found. Re-upload the resume to retry."}}
+            )
             return
         
         github_username = candidate.get("github_username")
@@ -479,7 +489,6 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
             
             result = None
             agent_result = None
-            verification_dict = None
 
             if use_agent:
                 
@@ -560,34 +569,44 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
                 except Exception:
                     verification_dict = result.model_dump() if hasattr(result, 'model_dump') else None
             
-            # Update task as done
-            await db.tasks.update_one(
-                {"task_id": task_id},
-                {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": {"verified": True}}}
-            )
+            task_result = {"verified": True}
         else:
-            verification_dict = None
             # No verification sources available
             print(f"[VERIFY] No verification sources for {candidate_id} (no github/linkedin/profile)")
-            await db.tasks.update_one(
-                {"task_id": task_id},
-                {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": {"verified": False, "reason": "No verification sources"}}}
-            )
-        
-        # Create application record AFTER verification/agent has fully resolved
-        # Pass verification_dict directly so _create_application doesn't re-query DB
-        await _create_application(candidate_id, job_id, verification_data=verification_dict)
-            
+
     except Exception as e:
         print(f"[VERIFY] Verification failed for {candidate_id}: {e}")
-        import traceback
         traceback.print_exc()
+        verification_error = str(e)
+        # The application is still created, with scores re-read from the DB
+        verification_dict = None
+
+    # Create application record AFTER verification/agent has fully resolved.
+    # The task only reports success once the candidate is saved to the job's pipeline.
+    try:
+        await _create_application(candidate_id, job_id, verification_data=verification_dict)
+    except Exception as e:
+        print(f"[APP] FAILED to save application for {candidate_id}: {e}")
+        traceback.print_exc()
+        # Exception type only: the task's error is returned by the API, and driver
+        # messages can contain database hosts
         await db.tasks.update_one(
             {"task_id": task_id},
-            {"$set": {"status": "verification_failed", "error": str(e)}}
+            {"$set": {"status": "failed", "completed_at": datetime.utcnow(),
+                      "error": f"Could not save this candidate to the job ({type(e).__name__}). Re-upload the resume to retry."}}
         )
-        # Still create application even if verification failed (will query DB as fallback)
-        await _create_application(candidate_id, job_id, verification_data=None)
+        return
+
+    if verification_error:
+        await db.tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": "verification_failed", "completed_at": datetime.utcnow(), "error": verification_error}}
+        )
+    else:
+        await db.tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": "done", "completed_at": datetime.utcnow(), "result": task_result}}
+        )
 
 
 async def _create_application(candidate_id: str, job_id: str, verification_data: dict = None):
@@ -599,130 +618,114 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
         verification_data: Pre-computed verification dict (from VerificationDataModel.to_mongo_dict()).
                           If provided, used directly instead of re-querying MongoDB.
                           If None, falls back to querying the verification_data collection.
+
+    Raises on any scoring or database failure: the caller decides how the task ends,
+    so a candidate is never reported as processed without being saved to the job.
     """
-    try:
-        # ── Step 1: Get verification data ──────────────────────────────────
-        verification = verification_data  # Use passed-in data if available
+    # ── Step 1: Get verification data ──────────────────────────────────
+    verification = verification_data  # Use passed-in data if available
+    
+    if verification is None:
+        # Fallback: query MongoDB (used when called from exception handler)
+        import os
+        dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
+        query = {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
         
-        if verification is None:
-            # Fallback: query MongoDB (used when called from exception handler)
-            import os
-            dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
-            query = {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
-            
-            if dual_run:
-                v_legacy = await db.verification_data.find_one(query)
-                v_agent  = await db.verification_data_agent.find_one(query)
-                if v_legacy and v_legacy.get("matchScore"):
-                    verification = v_legacy
-                elif v_agent and v_agent.get("matchScore"):
-                    verification = v_agent
-                else:
-                    verification = v_legacy or v_agent
+        if dual_run:
+            v_legacy = await db.verification_data.find_one(query)
+            v_agent  = await db.verification_data_agent.find_one(query)
+            if v_legacy and v_legacy.get("matchScore"):
+                verification = v_legacy
+            elif v_agent and v_agent.get("matchScore"):
+                verification = v_agent
             else:
-                verification = await db.verification_data.find_one(query)
-            
-            print(f"[APP] DB fallback query for {candidate_id}: found={'yes' if verification else 'NO'}")
+                verification = v_legacy or v_agent
         else:
-            print(f"[APP] Using pre-computed verification data for {candidate_id}")
+            verification = await db.verification_data.find_one(query)
         
-        # ── Step 2: Extract verification scores ───────────────────────────
-        verification_bonus = 0
-        if verification and verification.get("verificationStatus"):
-            status = verification["verificationStatus"]
-            if status.get("github") == "verified":
-                verification_bonus += 5
-            if status.get("linkedin") == "verified":
-                verification_bonus += 5
-            if status.get("webCheck") == "verified":
-                verification_bonus += 5
-        
-        github_verification_score = 0
-        github_v2_data: Dict[str, Any] = {}
-        if verification and verification.get("githubData"):
-            github_data = verification["githubData"]
-            github_verification_score = github_data.get("score", 0) or github_data.get("score100", 0)
-            github_v2_data = github_data.get("github_v2_data") or {}
+        print(f"[APP] DB fallback query for {candidate_id}: found={'yes' if verification else 'NO'}")
+    else:
+        print(f"[APP] Using pre-computed verification data for {candidate_id}")
+    
+    # ── Step 2: Extract verification scores ───────────────────────────
+    verification_bonus = 0
+    if verification and verification.get("verificationStatus"):
+        status = verification["verificationStatus"]
+        if status.get("github") == "verified":
+            verification_bonus += 5
+        if status.get("linkedin") == "verified":
+            verification_bonus += 5
+        if status.get("webCheck") == "verified":
+            verification_bonus += 5
+    
+    github_verification_score = 0
+    github_v2_data: Dict[str, Any] = {}
+    if verification and verification.get("githubData"):
+        github_data = verification["githubData"]
+        github_verification_score = github_data.get("score", 0) or github_data.get("score100", 0)
+        github_v2_data = github_data.get("github_v2_data") or {}
 
-        match_score = verification.get("matchScore", {}) if verification else {}
-        overall_credibility = match_score.get("overallCredibility", 0)
-        
-        print(
-            f"[APP] Scores for {candidate_id}: "
-            f"overallCredibility={overall_credibility}, "
-            f"github={github_verification_score}, "
-            f"bonus={verification_bonus}, "
-            f"source={'verified' if match_score else 'unverified'}"
-        )
+    match_score = verification.get("matchScore", {}) if verification else {}
+    overall_credibility = match_score.get("overallCredibility", 0)
+    
+    print(
+        f"[APP] Scores for {candidate_id}: "
+        f"overallCredibility={overall_credibility}, "
+        f"github={github_verification_score}, "
+        f"bonus={verification_bonus}, "
+        f"source={'verified' if match_score else 'unverified'}"
+    )
 
-        # ── Step 3: Load candidate resume + job requirements ──────────────
-        candidate_doc = await db.candidates.find_one({"candidate_id": candidate_id})
-        parsed_resume = candidate_doc.get("parsed", {}) if candidate_doc else {}
-        job_doc = await db.jobs.find_one({"_id": ObjectId(job_id)})
-        required_skills = job_doc.get("required_skills", []) if job_doc else []
-        preferred_skills = job_doc.get("preferred_skills", []) if job_doc else []
+    # ── Step 3: Load candidate resume + job requirements ──────────────
+    candidate_doc = await db.candidates.find_one({"candidate_id": candidate_id})
+    parsed_resume = candidate_doc.get("parsed", {}) if candidate_doc else {}
+    job_doc = await db.jobs.find_one({"_id": ObjectId(job_id)})
+    required_skills = job_doc.get("required_skills", []) if job_doc else []
+    preferred_skills = job_doc.get("preferred_skills", []) if job_doc else []
 
-        # ── Step 4: Unified skill evidence scoring ────────────────────────
-        scoring_result = await run_unified_skill_scoring(
-            required_skills=required_skills,
-            preferred_skills=preferred_skills,
-            parsed=parsed_resume,
-            github_v2_data=github_v2_data,
-        )
-        skill_scores = scoring_result["skill_scores"]
-        jd_match_score = scoring_result["jd_match_score"]
+    # ── Step 4: Unified skill evidence scoring ────────────────────────
+    scoring_result = await run_unified_skill_scoring(
+        required_skills=required_skills,
+        preferred_skills=preferred_skills,
+        parsed=parsed_resume,
+        github_v2_data=github_v2_data,
+    )
+    skill_scores = scoring_result["skill_scores"]
+    jd_match_score = scoring_result["jd_match_score"]
 
-        # FALLBACK: If embedding pipeline returned 0, use fuzzy keyword matcher
-        all_skills = required_skills + preferred_skills
-        if jd_match_score == 0.0 and len(all_skills) > 0:
-            fallback_results = compute_skill_matches(all_skills, parsed_resume)
-            skill_scores = fallback_results
-            jd_match_score = round(sum(s["score"] for s in fallback_results) / len(all_skills), 2) if fallback_results else 0.0
+    # FALLBACK: If embedding pipeline returned 0, use fuzzy keyword matcher
+    all_skills = required_skills + preferred_skills
+    if jd_match_score == 0.0 and len(all_skills) > 0:
+        fallback_results = compute_skill_matches(all_skills, parsed_resume)
+        skill_scores = fallback_results
+        jd_match_score = round(sum(s["score"] for s in fallback_results) / len(all_skills), 2) if fallback_results else 0.0
 
-        # ── Step 5: Build application document ────────────────────────────
-        application_doc = {
-            "candidate_id": candidate_id,
-            "job_id": job_id,
-            "application_date": datetime.utcnow(),
-            "status": "Under Review",
-            "score_details": {
-                "overall_score": overall_credibility,
-                "skills_match_score": github_verification_score,
-                "experience_match_score": match_score.get("experienceMatch", 0),
-                "verification_bonus": verification_bonus,
-                "score_source": "verified" if match_score else "unverified",
-                "jd_match_score": jd_match_score,
-                "skill_matches": skill_scores,
-            },
-            "recruiter_notes": ""
-        }
-
-        # ── Step 6: Upsert application ────────────────────────────────────
-        existing_app = await db.applications.find_one({"candidate_id": candidate_id, "job_id": job_id})
-        if existing_app:
-            await db.applications.update_one(
-                {"candidate_id": candidate_id, "job_id": job_id},
-                {"$set": {
-                    "score_details": application_doc["score_details"],
-                    "updated_at": datetime.utcnow(),
-                }}
-            )
-            print(
-                f"[APP] UPDATED application {candidate_id} → job {job_id} "
-                f"| overall={overall_credibility} | github={github_verification_score}% "
-                f"| bonus={verification_bonus} | jd_match={jd_match_score:.2f}/10 | source={'verified' if match_score else 'unverified'}"
-            )
-        else:
-            await db.applications.insert_one(application_doc)
-            print(
-                f"[APP] CREATED application {candidate_id} → job {job_id} "
-                f"| overall={overall_credibility} | github={github_verification_score}% "
-                f"| bonus={verification_bonus} | jd_match={jd_match_score:.2f}/10 | source={'verified' if match_score else 'unverified'}"
-            )
-    except Exception as e:
-        print(f"[APP] FAILED to create application for {candidate_id}: {e}")
-        import traceback
-        traceback.print_exc()
+    # ── Step 5: Save the application ──────────────────────────────────
+    score_details = {
+        "overall_score": overall_credibility,
+        "skills_match_score": github_verification_score,
+        "experience_match_score": match_score.get("experienceMatch", 0),
+        "verification_bonus": verification_bonus,
+        "score_source": "verified" if match_score else "unverified",
+        "jd_match_score": jd_match_score,
+        "skill_matches": skill_scores,
+    }
+    now = datetime.utcnow()
+    # One atomic upsert, safe to retry: scores refresh, but the recruiter's
+    # status and notes on an existing application are left alone
+    result = await db.applications.update_one(
+        {"candidate_id": candidate_id, "job_id": job_id},
+        {
+            "$set": {"score_details": score_details, "updated_at": now},
+            "$setOnInsert": {"application_date": now, "status": "Under Review", "recruiter_notes": ""},
+        },
+        upsert=True,
+    )
+    print(
+        f"[APP] {'CREATED' if result.upserted_id else 'UPDATED'} application {candidate_id} → job {job_id} "
+        f"| overall={overall_credibility} | github={github_verification_score}% "
+        f"| bonus={verification_bonus} | jd_match={jd_match_score:.2f}/10 | source={'verified' if match_score else 'unverified'}"
+    )
 
 
 async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None):
