@@ -135,7 +135,7 @@ const transformCandidateFromAPI = (c) => ({
     status: normalizeStatus(c.status),
     applicationDate: c.application_date,
     // All scores are 0–100
-    jdMatchScore: pct(c.jd_match_score),
+    jdMatchScore: c.jd_match_score == null ? null : pct(c.jd_match_score),
     githubScore: c.github_score == null ? null : pct(c.github_score),
     // null = no source could be checked (shown as "—", not 0%)
     verificationScore: c.verification_score == null ? null : pct(c.verification_score),
