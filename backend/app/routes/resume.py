@@ -219,8 +219,11 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
     return result
 
 
-async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None) -> str:
-    """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID."""
+async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None, org_id: str | None = None) -> str:
+    """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID.
+
+    org_id is the workspace of the job the resume was uploaded to; duplicates are matched within it.
+    """
     candidate_id = task_id
     try:
         filepath = os.path.join(RESUMES_DIR, filename)
@@ -297,14 +300,18 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         full_name = personal_info.get("full_name")
         phone_number = personal_info.get("phone_number")
         
-        if full_name and phone_number:
-            # Only dedupe within the same recruiter's workspace so one user's
-            # upload never overwrites a candidate that belongs to another user
+        if full_name and phone_number and org_id:
+            # Dedupe within the workspace, so teammates share one candidate record
+            # and another workspace's candidate is never reused. Candidates saved
+            # before org_id was stored only match their own uploader's.
             existing_candidate = await db.candidates.find_one({
                 "parsed.personal_info.full_name": full_name,
                 "parsed.personal_info.phone_number": phone_number,
-                "owner_uid": owner_uid,
                 "candidate_id": {"$ne": candidate_id},
+                "$or": [
+                    {"org_id": org_id},
+                    {"org_id": {"$exists": False}, "owner_uid": owner_uid},
+                ],
             })
             if existing_candidate:
                 print(f"Candidate match found! Reusing candidate_id: {existing_candidate['candidate_id']}")
@@ -320,6 +327,7 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
                 await db.candidates.update_one(
                     {"candidate_id": real_candidate_id},
                     {"$set": {
+                        "org_id": org_id,
                         "filename": filename,
                         "uploaded_at": datetime.utcnow(),
                         "parsed": parsed,
@@ -338,6 +346,7 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         candidate_doc = {
             "candidate_id": candidate_id,
             "owner_uid": owner_uid,
+            "org_id": org_id,
             "filename": filename,
             "uploaded_at": datetime.utcnow(),
             "parsed": parsed,
@@ -731,7 +740,11 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
 
 async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None):
     """Combined background task: parse resume, then run verification"""
-    real_candidate_id = await _parse_and_store(filename, task_id, owner_uid)
+    try:
+        job = await db.jobs.find_one({"_id": ObjectId(job_id)}, {"org_id": 1})
+    except Exception:
+        job = None
+    real_candidate_id = await _parse_and_store(filename, task_id, owner_uid, (job or {}).get("org_id"))
     
     # Check if parsing succeeded before verification
     task = await db.tasks.find_one({"task_id": task_id})
