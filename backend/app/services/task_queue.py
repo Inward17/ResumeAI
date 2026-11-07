@@ -92,8 +92,14 @@ class TaskQueue:
                     last_recovery = datetime.utcnow()
 
                 await self._slots.acquire()
-                self._wakeup.clear()
-                task = await self._claim()
+                try:
+                    self._wakeup.clear()
+                    task = await self._claim()
+                except BaseException:
+                    # The slot only passes to a worker once a task is claimed;
+                    # keeping it on a failed claim would shrink concurrency for good
+                    self._slots.release()
+                    raise
                 if task is None:
                     self._slots.release()
                     try:
