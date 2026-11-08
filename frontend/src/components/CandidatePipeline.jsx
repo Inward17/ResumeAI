@@ -25,7 +25,7 @@ const readDismissed = (jobId) => {
 };
 
 const SORTS = {
-  match: (a, b) => b.jdMatchScore - a.jdMatchScore,
+  match: (a, b) => (b.jdMatchScore ?? -1) - (a.jdMatchScore ?? -1),
   credibility: (a, b) => (b.verificationScore ?? -1) - (a.verificationScore ?? -1),
   name: (a, b) => a.name.localeCompare(b.name),
 };
@@ -194,8 +194,9 @@ const CandidatePipeline = () => {
     const vals = candidates.map((c) => c[key]).filter((v) => v != null);
     return vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null;
   };
-  const topMatch = candidates.length ? Math.max(...candidates.map((c) => c.jdMatchScore)) : null;
-  const strongMatches = candidates.filter((c) => c.jdMatchScore >= prefs.matchThreshold).length;
+  const scored = candidates.map((c) => c.jdMatchScore).filter((v) => v != null);
+  const topMatch = scored.length ? Math.max(...scored) : null;
+  const strongMatches = scored.filter((v) => v >= prefs.matchThreshold).length;
   const needsReview = candidates.filter((c) => c.verificationScore != null && c.verificationScore < prefs.verificationThreshold).length;
   const statusItems = [
     { id: 'All', label: 'All', count: candidates.length },
