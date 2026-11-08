@@ -377,29 +377,6 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         )
 
 
-_agent_loop_unavailable = False
-
-
-def _load_agent_loop():
-    """Import the agent loop for USE_AGENT_SYSTEM=true; None if it can't be loaded.
-
-    Several agent modules (config, memory, planner, executor, ...) are not in the
-    repository, so importing it fails. Failing every candidate's verification
-    because of a feature flag is worse than running the standard pipeline.
-    """
-    global _agent_loop_unavailable
-    if _agent_loop_unavailable:
-        return None
-    try:
-        from app.agent.core.agent_loop import run
-        return run
-    except ImportError as exc:
-        _agent_loop_unavailable = True
-        print(f"[VERIFY] USE_AGENT_SYSTEM=true but the agent system can't be loaded ({exc}); "
-              f"using standard verification instead")
-        return None
-
-
 _INSTITUTION_WORDS = ("university", "institute", "college", "school", "academy", "polytechnic")
 _INSTITUTION_ACRONYMS = {"iit", "nit", "iiit", "bits", "mit"}
 
@@ -481,77 +458,17 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         
         # Run verification
         if github_username or linkedin_url or profile_data:
-            use_agent = os.environ.get("USE_AGENT_SYSTEM", "false").lower() == "true"
-            run_agent_loop = _load_agent_loop() if use_agent else None
-            # Fall back to the standard pipeline if agent mode can't be loaded
-            use_agent = run_agent_loop is not None
-            dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
-            
-            result = None
-            agent_result = None
+            print(f"[VERIFY] Running verification for {candidate_id}")
+            result = await unified_verification_service.run_unified_verification(
+                candidate_id=candidate_id,
+                github_username=github_username,
+                linkedin_url=linkedin_url,
+                profile_data=profile_data,
+                parsed_resume=parsed,
+            )
+            print(f"[VERIFY] Verification complete for {candidate_id}")
 
-            if use_agent:
-                
-                if dual_run:
-                    # Shadow Mode: Run both concurrently
-                    print(f"Shadow Mode active: Running V2 + Agentic Loop for {candidate_id}")
-                    legacy_task = unified_verification_service.run_unified_verification(
-                        candidate_id=candidate_id,
-                        github_username=github_username,
-                        linkedin_url=linkedin_url,
-                        profile_data=profile_data,
-                        parsed_resume=parsed,
-                    )
-                    agent_task = run_agent_loop(candidate_id, job_id)
-                    
-                    gather_result = await asyncio.gather(legacy_task, agent_task, return_exceptions=True)
-                    result = gather_result[0]
-                    agent_result = gather_result[1]
-                    
-                    if isinstance(result, Exception):
-                        raise result
-                    if isinstance(agent_result, Exception):
-                        print(f"Agent Loop Failed: {agent_result}")
-                else:
-                    # Agent ONLY Mode — agent is already awaited, so scoring data is in DB by the time we continue
-                    print(f"Agentic Mode active: Running only Agent Loop for {candidate_id}")
-                    agent_result = await run_agent_loop(candidate_id, job_id)
-                    # Agent writes to verification_data (or verification_data_agent if dual_run).
-                    # Read it back so _create_application gets real scores.
-                    agent_verif_col = "verification_data_agent" if dual_run else "verification_data"
-                    agent_verif_doc = await db[agent_verif_col].find_one(
-                        {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
-                    )
-                    if agent_verif_doc:
-                        verification_dict = dict(agent_verif_doc)
-                        print(f"[AGENT] Read back verification_data for {candidate_id}: overallCredibility={verification_dict.get('matchScore', {}).get('overallCredibility', 0)}")
-                        # Update candidate status from agent scores
-                        agent_match = verification_dict.get("matchScore", {})
-                        if agent_match.get("overallCredibility", 0) > 0:
-                            await db.candidates.update_one(
-                                {"candidate_id": candidate_id},
-                                {"$set": {
-                                    "verification_score": agent_match["overallCredibility"],
-                                    "status": "verified"
-                                }}
-                            )
-                    else:
-                        print(f"[AGENT] No verification_data found after agent run for {candidate_id}")
-                    result = None  # skip legacy Pydantic conversion below
-            else:
-                # Normal Mode
-                print(f"[VERIFY] Legacy mode: running verification for {candidate_id}")
-                result = await unified_verification_service.run_unified_verification(
-                    candidate_id=candidate_id,
-                    github_username=github_username,
-                    linkedin_url=linkedin_url,
-                    profile_data=profile_data,
-                    parsed_resume=parsed,
-                )
-                print(f"[VERIFY] Legacy verification complete for {candidate_id}")
-            
             # Convert result to dict for passing to _create_application
-            # (only if agent path didn't already set verification_dict above)
             if result is not None:
                 match_score = getattr(result, "matchScore", None)
                 if match_score:
@@ -582,7 +499,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         # The application is still created, with scores re-read from the DB
         verification_dict = None
 
-    # Create application record AFTER verification/agent has fully resolved.
+    # Create application record AFTER verification has fully resolved.
     # The task only reports success once the candidate is saved to the job's pipeline.
     try:
         await _create_application(candidate_id, job_id, verification_data=verification_dict)
@@ -628,22 +545,9 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
     
     if verification is None:
         # Fallback: query MongoDB (used when called from exception handler)
-        import os
-        dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
         query = {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
-        
-        if dual_run:
-            v_legacy = await db.verification_data.find_one(query)
-            v_agent  = await db.verification_data_agent.find_one(query)
-            if v_legacy and v_legacy.get("matchScore"):
-                verification = v_legacy
-            elif v_agent and v_agent.get("matchScore"):
-                verification = v_agent
-            else:
-                verification = v_legacy or v_agent
-        else:
-            verification = await db.verification_data.find_one(query)
-        
+        verification = await db.verification_data.find_one(query)
+
         print(f"[APP] DB fallback query for {candidate_id}: found={'yes' if verification else 'NO'}")
     else:
         print(f"[APP] Using pre-computed verification data for {candidate_id}")
@@ -884,7 +788,6 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         )
     }
 
-    dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
     evaluations_by_id = {
         e["candidate_id"]: e
         async for e in db.evaluations.find(
@@ -893,10 +796,6 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         )
     }
     verification_by_id = await _verification_by_candidate("verification_data", candidate_ids)
-    agent_verification_by_id = (
-        await _verification_by_candidate("verification_data_agent", candidate_ids) if dual_run else {}
-    )
-    
     result = []
     for app in applications:
         candidate_id = app.get("candidate_id")
@@ -906,20 +805,8 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         parsed = candidate.get("parsed", {}) if candidate else {}
         personal_info = parsed.get("personal_info", {})
         
-        # Get verification data for additional info
-        verification = None
-        if dual_run:
-            v_legacy = verification_by_id.get(candidate_id)
-            v_agent  = agent_verification_by_id.get(candidate_id)
-            if v_legacy and v_legacy.get("matchScore"):
-                verification = v_legacy
-            elif v_agent and v_agent.get("matchScore"):
-                verification = v_agent
-            else:
-                verification = v_legacy or v_agent
-        else:
-            verification = verification_by_id.get(candidate_id)
-        
+        verification = verification_by_id.get(candidate_id)
+
         # Read stored skill_matches from application document (computed at upload time)
         score_details = app.get("score_details") or {}
         skill_matches = score_details.get("skill_matches", [])

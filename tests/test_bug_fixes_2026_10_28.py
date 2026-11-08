@@ -90,25 +90,6 @@ class TestBE02WebSearchEntities:
         assert profile["experiences"] == [{"companyName": "Google"}]
 
 
-class TestBE03AgentModeFallsBack:
-    async def test_agent_flag_uses_standard_verification(self, mock_db, sample_parsed_resume, monkeypatch):
-        from app.routes import resume
-        monkeypatch.setenv("USE_AGENT_SYSTEM", "true")
-        monkeypatch.setattr(resume, "_agent_loop_unavailable", False)
-        await mock_db.candidates.insert_one({"candidate_id": "c1", "parsed": sample_parsed_resume,
-                                             "github_username": "janedoe"})
-        await mock_db.tasks.insert_one({"task_id": "c1", "status": "parsed"})
-        verification = MagicMock()
-        verification.matchScore.overallCredibility = 70
-        verification.to_mongo_dict.return_value = {"matchScore": {"overallCredibility": 70}}
-        run = AsyncMock(return_value=verification)
-        with patch.object(resume.unified_verification_service, "run_unified_verification", run), \
-             patch.object(resume, "_create_application", AsyncMock()):
-            await resume._run_unified_verification("c1", "job-1")
-        run.assert_awaited_once()
-        assert (await mock_db.tasks.find_one({"task_id": "c1"}))["status"] == "done"
-
-
 class TestBE04RepoSizeInKilobytes:
     def test_commit_depth_uses_kb(self):
         from app.services.github_services_v2.github_service import _compute_repo_stats
