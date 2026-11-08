@@ -85,7 +85,6 @@ backend/
     database.py          MongoDB client and indexes
     routes/              HTTP endpoints (jobs, resumes, verification, interviews, organization…)
     services/            Parsing, task queue, verification, GitHub pipeline, skill matching, usage checks
-    agent/               Optional agent-based verification (USE_AGENT_SYSTEM)
   scripts/               seed_demo.py, assign_job_owner.py
 frontend/src/
   components/            Pages, shared UI kit (common.jsx), settings sections
