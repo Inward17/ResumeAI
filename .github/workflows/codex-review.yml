@@ -14,21 +14,35 @@ concurrency:
 
 jobs:
   request:
-    name: Request review (not review approval)
+    # Green means Codex finished reviewing this exact commit. It is not an
+    # approval: never make this a required check or use it to allow merging.
+    name: Codex review completed (not review approval)
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       # Metadata only. Never check out or execute PR code in this privileged job.
-      - name: Request review once per PR head
+      - name: Request review and wait for the result on this PR head
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          # Set this repository variable to "true" once Codex's own automatic
+          # review covers every PR, so the workflow only watches for the result.
+          CODEX_NATIVE_REVIEW: ${{ vars.CODEX_NATIVE_REVIEW }}
         shell: python
         run: |
           import json
           import os
+          import re
+          import time
+          import urllib.error
           import urllib.request
+
+          CODEX_BOT = "chatgpt-codex-connector[bot]"
+          ACTIONS_BOT = "github-actions[bot]"
+          WAIT_SECONDS = 15 * 60
+          POLL_SECONDS = 30
+          REVIEW_STATE = re.compile(r"codex-review-state:v1 (\{.*?\}) -->", re.DOTALL)
 
           base = "https://api.github.com/repos/" + os.environ["GH_REPO"]
           headers = {
@@ -44,6 +58,44 @@ jobs:
               )
               with urllib.request.urlopen(req, timeout=30) as response:
                   return json.load(response)
+
+          def all_pages(path):
+              items, page = [], 1
+              while True:
+                  batch = api(f"{path}?per_page=100&page={page}")
+                  items.extend(batch)
+                  if len(batch) < 100:
+                      return items
+                  page += 1
+
+          def author(item):
+              return (item.get("user") or {}).get("login")
+
+          def finish(ok, message):
+              print(("::notice::" if ok else "::error::") + message)
+              with open(os.environ.get("GITHUB_STEP_SUMMARY", os.devnull), "a") as summary:
+                  summary.write(message + "\n")
+              raise SystemExit(0 if ok else 1)
+
+          def review_result(number, sha, request_id):
+              comments = [c for c in all_pages(f"/issues/{number}/comments") if author(c) == CODEX_BOT]
+              for comment in comments:
+                  match = REVIEW_STATE.search(comment.get("body") or "")
+                  if not match:
+                      continue
+                  try:
+                      review = json.loads(match.group(1)).get("code_review") or {}
+                  except ValueError:
+                      continue
+                  if review.get("commit_sha") == sha and review.get("status") == "completed":
+                      return "completed"
+              if any(author(r) == CODEX_BOT and r.get("commit_id") == sha
+                     for r in all_pages(f"/pulls/{number}/reviews")):
+                  return "completed"
+              if request_id and any(c["id"] > request_id and "To use Codex here" in (c.get("body") or "")
+                                    for c in comments):
+                  return "rejected"
+              return None
 
           with open(os.environ["GITHUB_EVENT_PATH"]) as stream:
               event = json.load(stream)
@@ -64,33 +116,55 @@ jobs:
               raise SystemExit(0)
 
           sha = pr["head"]["sha"]
-          marker = f"<!-- codex-review-request-v2:{sha} -->"
-          page = 1
-          while True:
-              comments = api(f"/issues/{number}/comments?per_page=100&page={page}")
-              if any(marker in (c.get("body") or "") and
-                     c["user"]["login"] == "github-actions[bot]" for c in comments):
+          request_id = 0
+          if os.environ.get("CODEX_NATIVE_REVIEW") != "true":
+              marker = f"<!-- codex-review-request-v2:{sha} -->"
+              posted = [c for c in all_pages(f"/issues/{number}/comments")
+                        if marker in (c.get("body") or "") and author(c) == ACTIONS_BOT]
+              if posted:
                   print("Review already requested for this head.")
-                  raise SystemExit(0)
-              if len(comments) < 100:
+                  found = re.search(r"issuecomment-(\d+)", posted[0]["body"])
+                  request_id = int(found.group(1)) if found else posted[0]["id"]
+              else:
+                  # Recheck immediately before posting to reduce stale-head requests.
+                  current = api(f"/pulls/{number}")
+                  if current["state"] != "open" or current["draft"] or current["head"]["sha"] != sha:
+                      print("PR changed while checking comments; skip.")
+                      raise SystemExit(0)
+
+                  # Keep the command exact: extra prose can route to a cloud task.
+                  # Record the SHA separately so retries can deduplicate requests.
+                  request = api(f"/issues/{number}/comments", {"body": "@codex review"})
+                  request_id = request["id"]
+                  api(f"/issues/{number}/comments", {
+                      "body": (
+                          f"Codex review requested for head {sha}. "
+                          f"Request comment: {request['html_url']}\n\n"
+                          "A posted request is not a completed review or approval.\n\n"
+                          + marker
+                      )
+                  })
+
+          deadline = time.monotonic() + WAIT_SECONDS
+          result = None
+          while True:
+              try:
+                  current = api(f"/pulls/{number}")
+                  if current["state"] != "open" or current["head"]["sha"] != sha:
+                      print("PR closed or has a newer head; this run no longer applies.")
+                      raise SystemExit(0)
+                  result = review_result(number, sha, request_id)
+              except urllib.error.URLError as exc:
+                  print(f"GitHub API error while waiting: {exc}")
+              if result or time.monotonic() >= deadline:
                   break
-              page += 1
+              time.sleep(POLL_SECONDS)
 
-          # Recheck immediately before posting to reduce stale-head requests.
-          current = api(f"/pulls/{number}")
-          if current["state"] != "open" or current["draft"] or current["head"]["sha"] != sha:
-              print("PR changed while checking comments; skip.")
-              raise SystemExit(0)
-
-          # Keep the command exact: extra prose can route to a cloud task.
-          # Record the SHA separately so retries can deduplicate requests.
-          request = api(f"/issues/{number}/comments", {"body": "@codex review"})
-          api(f"/issues/{number}/comments", {
-              "body": (
-                  f"Codex review requested for head {sha}. "
-                  f"Request comment: {request['html_url']}\n\n"
-                  "A posted request is not a completed review or approval.\n\n"
-                  + marker
-              )
-          })
-          print("Exact review command posted. Confirm a Codex response for this head.")
+          short = sha[:7]
+          if result == "completed":
+              finish(True, f"Codex completed a review of {short}. Read its findings: this is not an approval.")
+          if result == "rejected":
+              finish(False, f"Codex rejected the review request for {short} (account or setup problem). "
+                            "No review happened, so treat this commit as unreviewed.")
+          finish(False, f"No completed Codex review for {short} after {WAIT_SECONDS // 60} minutes. "
+                        "Treat this commit as unreviewed.")
