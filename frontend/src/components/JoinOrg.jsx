@@ -58,6 +58,11 @@ const JoinOrg = () => {
               <Button size="lg" className="mt-6 w-full" onClick={join} disabled={joining}>
                 {joining ? 'Joining…' : `Join ${invite.org_name}`}
               </Button>
+            ) : !invite.email_verified && user?.email?.toLowerCase() === invite.email ? (
+              <div className="mt-6 rounded-md border border-warning/30 bg-warning-soft p-3 text-left text-sm text-warning">
+                Verify {invite.email} first: open the link in the verification email we sent, then sign out and back in to accept.
+                <Button variant="secondary" size="sm" className="mt-2 w-full" onClick={switchAccount}>Sign out</Button>
+              </div>
             ) : (
               <div className="mt-6 rounded-md border border-warning/30 bg-warning-soft p-3 text-left text-sm text-warning">
                 You're signed in as {user?.email}. Sign in with {invite.email} to accept.

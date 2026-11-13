@@ -9,6 +9,7 @@ import {
     browserSessionPersistence,
     setPersistence,
     sendPasswordResetEmail,
+    sendEmailVerification,
     updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
@@ -58,6 +59,8 @@ export const AuthProvider = ({ children }) => {
     const register = async (email, password) => {
         try {
             const result = await createUserWithEmailAndPassword(auth, email, password);
+            // Invitations only accept verified addresses; a failed send shouldn't block sign-up
+            sendEmailVerification(result.user).catch(() => {});
             return { success: true, user: result.user };
         } catch (error) {
             return { success: false, error: getErrorMessage(error.code) };
