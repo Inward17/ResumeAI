@@ -18,6 +18,11 @@ const SOURCE_STATE = {
   verified: { Icon: CheckCircle2, cls: 'text-success', text: 'Verified' },
   unverified: { Icon: XCircle, cls: 'text-danger', text: 'Not verified' },
 };
+// The web check only shows that the companies and colleges exist
+const WEB_STATE = {
+  verified: { ...SOURCE_STATE.verified, text: 'Organisation found' },
+  unverified: { ...SOURCE_STATE.unverified, text: 'Not found' },
+};
 const NOT_CHECKED = { Icon: CircleDashed, cls: 'text-ink-3', text: 'Not checked' };
 
 const Section = ({ title, Icon, items, empty }) => (
@@ -142,7 +147,7 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
             )}
             <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
               {SOURCES.map(({ key, label, Icon }) => {
-                const st = SOURCE_STATE[verificationStatus[key]] || NOT_CHECKED;
+                const st = (key === 'webCheck' ? WEB_STATE : SOURCE_STATE)[verificationStatus[key]] || NOT_CHECKED;
                 return (
                   <li key={key} className="flex items-center justify-between px-3 py-2.5 text-sm">
                     <span className="flex items-center gap-2 text-ink-2"><Icon className="h-4 w-4 text-ink-3" aria-hidden="true" />{label}</span>

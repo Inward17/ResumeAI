@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional, List
 import httpx
 
 from app.database import db
+from app.utils.text_utils import UNTRUSTED_NOTE, as_data
 
 
 def _normalize(text: str) -> str:
@@ -97,7 +98,7 @@ async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Option
     payload = {
         "model": GROQ_MODEL,
         "messages": [
-            {"role": "system", "content": system},
+            {"role": "system", "content": f"{system}\n{UNTRUSTED_NOTE}"},
             {"role": "user", "content": user},
         ],
         "temperature": temperature,
@@ -129,7 +130,7 @@ async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Option
 
 async def _classify_intent(user_message: str, candidate_name: str) -> Dict[str, str]:
     """Route the interviewer's prompt to one of the 4 conditions."""
-    user_prompt = f"Candidate name: {candidate_name}\nInterviewer message: {user_message}"
+    user_prompt = f"Candidate name: {as_data(candidate_name)}\nInterviewer message: {user_message}"
     raw = await _call_groq(ROUTER_SYSTEM_PROMPT, user_prompt)
     if not raw:
         return {"condition": "general_qa", "extracted_query": user_message}
@@ -245,14 +246,16 @@ You have access to the candidate's resume and verification data.
 Provide helpful, concise, and actionable responses.
 Be direct and professional. Keep the response under 150 words."""
 
-    user_msg = f"""Candidate: {candidate_name}
+    candidate_text = f"""Candidate: {candidate_name}
 Skills: {skills}
 Experience:
 {exp_text if exp_text else 'No experience data'}
 Projects:
 {proj_text if proj_text else 'No project data'}
 GitHub Score: {github_score}/100
-Red Flags: {', '.join(red_flags) if red_flags else 'None'}
+Red Flags: {', '.join(red_flags) if red_flags else 'None'}"""
+
+    user_msg = f"""{as_data(candidate_text)}
 
 Interviewer's question: {query}"""
 
@@ -345,11 +348,11 @@ async def _handle_verify_tech(
 Based on the evidence provided, give a clear verdict and recommendation to the interviewer.
 Be direct, concise (under 120 words), and helpful. Use the evidence to justify your answer."""
 
-    user_msg = f"""Candidate: {candidate_name}
+    user_msg = f"""Candidate: {as_data(candidate_name)}
 Claim: Candidate says they know "{tech_query}"
 
 Evidence:
-{evidence}
+{as_data(evidence)}
 
 Provide a clear verdict: Does the evidence support this claim?"""
 
@@ -457,11 +460,11 @@ async def _handle_verify_project(
 Based on the evidence provided, give a clear verdict and recommendation to the interviewer.
 Be direct, concise (under 120 words), and helpful."""
 
-    user_msg = f"""Candidate: {candidate_name}
+    user_msg = f"""Candidate: {as_data(candidate_name)}
 Claim: Candidate says they built a project called "{project_query}"
 
 Evidence:
-{evidence}
+{as_data(evidence)}
 
 Provide a clear verdict: Does the evidence support this claim? If the repository is a fork, emphasize that."""
 
@@ -573,11 +576,11 @@ async def _handle_verify_authenticity(
 Based on the evidence provided (clone analysis, behavioral patterns, commit history, fork status), give a clear authenticity verdict.
 Be direct, concise (under 150 words), and helpful. Highlight any red flags clearly."""
 
-    user_msg = f"""Candidate: {candidate_name}
+    user_msg = f"""Candidate: {as_data(candidate_name)}
 Query: Is the project "{project_query}" genuinely built by this candidate?
 
 Evidence:
-{evidence}
+{as_data(evidence)}
 
 Provide a clear authenticity verdict."""
 
@@ -607,7 +610,7 @@ async def fact_check(candidate_id: str, user_message: str, candidate_name: str =
     dict
         {"response": str, "condition": str, "extracted_query": str}
     """
-    print(f"[FactChecker] Received: candidate={candidate_id}, msg='{user_message[:80]}...'")
+    logger.info("[FactChecker] Received question for candidate %s (%d chars)", candidate_id, len(user_message))
 
     # Step 1: Classify intent
     intent = await _classify_intent(user_message, candidate_name)

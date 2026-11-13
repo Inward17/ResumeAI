@@ -145,29 +145,52 @@ RESUMES_DIR = os.getenv("RESUMES_DIR", "resumes")
 os.makedirs(RESUMES_DIR, exist_ok=True)
 
 
+from urllib.parse import urlparse
+
+_GITHUB_USER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+_LINKEDIN_SLUG = re.compile(r"[A-Za-z0-9_-]{1,100}")
+
+
 def extract_github_username(github_url: str) -> str | None:
-    """Extract GitHub username from URL or return as-is if already username"""
+    """GitHub username from a github.com URL or a bare username; None if it isn't valid.
+
+    The username ends up in GitHub API paths, so only GitHub's own username
+    characters are accepted.
+    """
     if not github_url:
         return None
     github_url = github_url.strip()
-    # Handle github.com URLs
-    if "github.com" in github_url:
-        parts = github_url.rstrip("/").split("/")
-        return parts[-1] if parts else None
-    # Already a username
-    return github_url
+    if "github.com" in github_url.lower():
+        if "://" not in github_url:
+            github_url = "https://" + github_url
+        parsed = urlparse(github_url)
+        if (parsed.hostname or "") not in ("github.com", "www.github.com"):
+            return None
+        github_url = parsed.path.strip("/").split("/")[0]
+    return github_url if _GITHUB_USER.fullmatch(github_url) else None
 
 
 def extract_linkedin_url(linkedin: str) -> str | None:
-    """Ensure LinkedIn is a full URL"""
+    """https URL on linkedin.com (or a subdomain), else None.
+
+    The dossier links to it, so it must not point anywhere else.
+    """
     if not linkedin:
         return None
     linkedin = linkedin.strip()
-    if linkedin.startswith("http"):
-        return linkedin
-    if "linkedin.com" in linkedin:
-        return f"https://{linkedin}"
-    return f"https://linkedin.com/in/{linkedin}"
+    if "://" not in linkedin:
+        if "linkedin.com" in linkedin.lower():
+            linkedin = "https://" + linkedin
+        elif _LINKEDIN_SLUG.fullmatch(linkedin):
+            return f"https://linkedin.com/in/{linkedin}"
+        else:
+            return None
+    parsed = urlparse(linkedin)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() not in ("http", "https") or not (host == "linkedin.com" or host.endswith(".linkedin.com")):
+        return None
+    # Plain http links are upgraded so the dossier only ever links over https
+    return parsed._replace(scheme="https").geturl()
 
 
 def extract_pdf_hyperlinks(filepath: str) -> dict:

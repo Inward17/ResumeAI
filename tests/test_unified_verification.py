@@ -237,8 +237,8 @@ class TestCalculateMatchScores:
         )
 
         result = service._calculate_match_scores(github_data, linkedin_match, web_data)
-        # Weighted: GitHub(50%) + LinkedIn(20%) + Web(30%)
-        expected = (85 * 0.5 + 100 * 0.2 + 80 * 0.3) / 1.0
+        # Weighted: GitHub(50%) + LinkedIn(20%) + Web(30%, web score capped at 50)
+        expected = (85 * 0.5 + 100 * 0.2 + 50 * 0.3) / 1.0
         assert abs(result.overallCredibility - expected) < 1.0
 
     def test_no_sources_score(self):
