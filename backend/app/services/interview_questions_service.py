@@ -6,6 +6,8 @@ import json
 import os
 import httpx
 
+from app.utils.text_utils import UNTRUSTED_NOTE, as_data
+
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 # Groq retires models; override with GROQ_MODEL when this one goes
@@ -74,6 +76,14 @@ def _build_prompt(job: dict, candidate: dict, verification: dict | None) -> str:
                 recent = positions[0] if positions else {}
                 verification_context += f"Current role: {recent.get('title', '')} at {recent.get('companyName', '')}. "
 
+    candidate_context = f"""- Name: {candidate_name}
+- Skills: {candidate_skills}
+- Experience:
+{exp_summary if exp_summary else '  No experience data available'}
+- Education:
+{edu_summary if edu_summary else '  No education data available'}
+{f'- Verification: {verification_context}' if verification_context else ''}"""
+
     return f"""You are an expert technical interviewer. Generate exactly 5 interview questions for the following candidate applying to a specific job role.
 
 JOB CONTEXT:
@@ -83,15 +93,10 @@ JOB CONTEXT:
 - Preferred Skills: {preferred_skills}
 
 CANDIDATE CONTEXT:
-- Name: {candidate_name}
-- Skills: {candidate_skills}
-- Experience:
-{exp_summary if exp_summary else '  No experience data available'}
-- Education:
-{edu_summary if edu_summary else '  No education data available'}
-{f'- Verification: {verification_context}' if verification_context else ''}
+{as_data(candidate_context)}
 
 INSTRUCTIONS:
+0. {UNTRUSTED_NOTE}
 1. Generate 5 interview questions that probe the candidate's fit for THIS specific role.
 2. Mix question types: technical depth, system design, behavioral, and problem-solving.
 3. Tailor questions to the candidate's background — reference their skills and experience where relevant.

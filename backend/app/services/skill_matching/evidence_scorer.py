@@ -25,6 +25,8 @@ Evidence weights reflect evidential reliability:
     experience  → 0.30   (professional context)
     projects    → 0.25   (personal/academic context)
     skills      → 0.10   (self-declared — weakest, most gameable)
+
+A skill backed only by the skills list scores at most SKILLS_ONLY_CAP.
 """
 
 from __future__ import annotations
@@ -58,6 +60,11 @@ _FOUND_THRESHOLD: float = 3.0
 # SIM_FULL or more counts as full evidence. A literal mention is always full evidence.
 SIM_FLOOR: float = 0.35
 SIM_FULL: float = 0.75
+
+# A skill only written in the self-declared skills list, with no real evidence
+# in experience, projects or GitHub, is easy to stuff, so its score is capped
+SKILLS_ONLY_CAP: float = 6.0
+_OTHER_EVIDENCE: float = 0.5
 
 
 def _mentions(text: str, terms: List[str]) -> bool:
@@ -155,6 +162,10 @@ async def score_skill(
     # (no GitHub or projects section must not cap the score)
     score_max = sum(SECTION_WEIGHTS.get(sec, 0.0) for sec in section_evidence) + MAX_BONUS_WEIGHT
     score = round(min((weighted_sum + max_bonus) / score_max, 1.0) * 10, 2)
+    if section_evidence.get("skills") == 1.0 and all(
+        ev < _OTHER_EVIDENCE for sec, ev in section_evidence.items() if sec != "skills"
+    ):
+        score = min(score, SKILLS_ONLY_CAP)
     found = score >= _FOUND_THRESHOLD
 
     return {
