@@ -8,7 +8,7 @@ from datetime import datetime
 
 from rapidfuzz import fuzz
 
-from app.database import db
+from app import database
 from app.services.linkedinScraper import scrape_linkedin_profiles
 from app.services.verifier import verify_profile, _clean_company_name, _clean_education_name
 from app.services.github_services_v2 import verify_github, GitHubVerificationResult
@@ -75,9 +75,18 @@ class UnifiedVerificationService:
     """Service orchestrating concurrent verification from all sources"""
     
     def __init__(self, db_client=None, github_token: Optional[str] = None):
-        self.db = db_client or db
+        self._db = db_client
         self.github_token = github_token or os.getenv("GITHUB_TOKEN")
         self.cache = VerificationCache()
+
+    @property
+    def db(self):
+        # Resolved at call time so tests (and reconnects) see the current app.database.db
+        return self._db if self._db is not None else database.db
+
+    @db.setter
+    def db(self, value):
+        self._db = value
     
     async def run_unified_verification(
         self,
