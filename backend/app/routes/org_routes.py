@@ -12,7 +12,8 @@ from bson import ObjectId
 from app.auth import AuthUser, get_current_user
 from app.database import db
 from app.org import (
-    email_delivery_configured, hash_secret, join_url, membership, new_api_key, oid, require_manager, send_invite_email,
+    email_delivery_configured, hash_secret, join_url, membership, new_api_key, oid, reject_api_key, require_manager,
+    send_invite_email,
 )
 from app.services.usage_service import provider_usage
 
@@ -58,6 +59,7 @@ def _key_out(k: dict) -> dict:
 
 @router.get("/org")
 async def get_org(user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     m = await membership(user)
     org = await db.orgs.find_one({"_id": ObjectId(m["org_id"])})
     members = await db.org_members.find({"org_id": m["org_id"]}, {"_id": 0}).sort("joined_at", 1).to_list(500)
@@ -95,6 +97,7 @@ async def change_role(uid: str, body: RoleUpdate, user: AuthUser = Depends(get_c
 
 @router.delete("/org/members/{uid}")
 async def remove_member(uid: str, user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     m = await membership(user)
     target = await db.org_members.find_one({"org_id": m["org_id"], "uid": uid})
     if not target:
@@ -105,6 +108,9 @@ async def remove_member(uid: str, user: AuthUser = Depends(get_current_user)):
     if target["role"] == "owner":
         raise HTTPException(400, "The owner can't leave or be removed")
     await db.org_members.delete_one({"_id": target["_id"]})
+    # Their keys for this workspace stop working with them
+    await db.api_keys.update_many({"org_id": m["org_id"], "created_by": uid, "revoked_at": None},
+                                  {"$set": {"revoked_at": datetime.utcnow()}})
     await db.users.update_one({"uid": uid, "org_id": m["org_id"]}, {"$unset": {"org_id": ""}})
     return {"removed": uid}
 
@@ -155,18 +161,23 @@ async def _pending_invite(token: str) -> dict:
 
 @router.get("/invites/{token}")
 async def preview_invite(token: str, user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     inv = await _pending_invite(token)
     org = await db.orgs.find_one({"_id": ObjectId(inv["org_id"])})
     return {"org_name": org["name"] if org else "Workspace", "email": inv["email"], "role": inv["role"],
-            "invited_by": inv.get("invited_by_name"), "email_matches": (user.email or "").lower() == inv["email"]}
+            "invited_by": inv.get("invited_by_name"), "email_matches": user.email_verified and (user.email or "").lower() == inv["email"],
+            "email_verified": user.email_verified}
 
 
 @router.post("/invites/{token}/accept")
 async def accept_invite(token: str, user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     inv = await _pending_invite(token)
-    # The link alone isn't enough: it must be the invited person
+    # The link alone isn't enough: it must be the invited person, with a verified address
     if (user.email or "").lower() != inv["email"]:
         raise HTTPException(403, f"This invitation is for {inv['email']}. Sign in with that email to accept it.")
+    if not user.email_verified:
+        raise HTTPException(403, "Verify your email address, then open this invitation again.")
     now = datetime.utcnow()
     await db.org_members.update_one(
         {"org_id": inv["org_id"], "uid": user.uid},
@@ -183,6 +194,7 @@ async def accept_invite(token: str, user: AuthUser = Depends(get_current_user)):
 
 @router.get("/org/api-keys")
 async def list_api_keys(user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     m = await membership(user)
     return [_key_out(k) async for k in db.api_keys.find({"org_id": m["org_id"], "revoked_at": None}).sort("created_at", -1)]
 

@@ -11,6 +11,12 @@ from app.database import db
 
 router = APIRouter(prefix="/jobs", tags=["evaluations"])
 
+
+async def _require_application(job_id: str, candidate_id: str) -> None:
+    """404 unless the candidate applied to this job (the job's workspace is checked by require_job_owner)."""
+    if not await db.applications.find_one({"job_id": job_id, "candidate_id": candidate_id}, {"_id": 1}):
+        raise HTTPException(404, "Candidate not found")
+
 # Statuses (old spellings included) that move to "Interview" once an evaluation is submitted
 EARLY_STATUSES = ["Under Review", "Shortlisted", "New", "Reviewing", "Pending Review", "new", "shortlisted", None]
 
@@ -38,6 +44,7 @@ async def submit_evaluation(job_id: str, candidate_id: str, evaluation: Evaluati
     Store the interviewer's evaluation of a candidate.
     Saves per-question keyword scores and the aggregate score.
     """
+    await _require_application(job_id, candidate_id)
     doc = {
         "job_id": job_id,
         "candidate_id": candidate_id,
@@ -76,6 +83,7 @@ async def submit_evaluation(job_id: str, candidate_id: str, evaluation: Evaluati
 @router.get("/{job_id}/candidates/{candidate_id}/evaluation", dependencies=[Depends(require_job_owner)])
 async def get_evaluation(job_id: str, candidate_id: str):
     """Retrieve a stored evaluation for a candidate+job pair."""
+    await _require_application(job_id, candidate_id)
     doc = await db.evaluations.find_one(
         {"job_id": job_id, "candidate_id": candidate_id}
     )

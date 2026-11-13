@@ -25,10 +25,12 @@ async def get_interview_questions(job_id: str, candidate_id: str):
         "candidate_id": candidate_id,
     })
 
-    if application:
-        cached = application.get("interview_questions")
-        if cached:
-            return {"status": "success", "questions": cached, "cached": True}
+    # Only candidates who applied to this job; 404 so other workspaces' ids aren't revealed
+    if not application:
+        raise HTTPException(404, "Candidate not found")
+    cached = application.get("interview_questions")
+    if cached:
+        return {"status": "success", "questions": cached, "cached": True}
 
     # ── 2. Fetch context data ────────────────────────────────────────────
     # Job
@@ -61,11 +63,10 @@ async def get_interview_questions(job_id: str, candidate_id: str):
     )
 
     if questions:
-        # ── 4. Cache in applications collection (upsert) ─────────────────
+        # ── 4. Cache on the existing application (never create one) ──────
         await db.applications.update_one(
-            {"job_id": job_id, "candidate_id": candidate_id},
+            {"_id": application["_id"]},
             {"$set": {"interview_questions": questions}},
-            upsert=True,
         )
         print(f"[InterviewQ] ✅ Cached {len(questions)} questions for {candidate_id}")
         return {"status": "success", "questions": questions, "cached": False}
