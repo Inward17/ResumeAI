@@ -12,6 +12,14 @@ from datetime import datetime
 # Ensure backend app is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+# Point the real client at an unreachable address before any app module is
+# imported (load_dotenv() won't override these), so a db handle the patch
+# below misses fails fast instead of writing to a real database.
+os.environ["MONGO_URL"] = "mongodb://127.0.0.1:1"
+os.environ["DB_NAME"] = "resumeai_test_unreachable"
+os.environ["MONGO_SERVER_SELECTION_TIMEOUT_MS"] = "500"
+os.environ["MONGO_CONNECT_TIMEOUT_MS"] = "500"
+
 
 # ---------------------------------------------------------------------------
 # Event-loop fixture (pytest-asyncio)
@@ -46,7 +54,6 @@ def _patch_db(mock_db):
         "app.routes.job_routes.db",
         "app.routes.resume.db",
         "app.routes.github_routes.db",
-        "app.services.unified_verification.db",
         "app.auth.db",
         "app.org.db",
         "app.routes.org_routes.db",
