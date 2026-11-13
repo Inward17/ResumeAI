@@ -92,7 +92,8 @@ class TestTaskQueue:
         finally:
             await queue.stop()
         task = await mock_db.tasks.find_one({"task_id": "boom"})
-        assert "kaboom" in task["error"]
+        # The tasks API returns this field: exception type only, never its text
+        assert "RuntimeError" in task["error"] and "kaboom" not in task["error"]
 
     async def test_notify_wakes_idle_dispatcher(self, mock_db):
         handled = asyncio.Event()
@@ -151,9 +152,12 @@ class TestBulkUploadEndToEnd:
         from unittest.mock import AsyncMock, MagicMock
         from app.routes.resume import process_resume_task
 
-        files = [("files", (f"resume{i}.txt", f"Resume number {i}".encode(), "text/plain")) for i in range(100)]
-        resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
-        assert resp.status_code == 200
+        # Two requests: one request takes at most MAX_FILES_PER_UPLOAD (50) files
+        for start in (0, 50):
+            files = [("files", (f"resume{i}.txt", f"Resume number {i}".encode(), "text/plain"))
+                     for i in range(start, start + 50)]
+            resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
+            assert resp.status_code == 200
 
         parse_calls = 0
 

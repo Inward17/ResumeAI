@@ -136,7 +136,9 @@ class TaskQueue:
             logger.exception("Task %s crashed", task_id)
             await db.tasks.update_one(
                 {"task_id": task_id},
-                {"$set": {"status": "failed", "completed_at": datetime.utcnow(), "error": str(exc)}},
+                # Exception type only: the tasks API returns this; the detail is in the log above
+                {"$set": {"status": "failed", "completed_at": datetime.utcnow(),
+                          "error": f"Processing failed ({type(exc).__name__}). Re-upload the resume to retry."}},
             )
         finally:
             heartbeat.cancel()

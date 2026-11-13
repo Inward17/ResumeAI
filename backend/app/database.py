@@ -84,6 +84,7 @@ _INDEXES = [
     ("invites", [("org_id", ASCENDING), ("status", ASCENDING)], {}),
     ("api_keys", [("key_hash", ASCENDING)], {"unique": True}),
     ("api_keys", [("org_id", ASCENDING)], {}),
+    ("usage_quotas", [("expires_at", ASCENDING)], {"expireAfterSeconds": 0}),
 ]
 
 
