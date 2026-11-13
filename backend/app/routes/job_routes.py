@@ -11,6 +11,7 @@ from bson import ObjectId
 from app.auth import AuthUser, get_current_user
 from app.database import db
 from app.org import ensure_org
+from app.routes.resume import delete_task_files
 
 # Everyone who made it past screening, so hiring someone doesn't lower the shortlist rate
 SHORTLISTED_STATUSES = ["Shortlisted", "Interview", "Offer", "Hired"]
@@ -230,6 +231,8 @@ async def delete_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     # Candidate records stay: the same person can be in other jobs' pipelines.
     await db.applications.delete_many({"job_id": job_id})
     await db.evaluations.delete_many({"job_id": job_id})
+    # Leftover resume files; a task still being parsed deletes its own when done
+    await delete_task_files({"job_id": job_id, "status": {"$ne": "processing"}})
     await db.tasks.delete_many({"job_id": job_id, "status": "queued"})
 
     return {"message": "Job deleted successfully"}

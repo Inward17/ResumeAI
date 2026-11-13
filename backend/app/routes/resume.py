@@ -11,7 +11,9 @@ from app.auth import AuthUser, get_current_user, require_job_owner
 from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
-from app.utils.file_utils import read_file
+from app.utils.file_utils import read_file, content_matches_type
+from app.services.quota import rate_limit, use_quota
+from app.org import ensure_org
 from app.services.skill_matching.pipeline import run_unified_skill_scoring
 from app.services.task_queue import task_queue, TERMINAL_STATUSES
 
@@ -20,6 +22,8 @@ from app.services.task_queue import task_queue, TERMINAL_STATUSES
 # RESUME_WORKERS in app.services.task_queue.
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+MAX_FILES_PER_UPLOAD = int(os.getenv("MAX_FILES_PER_UPLOAD", "50"))
+TEXT_EXTRACT_TIMEOUT_SECONDS = int(os.getenv("TEXT_EXTRACT_TIMEOUT_SECONDS", "60"))
 
 # The one list of application statuses shared with the frontend
 CANDIDATE_STATUSES = ["Under Review", "Shortlisted", "Interview", "Offer", "Hired", "Rejected"]
@@ -229,7 +233,9 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         with open(filepath, "rb") as f:
             content = await asyncio.to_thread(f.read)
         
-        text = await asyncio.to_thread(read_file, filename, content)
+        # ponytail: on timeout the extraction thread can't be killed and runs on
+        # in the background; move parsing to a subprocess if that ever bites.
+        text = await asyncio.wait_for(asyncio.to_thread(read_file, filename, content), TEXT_EXTRACT_TIMEOUT_SECONDS)
         if not text:
             raise ValueError("Empty file")
         
@@ -370,11 +376,41 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         return candidate_id
         
     except Exception as e:
-        print(f"[PARSE] ❌ FAILED for {task_id}: {e}")
+        print(f"[PARSE] ❌ FAILED for {task_id}: {e!r}")
+        traceback.print_exc()
+        # The tasks API returns this, so no raw exception text (it can hold provider URLs and request details)
         await db.tasks.update_one(
             {"task_id": task_id},
-            {"$set": {"status": "failed", "completed_at": datetime.utcnow(), "error": str(e)}}
+            {"$set": {"status": "failed", "completed_at": datetime.utcnow(), "error": _parse_error_message(e)}}
         )
+
+
+def _parse_error_message(e: Exception) -> str:
+    if isinstance(e, asyncio.TimeoutError):
+        hint = "Reading the file took too long; it may be damaged or very large"
+    elif str(e) == "Empty file":
+        hint = "No text could be read from the file; scanned images aren't supported"
+    else:
+        hint = "Check the file opens normally"
+    return f"Could not parse this resume ({type(e).__name__}). {hint}, then re-upload it."
+
+
+def _remove_stored_file(filename: str | None):
+    """Delete an uploaded resume from RESUMES_DIR; a missing file is fine."""
+    if not filename:
+        return
+    try:
+        os.remove(os.path.join(RESUMES_DIR, os.path.basename(filename)))
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        print(f"[PARSE] Could not delete {filename}: {e!r}")
+
+
+async def delete_task_files(query: dict):
+    """Delete the stored resume files of the tasks matching ``query``."""
+    async for task in db.tasks.find(query, {"filename": 1}):
+        await asyncio.to_thread(_remove_stored_file, task.get("filename"))
 
 
 _agent_loop_unavailable = False
@@ -729,9 +765,14 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
     )
 
 
-async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None):
+async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None,
+                            resolved_candidate_id: str | None = None):
     """Combined background task: parse resume, then run verification"""
-    real_candidate_id = await _parse_and_store(filename, task_id, owner_uid)
+    # A task re-queued after a crash during verification was already parsed and its file deleted
+    real_candidate_id = resolved_candidate_id or await _parse_and_store(filename, task_id, owner_uid)
+    # The candidate is stored (or the parse failed for good): the file isn't needed any more.
+    # Not in a finally, so a cancelled task keeps its file for the retry.
+    await asyncio.to_thread(_remove_stored_file, filename)
     
     # Check if parsing succeeded before verification
     task = await db.tasks.find_one({"task_id": task_id})
@@ -741,7 +782,8 @@ async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid:
 
 async def process_resume_task(task: dict):
     """Queue handler (see app.services.task_queue): runs one uploaded resume end to end."""
-    await _parse_and_verify(task["filename"], task["task_id"], task["job_id"], task.get("owner_uid"))
+    await _parse_and_verify(task["filename"], task["task_id"], task["job_id"], task.get("owner_uid"),
+                            task.get("resolved_candidate_id"))
 
 
 def _write_file(path: str, content: bytes):
@@ -756,13 +798,28 @@ async def upload_resumes(
     user: AuthUser = Depends(get_current_user),
 ):
     """Upload resumes; each one is queued and processed by the task workers."""
+    rate_limit(user.uid, "upload")
+    if len(files) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(400, f"Too many files: upload at most {MAX_FILES_PER_UPLOAD} per request")
+    max_bytes = MAX_UPLOAD_MB * 1024 * 1024
     # Validate the whole batch first so a bad file doesn't leave half a batch queued
     for file in files:
+        if not file.filename:
+            raise HTTPException(400, "Every file needs a filename")
         ext = file.filename.lower().split(".")[-1]
         if ext not in ("pdf", "docx", "doc", "txt"):
             raise HTTPException(400, f"Unsupported file type: {ext}")
-        if file.size is not None and file.size > MAX_UPLOAD_MB * 1024 * 1024:
+        if file.size is not None and file.size > max_bytes:
             raise HTTPException(413, f"{file.filename} is larger than {MAX_UPLOAD_MB} MB")
+        # One file in memory at a time; file.size can be None, so never read past the limit
+        content = await file.read(max_bytes + 1)
+        await file.seek(0)
+        if len(content) > max_bytes:
+            raise HTTPException(413, f"{file.filename} is larger than {MAX_UPLOAD_MB} MB")
+        if not content_matches_type(ext, content):
+            raise HTTPException(400, f"{file.filename} is not a valid .{ext} file")
+
+    await use_quota(await ensure_org(user), "resume_upload", len(files))
 
     saved = []
     tasks = []

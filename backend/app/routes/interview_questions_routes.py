@@ -3,7 +3,9 @@ Interview Questions Routes — API endpoint for generating AI-powered interview 
 Uses Groq API, caches results in the applications collection.
 """
 from fastapi import APIRouter, Depends, HTTPException
-from app.auth import require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_owner
+from app.org import ensure_org
+from app.services.quota import rate_limit, use_quota
 from bson import ObjectId
 
 from app.database import db
@@ -13,11 +15,12 @@ router = APIRouter(prefix="/jobs", tags=["interview-questions"])
 
 
 @router.get("/{job_id}/candidates/{candidate_id}/interview-questions", dependencies=[Depends(require_job_owner)])
-async def get_interview_questions(job_id: str, candidate_id: str):
+async def get_interview_questions(job_id: str, candidate_id: str, user: AuthUser = Depends(get_current_user)):
     """
     Get AI-generated interview questions for a candidate + job pair.
     Generates via Groq on first call, then caches in applications collection.
     """
+    rate_limit(user.uid, "ai")
 
     # ── 1. Check cache ───────────────────────────────────────────────────
     application = await db.applications.find_one({
@@ -53,6 +56,8 @@ async def get_interview_questions(job_id: str, candidate_id: str):
     })
 
     # ── 3. Generate questions via Groq ───────────────────────────────────
+    # Only uncached requests reach Groq, so only they count against the daily quota
+    await use_quota(await ensure_org(user), "ai_call")
     print(f"[InterviewQ] Generating questions for candidate={candidate_id}, job={job_id}...")
     questions = await generate_interview_questions(
         job=dict(job),

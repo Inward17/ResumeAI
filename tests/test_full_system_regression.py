@@ -61,7 +61,7 @@ class TestFullPipelineFlow:
 
         # ── Step 2: Upload resume ───────────────────────────────────
         files = [
-            ("files", ("resume.pdf", b"fake-pdf", "application/pdf"))
+            ("files", ("resume.pdf", b"%PDF-1.4 fake", "application/pdf"))
         ]
         resp = await client.post(
             f"/api/v1/jobs/{job_id}/upload", files=files
@@ -86,7 +86,7 @@ class TestFullPipelineFlow:
             from app.routes.resume import process_resume_task
             await process_resume_task(task)
             mock_pipeline.assert_called_once_with(
-                task["filename"], candidate_id, job_id, "test-user"
+                task["filename"], candidate_id, job_id, "test-user", None
             )
 
         # ── Step 3: Simulate what the background task does ──────────
@@ -520,7 +520,7 @@ class TestResumeRoutesRegression:
 
     async def test_upload_creates_task_record(self, client, mock_db, owned_job_id):
         """Upload must create a task record in the DB."""
-        files = [("files", ("test.pdf", b"content", "application/pdf"))]
+        files = [("files", ("test.pdf", b"%PDF-1.4 content", "application/pdf"))]
         resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
         assert resp.status_code == 200
         candidate_id = resp.json()["saved"][0]["candidate_id"]
