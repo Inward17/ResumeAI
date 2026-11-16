@@ -28,7 +28,7 @@ class TestInvites:
         _sign_in_as(AuthUser(uid="stranger", email="stranger@example.com"))
         assert (await client.post(f"/api/invites/{token}/accept")).status_code == 403
 
-        _sign_in_as(AuthUser(uid="friend", email="friend@example.com", name="Friend"))
+        _sign_in_as(AuthUser(uid="friend", email="friend@example.com", email_verified=True, name="Friend"))
         assert (await client.post(f"/api/invites/{token}/accept")).status_code == 200
         assert [j["id"] for j in (await client.get("/api/jobs")).json()] == [job_id]
         assert (await client.post(f"/api/invites/{token}/accept")).status_code == 404  # single use

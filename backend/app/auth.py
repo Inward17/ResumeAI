@@ -13,6 +13,8 @@ Configuration (backend .env):
   FIREBASE_PROJECT_ID     Firebase project id (same as REACT_APP_FIREBASE_PROJECT_ID)
   GOOGLE_OAUTH_CLIENT_IDS optional, comma-separated OAuth client ids
   AUTH_DISABLED=true      local development only: skip verification
+  ALLOWED_EMAIL_DOMAINS   optional, comma-separated; with ALLOWED_EMAILS, limits who may sign in
+  ALLOWED_EMAILS          optional, comma-separated exact addresses
 """
 import os
 import re
@@ -39,6 +41,15 @@ FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 GOOGLE_OAUTH_CLIENT_IDS = [c.strip() for c in os.getenv("GOOGLE_OAUTH_CLIENT_IDS", "").split(",") if c.strip()]
 AUTH_DISABLED = os.getenv("AUTH_DISABLED", "false").lower() == "true"
 
+
+def _env_set(name: str) -> set:
+    return {v.strip().lower().lstrip("@") for v in os.getenv(name, "").split(",") if v.strip()}
+
+
+# Unset = anyone with a valid token may sign in (and gets a personal workspace)
+ALLOWED_EMAIL_DOMAINS = _env_set("ALLOWED_EMAIL_DOMAINS")
+ALLOWED_EMAILS = _env_set("ALLOWED_EMAILS")
+
 FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
 GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v1/certs"
 GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
@@ -50,6 +61,8 @@ bearer_scheme = HTTPBearer(auto_error=False, description="Firebase / Google OAut
 class AuthUser:
     uid: str
     email: Optional[str] = None
+    # True only when the identity provider says the address was verified
+    email_verified: bool = False
     name: Optional[str] = None
     picture: Optional[str] = None
     provider: Optional[str] = None
@@ -119,7 +132,8 @@ async def verify_id_token(token: str) -> AuthUser:
         # Checks signature, exp/iat (with small clock skew) and audience
         claims = google_jwt.decode(token, certs=certs, audience=audience, clock_skew_in_seconds=10)
     except (ValueError, google_auth_exceptions.GoogleAuthError) as exc:
-        raise _unauthorized(f"Invalid token: {exc}")
+        logger.info("Rejected ID token: %s", exc)
+        raise _unauthorized("Invalid or expired token")
     if claims.get("iss") != issuer:
         raise _unauthorized("Token issuer is not accepted")
 
@@ -131,6 +145,7 @@ async def verify_id_token(token: str) -> AuthUser:
     return AuthUser(
         uid=uid,
         email=claims.get("email"),
+        email_verified=claims.get("email_verified") in (True, "true"),
         name=claims.get("name"),
         picture=claims.get("picture"),
         provider=firebase_info.get("sign_in_provider") or "google",
@@ -142,7 +157,7 @@ async def get_current_user(
 ) -> AuthUser:
     """FastAPI dependency: the authenticated user, or 401."""
     if AUTH_DISABLED:
-        return AuthUser(uid="dev-user", email="dev@localhost", name="Local Developer", provider="disabled")
+        return AuthUser(uid="dev-user", email="dev@localhost", email_verified=True, name="Local Developer", provider="disabled")
     # Workspace API keys don't depend on the identity provider being configured
     if credentials is not None and credentials.credentials.startswith(API_KEY_PREFIX):
         user = await user_for_api_key(credentials.credentials)
@@ -154,7 +169,29 @@ async def get_current_user(
         raise HTTPException(status_code=500, detail="Authentication is not configured on the server")
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise _unauthorized("Missing bearer token")
-    return await verify_id_token(credentials.credentials)
+    user = await verify_id_token(credentials.credentials)
+    await require_allowed_email(user)
+    return user
+
+
+async def require_allowed_email(user: AuthUser) -> None:
+    """403 unless sign-in is open, the verified email is allow-listed, or the user was already let in."""
+    if not ALLOWED_EMAIL_DOMAINS and not ALLOWED_EMAILS:
+        return
+    email = (user.email or "").lower() if user.email_verified else ""
+    if email and (email in ALLOWED_EMAILS or email.rsplit("@", 1)[-1] in ALLOWED_EMAIL_DOMAINS):
+        return
+    if await db.org_members.find_one({"uid": user.uid}, {"_id": 1}):
+        return
+    if email and await db.invites.find_one(
+        {"email": email, "status": "pending", "expires_at": {"$gt": datetime.utcnow()}}, {"_id": 1}
+    ):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="This account isn't allowed to use this ResumeAI workspace. Sign in with a verified, approved "
+               "email address, or ask a workspace admin to invite you.",
+    )
 
 
 async def require_job_owner(job_id: str, user: AuthUser = Depends(get_current_user)) -> dict:

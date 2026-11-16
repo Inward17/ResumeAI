@@ -13,6 +13,7 @@ ponytail: one active org per user (users.org_id); add an org switcher if
 people need to belong to several at once.
 """
 import hashlib
+import html
 import logging
 import os
 import secrets
@@ -87,7 +88,14 @@ async def membership(user) -> dict:
     return {"org_id": org_id, "role": member["role"] if member else "member"}
 
 
+def reject_api_key(user) -> None:
+    """Workspace API keys are for the jobs/candidates API, never for managing the workspace or joining one."""
+    if getattr(user, "provider", None) == "api_key":
+        raise HTTPException(status_code=403, detail="API keys can't manage workspaces; sign in instead")
+
+
 async def require_manager(user) -> dict:
+    reject_api_key(user)
     m = await membership(user)
     if m["role"] not in MANAGER_ROLES:
         raise HTTPException(status_code=403, detail="Only owners and admins can do this")
@@ -99,6 +107,9 @@ async def user_for_api_key(raw: str):
     from app.auth import AuthUser
     key = await db.api_keys.find_one({"key_hash": hash_secret(raw), "revoked_at": None})
     if not key:
+        return None
+    # A key stops working once its creator leaves the workspace
+    if not await db.org_members.find_one({"org_id": key["org_id"], "uid": key["created_by"]}, {"_id": 1}):
         return None
     await db.api_keys.update_one({"_id": key["_id"]}, {"$set": {"last_used_at": datetime.utcnow()}})
     creator = await db.users.find_one({"uid": key["created_by"]}, {"email": 1, "name": 1}) or {}
@@ -114,17 +125,20 @@ async def send_invite_email(to: str, org_name: str, inviter: str, url: str) -> O
     """Send the invite through Composio's Gmail tool. Returns an error message, or None on success."""
     if not COMPOSIO_API_KEY:
         return "Email sending is not configured (set COMPOSIO_API_KEY)"
+    # Workspace and inviter names are user-controlled: no markup in the body, no header breaks in the subject
+    subject = " ".join(f"{inviter} invited you to {org_name} on ResumeAI".splitlines())
+    org_name, inviter, to_html = html.escape(org_name), html.escape(inviter), html.escape(to)
     body = {
         "user_id": COMPOSIO_USER_ID,
         "arguments": {
             "recipient_email": to,
-            "subject": f"{inviter} invited you to {org_name} on ResumeAI",
+            "subject": subject,
             "is_html": True,
             "body": (
                 f"<p>{inviter} invited you to join <b>{org_name}</b> on ResumeAI, "
                 f"where your team screens and verifies candidates together.</p>"
-                f'<p><a href="{url}">Accept the invitation</a></p>'
-                f"<p style=\"color:#756e63;font-size:12px\">Sign in with {to} to accept. The link expires in 14 days.</p>"
+                f'<p><a href="{html.escape(url)}">Accept the invitation</a></p>'
+                f"<p style=\"color:#756e63;font-size:12px\">Sign in with {to_html} to accept. The link expires in 14 days.</p>"
             ),
         },
     }
@@ -141,7 +155,7 @@ async def send_invite_email(to: str, org_name: str, inviter: str, url: str) -> O
         return None
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning("Composio invite email failed: %s", exc)
-        return f"Could not reach Composio: {exc}"
+        return "Could not reach the email service"
 
 
 def oid(value: str) -> ObjectId:

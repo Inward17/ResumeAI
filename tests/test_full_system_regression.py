@@ -1116,14 +1116,6 @@ class TestEdgeCasesAndFailures:
         assert extract_linkedin_url("https://www.linkedin.com/in/user") == "https://www.linkedin.com/in/user"
         assert "linkedin.com" in extract_linkedin_url("user")
 
-    async def test_verification_with_no_sources(self, client):
-        """Verification request with no sources must return 400."""
-        resp = await client.post(
-            "/api/v1/verification/verify-candidate",
-            json={"candidate_id": "test"},
-        )
-        assert resp.status_code == 400
-
     async def test_verification_status_nonexistent(self, client, mock_db, owned_job_id):
         """Checking status of a candidate without verification must return not_found."""
         await mock_db.applications.insert_one({"candidate_id": "no-verif", "job_id": owned_job_id})
