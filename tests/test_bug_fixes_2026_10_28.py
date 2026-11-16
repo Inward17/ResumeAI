@@ -38,7 +38,8 @@ class TestBE01WebSearchCounts:
         svc.cache.set("c", "webSearch", sample_verification_result)  # edu 85, exp 90
         result = await svc._build_and_persist("c")
         assert result.matchScore.experienceMatch == 90
-        assert result.matchScore.overallCredibility == pytest.approx(87.5)
+        # The web check only shows the organisations exist, so alone it is capped at 50
+        assert result.matchScore.overallCredibility == pytest.approx(50)
         web = result.webSearchData.results[0]
         assert web.education.details[0].college == "IIT Delhi"
         assert web.experience.details[0].company == "Google"
