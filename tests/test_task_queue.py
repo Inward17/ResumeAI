@@ -112,6 +112,98 @@ class TestTaskQueue:
                 await queue.stop()
 
 
+class TestClaimFailures:
+    """Issue #10: a failed claim must hand its worker slot back."""
+
+    @staticmethod
+    def _flaky_claim(queue, failures):
+        real_claim = queue._claim
+        calls = {"n": 0}
+
+        async def claim():
+            calls["n"] += 1
+            if calls["n"] <= failures:
+                raise RuntimeError("database briefly unreachable")
+            return await real_claim()
+
+        queue._claim = claim
+        return calls
+
+    @staticmethod
+    async def _done_handler(mock_db, task):
+        await mock_db.tasks.update_one({"task_id": task["task_id"]}, {"$set": {"status": "done"}})
+
+    async def test_processing_resumes_after_a_failed_claim(self, mock_db):
+        await _insert_task(mock_db, "t1")
+        queue = tq.TaskQueue()
+        with patch.object(tq, "TASK_POLL_SECONDS", 0.01):
+            queue.start(lambda task: self._done_handler(mock_db, task), concurrency=1)
+            calls = self._flaky_claim(queue, failures=1)
+            try:
+                assert await _wait_until(lambda: _count(mock_db, "done", 1))
+            finally:
+                await queue.stop()
+        assert calls["n"] >= 2
+
+    async def test_repeated_failures_keep_full_concurrency(self, mock_db):
+        for i in range(8):
+            await _insert_task(mock_db, f"t{i}")
+        running = peak = 0
+
+        async def handler(task):
+            nonlocal running, peak
+            running += 1
+            peak = max(peak, running)
+            await asyncio.sleep(0.05)
+            running -= 1
+            await self._done_handler(mock_db, task)
+
+        queue = tq.TaskQueue()
+        with patch.object(tq, "TASK_POLL_SECONDS", 0.01):
+            queue.start(handler, concurrency=2)
+            self._flaky_claim(queue, failures=5)
+            try:
+                assert await _wait_until(lambda: _count(mock_db, "done", 8))
+                assert await _wait_until(lambda: _async(queue._slots._value == 2))
+            finally:
+                await queue.stop()
+        assert peak == 2
+
+    async def test_idle_and_busy_paths_never_exceed_capacity(self, mock_db):
+        queue = tq.TaskQueue()
+        with patch.object(tq, "TASK_POLL_SECONDS", 0.01):
+            queue.start(lambda task: self._done_handler(mock_db, task), concurrency=3)
+            try:
+                await asyncio.sleep(0.1)  # several empty claims
+                for i in range(5):
+                    await _insert_task(mock_db, f"t{i}")
+                queue.notify()
+                assert await _wait_until(lambda: _count(mock_db, "done", 5))
+                await asyncio.sleep(0.05)
+                assert queue._slots._value <= 3
+                assert await _wait_until(lambda: _async(queue._slots._value == 3))
+            finally:
+                await queue.stop()
+
+    async def test_stop_while_claiming_releases_the_slot(self, mock_db):
+        claiming = asyncio.Event()
+
+        async def hanging_claim():
+            claiming.set()
+            await asyncio.Event().wait()
+
+        queue = tq.TaskQueue()
+        queue.start(lambda task: None, concurrency=1)
+        queue._claim = hanging_claim
+        await asyncio.wait_for(claiming.wait(), timeout=2)
+        await queue.stop()
+        assert queue._slots._value == 1
+
+
+async def _async(value):
+    return value
+
+
 class TestRecoverStaleTasks:
     async def test_dead_worker_task_is_requeued(self, mock_db):
         old = datetime.utcnow() - timedelta(seconds=tq.TASK_STALE_SECONDS + 60)
