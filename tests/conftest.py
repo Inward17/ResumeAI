@@ -53,7 +53,6 @@ def _patch_db(mock_db):
         "app.database.db",
         "app.routes.job_routes.db",
         "app.routes.resume.db",
-        "app.routes.github_routes.db",
         "app.auth.db",
         "app.org.db",
         "app.routes.org_routes.db",
