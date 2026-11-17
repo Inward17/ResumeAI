@@ -73,7 +73,7 @@ const Interviews = () => {
             return [];
           }
         }));
-        setEntries(lists.flat().sort((a, b) => b.candidate.jdMatchScore - a.candidate.jdMatchScore));
+        setEntries(lists.flat().sort((a, b) => (b.candidate.jdMatchScore ?? -1) - (a.candidate.jdMatchScore ?? -1)));
       } catch (err) {
         toast({ title: 'Could not load interviews', description: err.message, variant: 'destructive' });
       } finally {
@@ -105,7 +105,8 @@ const Interviews = () => {
     && (!q || candidate.name.toLowerCase().includes(q) || job.title.toLowerCase().includes(q) || (candidate.email || '').toLowerCase().includes(q)));
 
   const total = entries.length;
-  const avgMatch = total ? Math.round(entries.reduce((s, e) => s + e.candidate.jdMatchScore, 0) / total) : null;
+  const matchScores = entries.map((e) => e.candidate.jdMatchScore).filter((v) => v != null);
+  const avgMatch = matchScores.length ? Math.round(matchScores.reduce((s, v) => s + v, 0) / matchScores.length) : null;
   const countOf = (status) => entries.filter((e) => e.candidate.status === status).length;
   const selectedEntry = selected && entries.find((e) => e.candidate.id === selected.candidateId && e.job.id === selected.jobId);
   const startInterview = (jobId, candidateId) => navigate(`/jobs/${jobId}/candidates/${candidateId}/interview`,

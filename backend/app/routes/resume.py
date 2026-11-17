@@ -145,29 +145,52 @@ RESUMES_DIR = os.getenv("RESUMES_DIR", "resumes")
 os.makedirs(RESUMES_DIR, exist_ok=True)
 
 
+from urllib.parse import urlparse
+
+_GITHUB_USER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
+_LINKEDIN_SLUG = re.compile(r"[A-Za-z0-9_-]{1,100}")
+
+
 def extract_github_username(github_url: str) -> str | None:
-    """Extract GitHub username from URL or return as-is if already username"""
+    """GitHub username from a github.com URL or a bare username; None if it isn't valid.
+
+    The username ends up in GitHub API paths, so only GitHub's own username
+    characters are accepted.
+    """
     if not github_url:
         return None
     github_url = github_url.strip()
-    # Handle github.com URLs
-    if "github.com" in github_url:
-        parts = github_url.rstrip("/").split("/")
-        return parts[-1] if parts else None
-    # Already a username
-    return github_url
+    if "github.com" in github_url.lower():
+        if "://" not in github_url:
+            github_url = "https://" + github_url
+        parsed = urlparse(github_url)
+        if (parsed.hostname or "") not in ("github.com", "www.github.com"):
+            return None
+        github_url = parsed.path.strip("/").split("/")[0]
+    return github_url if _GITHUB_USER.fullmatch(github_url) else None
 
 
 def extract_linkedin_url(linkedin: str) -> str | None:
-    """Ensure LinkedIn is a full URL"""
+    """https URL on linkedin.com (or a subdomain), else None.
+
+    The dossier links to it, so it must not point anywhere else.
+    """
     if not linkedin:
         return None
     linkedin = linkedin.strip()
-    if linkedin.startswith("http"):
-        return linkedin
-    if "linkedin.com" in linkedin:
-        return f"https://{linkedin}"
-    return f"https://linkedin.com/in/{linkedin}"
+    if "://" not in linkedin:
+        if "linkedin.com" in linkedin.lower():
+            linkedin = "https://" + linkedin
+        elif _LINKEDIN_SLUG.fullmatch(linkedin):
+            return f"https://linkedin.com/in/{linkedin}"
+        else:
+            return None
+    parsed = urlparse(linkedin)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme.lower() not in ("http", "https") or not (host == "linkedin.com" or host.endswith(".linkedin.com")):
+        return None
+    # Plain http links are upgraded so the dossier only ever links over https
+    return parsed._replace(scheme="https").geturl()
 
 
 def extract_pdf_hyperlinks(filepath: str) -> dict:
@@ -219,8 +242,11 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
     return result
 
 
-async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None) -> str:
-    """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID."""
+async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None, org_id: str | None = None) -> str:
+    """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID.
+
+    org_id is the workspace of the job the resume was uploaded to; duplicates are matched within it.
+    """
     candidate_id = task_id
     try:
         filepath = os.path.join(RESUMES_DIR, filename)
@@ -297,14 +323,18 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         full_name = personal_info.get("full_name")
         phone_number = personal_info.get("phone_number")
         
-        if full_name and phone_number:
-            # Only dedupe within the same recruiter's workspace so one user's
-            # upload never overwrites a candidate that belongs to another user
+        if full_name and phone_number and org_id:
+            # Dedupe within the workspace, so teammates share one candidate record
+            # and another workspace's candidate is never reused. Candidates saved
+            # before org_id was stored only match their own uploader's.
             existing_candidate = await db.candidates.find_one({
                 "parsed.personal_info.full_name": full_name,
                 "parsed.personal_info.phone_number": phone_number,
-                "owner_uid": owner_uid,
                 "candidate_id": {"$ne": candidate_id},
+                "$or": [
+                    {"org_id": org_id},
+                    {"org_id": {"$exists": False}, "owner_uid": owner_uid},
+                ],
             })
             if existing_candidate:
                 print(f"Candidate match found! Reusing candidate_id: {existing_candidate['candidate_id']}")
@@ -320,6 +350,7 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
                 await db.candidates.update_one(
                     {"candidate_id": real_candidate_id},
                     {"$set": {
+                        "org_id": org_id,
                         "filename": filename,
                         "uploaded_at": datetime.utcnow(),
                         "parsed": parsed,
@@ -338,6 +369,7 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         candidate_doc = {
             "candidate_id": candidate_id,
             "owner_uid": owner_uid,
+            "org_id": org_id,
             "filename": filename,
             "uploaded_at": datetime.utcnow(),
             "parsed": parsed,
@@ -375,29 +407,6 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
             {"task_id": task_id},
             {"$set": {"status": "failed", "completed_at": datetime.utcnow(), "error": str(e)}}
         )
-
-
-_agent_loop_unavailable = False
-
-
-def _load_agent_loop():
-    """Import the agent loop for USE_AGENT_SYSTEM=true; None if it can't be loaded.
-
-    Several agent modules (config, memory, planner, executor, ...) are not in the
-    repository, so importing it fails. Failing every candidate's verification
-    because of a feature flag is worse than running the standard pipeline.
-    """
-    global _agent_loop_unavailable
-    if _agent_loop_unavailable:
-        return None
-    try:
-        from app.agent.core.agent_loop import run
-        return run
-    except ImportError as exc:
-        _agent_loop_unavailable = True
-        print(f"[VERIFY] USE_AGENT_SYSTEM=true but the agent system can't be loaded ({exc}); "
-              f"using standard verification instead")
-        return None
 
 
 _INSTITUTION_WORDS = ("university", "institute", "college", "school", "academy", "polytechnic")
@@ -481,77 +490,17 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         
         # Run verification
         if github_username or linkedin_url or profile_data:
-            use_agent = os.environ.get("USE_AGENT_SYSTEM", "false").lower() == "true"
-            run_agent_loop = _load_agent_loop() if use_agent else None
-            # Fall back to the standard pipeline if agent mode can't be loaded
-            use_agent = run_agent_loop is not None
-            dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
-            
-            result = None
-            agent_result = None
+            print(f"[VERIFY] Running verification for {candidate_id}")
+            result = await unified_verification_service.run_unified_verification(
+                candidate_id=candidate_id,
+                github_username=github_username,
+                linkedin_url=linkedin_url,
+                profile_data=profile_data,
+                parsed_resume=parsed,
+            )
+            print(f"[VERIFY] Verification complete for {candidate_id}")
 
-            if use_agent:
-                
-                if dual_run:
-                    # Shadow Mode: Run both concurrently
-                    print(f"Shadow Mode active: Running V2 + Agentic Loop for {candidate_id}")
-                    legacy_task = unified_verification_service.run_unified_verification(
-                        candidate_id=candidate_id,
-                        github_username=github_username,
-                        linkedin_url=linkedin_url,
-                        profile_data=profile_data,
-                        parsed_resume=parsed,
-                    )
-                    agent_task = run_agent_loop(candidate_id, job_id)
-                    
-                    gather_result = await asyncio.gather(legacy_task, agent_task, return_exceptions=True)
-                    result = gather_result[0]
-                    agent_result = gather_result[1]
-                    
-                    if isinstance(result, Exception):
-                        raise result
-                    if isinstance(agent_result, Exception):
-                        print(f"Agent Loop Failed: {agent_result}")
-                else:
-                    # Agent ONLY Mode — agent is already awaited, so scoring data is in DB by the time we continue
-                    print(f"Agentic Mode active: Running only Agent Loop for {candidate_id}")
-                    agent_result = await run_agent_loop(candidate_id, job_id)
-                    # Agent writes to verification_data (or verification_data_agent if dual_run).
-                    # Read it back so _create_application gets real scores.
-                    agent_verif_col = "verification_data_agent" if dual_run else "verification_data"
-                    agent_verif_doc = await db[agent_verif_col].find_one(
-                        {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
-                    )
-                    if agent_verif_doc:
-                        verification_dict = dict(agent_verif_doc)
-                        print(f"[AGENT] Read back verification_data for {candidate_id}: overallCredibility={verification_dict.get('matchScore', {}).get('overallCredibility', 0)}")
-                        # Update candidate status from agent scores
-                        agent_match = verification_dict.get("matchScore", {})
-                        if agent_match.get("overallCredibility", 0) > 0:
-                            await db.candidates.update_one(
-                                {"candidate_id": candidate_id},
-                                {"$set": {
-                                    "verification_score": agent_match["overallCredibility"],
-                                    "status": "verified"
-                                }}
-                            )
-                    else:
-                        print(f"[AGENT] No verification_data found after agent run for {candidate_id}")
-                    result = None  # skip legacy Pydantic conversion below
-            else:
-                # Normal Mode
-                print(f"[VERIFY] Legacy mode: running verification for {candidate_id}")
-                result = await unified_verification_service.run_unified_verification(
-                    candidate_id=candidate_id,
-                    github_username=github_username,
-                    linkedin_url=linkedin_url,
-                    profile_data=profile_data,
-                    parsed_resume=parsed,
-                )
-                print(f"[VERIFY] Legacy verification complete for {candidate_id}")
-            
             # Convert result to dict for passing to _create_application
-            # (only if agent path didn't already set verification_dict above)
             if result is not None:
                 match_score = getattr(result, "matchScore", None)
                 if match_score:
@@ -582,7 +531,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         # The application is still created, with scores re-read from the DB
         verification_dict = None
 
-    # Create application record AFTER verification/agent has fully resolved.
+    # Create application record AFTER verification has fully resolved.
     # The task only reports success once the candidate is saved to the job's pipeline.
     try:
         await _create_application(candidate_id, job_id, verification_data=verification_dict)
@@ -628,22 +577,9 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
     
     if verification is None:
         # Fallback: query MongoDB (used when called from exception handler)
-        import os
-        dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
         query = {"$or": [{"candidateId": candidate_id}, {"candidate_id": candidate_id}]}
-        
-        if dual_run:
-            v_legacy = await db.verification_data.find_one(query)
-            v_agent  = await db.verification_data_agent.find_one(query)
-            if v_legacy and v_legacy.get("matchScore"):
-                verification = v_legacy
-            elif v_agent and v_agent.get("matchScore"):
-                verification = v_agent
-            else:
-                verification = v_legacy or v_agent
-        else:
-            verification = await db.verification_data.find_one(query)
-        
+        verification = await db.verification_data.find_one(query)
+
         print(f"[APP] DB fallback query for {candidate_id}: found={'yes' if verification else 'NO'}")
     else:
         print(f"[APP] Using pre-computed verification data for {candidate_id}")
@@ -731,7 +667,11 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
 
 async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None):
     """Combined background task: parse resume, then run verification"""
-    real_candidate_id = await _parse_and_store(filename, task_id, owner_uid)
+    try:
+        job = await db.jobs.find_one({"_id": ObjectId(job_id)}, {"org_id": 1})
+    except Exception:
+        job = None
+    real_candidate_id = await _parse_and_store(filename, task_id, owner_uid, (job or {}).get("org_id"))
     
     # Check if parsing succeeded before verification
     task = await db.tasks.find_one({"task_id": task_id})
@@ -884,7 +824,6 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         )
     }
 
-    dual_run = os.environ.get("DUAL_RUN", "false").lower() == "true"
     evaluations_by_id = {
         e["candidate_id"]: e
         async for e in db.evaluations.find(
@@ -893,10 +832,6 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         )
     }
     verification_by_id = await _verification_by_candidate("verification_data", candidate_ids)
-    agent_verification_by_id = (
-        await _verification_by_candidate("verification_data_agent", candidate_ids) if dual_run else {}
-    )
-    
     result = []
     for app in applications:
         candidate_id = app.get("candidate_id")
@@ -906,20 +841,8 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         parsed = candidate.get("parsed", {}) if candidate else {}
         personal_info = parsed.get("personal_info", {})
         
-        # Get verification data for additional info
-        verification = None
-        if dual_run:
-            v_legacy = verification_by_id.get(candidate_id)
-            v_agent  = agent_verification_by_id.get(candidate_id)
-            if v_legacy and v_legacy.get("matchScore"):
-                verification = v_legacy
-            elif v_agent and v_agent.get("matchScore"):
-                verification = v_agent
-            else:
-                verification = v_legacy or v_agent
-        else:
-            verification = verification_by_id.get(candidate_id)
-        
+        verification = verification_by_id.get(candidate_id)
+
         # Read stored skill_matches from application document (computed at upload time)
         score_details = app.get("score_details") or {}
         skill_matches = score_details.get("skill_matches", [])
@@ -935,13 +858,15 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             "score_details": score_details,
             # Real job-description match, 0-100 (scored 0-10 internally). This field
             # used to carry the GitHub score, which the UI showed as "Role Match".
-            "jd_match_score": round(float(score_details.get("jd_match_score") or 0) * 10, 1),
+            # None (not 0) while a score is missing, so the UI shows "—" instead of 0%
+            "jd_match_score": None if score_details.get("jd_match_score") is None
+            else round(float(score_details["jd_match_score"]) * 10, 1),
             # None (not 0) when GitHub wasn't verified, so the UI shows "not analysed"
             "github_score": score_details.get("skills_match_score", 0)
             if ((verification or {}).get("verificationStatus") or {}).get("github") == "verified" else None,
             # None when no source could be checked: "not verified" is not "0% credible"
             "verification_score": None if score_details.get("score_source") == "unverified"
-            else score_details.get("overall_score", 0),
+            else score_details.get("overall_score"),
             "interview_score": (evaluations_by_id.get(candidate_id) or {}).get("total_score"),
             "interviewed_at": (evaluations_by_id.get(candidate_id) or {}).get("submitted_at"),
             "skills": _split_skills(parsed.get("skills")),
