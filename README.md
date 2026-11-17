@@ -103,3 +103,7 @@ docs/                    Architecture, setup guides, reports
 - [Evaluation results](docs/EVALUATION_RESULTS.md)
 - Review records: [backend analysis](docs/BACKEND_ANALYSIS.md), [bugs found on 28 Oct 2026](docs/BUGS_FOUND_2026-10-28.md)
 - [LangGraph migration plan](docs/LANGGRAPH_MIGRATION_PLAN.md) (proposal, not implemented)
+
+## License
+
+[MIT](LICENSE)
