@@ -86,7 +86,6 @@ Indexes for every hot query are created at startup (`database.ensure_indexes`).
 | `app/services/skill_matching/` | Evidence-weighted semantic skill scoring |
 | `app/services/linkedinScraper.py` | LinkedIn lookup: Firecrawl `fullenrich/people/match`, Apify fallback |
 | `app/services/usage_service.py` | Live limits of external API keys |
-| `app/agent/` | Optional agent-based verification (`USE_AGENT_SYSTEM`, `DUAL_RUN`) |
 
 ## Frontend layout
 

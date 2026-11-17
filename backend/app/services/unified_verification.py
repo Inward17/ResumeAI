@@ -2,6 +2,7 @@
 Unified Verification Service - Orchestrates concurrent verification of GitHub, LinkedIn, and web search
 """
 import asyncio
+import logging
 import os
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
@@ -31,6 +32,11 @@ from app.models.verification_data_model import (
     MatchScoreModel,
     Discrepancy,
 )
+
+logger = logging.getLogger(__name__)
+
+# Most the web check ("organisation found") can contribute, on 0-100
+WEB_CHECK_MAX = 50
 
 # Fuzzy score (0-100) at which a resume entry counts as present on LinkedIn
 LINKEDIN_MATCH_THRESHOLD = 80
@@ -133,7 +139,7 @@ class UnifiedVerificationService:
             # Log any exceptions
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
-                    print(f"Verification error for {task_names[i]}: {result}")
+                    logger.warning("Verification error for %s (candidate %s): %s", task_names[i], candidate_id, result)
         
         # Build and persist unified verification data
         verification_data = await self._build_and_persist(candidate_id)
@@ -341,7 +347,10 @@ class UnifiedVerificationService:
         web_status = "pending"
         if cached.get("webSearch") and not cached["webSearch"].get("error"):
             ws = cached["webSearch"]
-            web_status = "verified"
+            # "verified" here means the organisations were found (the UI says so),
+            # not that the candidate's history with them is confirmed
+            found = [(ws.get(k) or {}).get("average_score", 0) for k in ("education", "experience")]
+            web_status = "verified" if max(found) >= 60 else "unverified"
             
             # Build education details
             edu_details = []
@@ -466,7 +475,9 @@ class UnifiedVerificationService:
             weights += 0.2
         
         if web_scores:
-            avg_web = sum(web_scores) / len(web_scores)
+            # The web check only shows the organisations exist, not that the
+            # candidate worked or studied there, so it can't carry the score alone
+            avg_web = min(sum(web_scores) / len(web_scores), WEB_CHECK_MAX)
             overall += avg_web * 0.3
             weights += 0.3
         

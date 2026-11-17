@@ -65,4 +65,5 @@ Merge to `main` (or **Actions → CI/CD → Run workflow** on `main`). The first
 - **Cold starts:** free Spaces sleep after about 48 hours without traffic. The first request afterwards takes a minute or two.
 - **Uploaded resumes** are stored on the Space's disk, which is reset on every redeploy or restart. Finished candidates live in MongoDB and are unaffected; only files still queued at that moment are lost. Persistent storage (or object storage such as S3) removes this limit.
 - **Pull requests** run tests and the build but never deploy.
+- **Codex review** (`.github/workflows/codex-review.yml`) asks Codex to review each collaborator PR and waits up to 15 minutes. Its check is green only when Codex finished reviewing that exact commit, and red when Codex rejected the request or never answered. Green is not an approval, so don't make it a required check. Once Codex's own automatic review covers every PR, set the repository variable `CODEX_NATIVE_REVIEW=true` so the workflow only watches for the result.
 - The backend image (`backend/Dockerfile`) runs on any container host: set `PORT` and the variables in `backend/.env.example`.

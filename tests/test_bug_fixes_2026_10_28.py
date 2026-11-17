@@ -38,7 +38,8 @@ class TestBE01WebSearchCounts:
         svc.cache.set("c", "webSearch", sample_verification_result)  # edu 85, exp 90
         result = await svc._build_and_persist("c")
         assert result.matchScore.experienceMatch == 90
-        assert result.matchScore.overallCredibility == pytest.approx(87.5)
+        # The web check only shows the organisations exist, so alone it is capped at 50
+        assert result.matchScore.overallCredibility == pytest.approx(50)
         web = result.webSearchData.results[0]
         assert web.education.details[0].college == "IIT Delhi"
         assert web.experience.details[0].company == "Google"
@@ -88,25 +89,6 @@ class TestBE02WebSearchEntities:
         profile = run.call_args.kwargs["profile_data"]
         assert profile["educations"] == [{"schoolName": "IIT Delhi"}]
         assert profile["experiences"] == [{"companyName": "Google"}]
-
-
-class TestBE03AgentModeFallsBack:
-    async def test_agent_flag_uses_standard_verification(self, mock_db, sample_parsed_resume, monkeypatch):
-        from app.routes import resume
-        monkeypatch.setenv("USE_AGENT_SYSTEM", "true")
-        monkeypatch.setattr(resume, "_agent_loop_unavailable", False)
-        await mock_db.candidates.insert_one({"candidate_id": "c1", "parsed": sample_parsed_resume,
-                                             "github_username": "janedoe"})
-        await mock_db.tasks.insert_one({"task_id": "c1", "status": "parsed"})
-        verification = MagicMock()
-        verification.matchScore.overallCredibility = 70
-        verification.to_mongo_dict.return_value = {"matchScore": {"overallCredibility": 70}}
-        run = AsyncMock(return_value=verification)
-        with patch.object(resume.unified_verification_service, "run_unified_verification", run), \
-             patch.object(resume, "_create_application", AsyncMock()):
-            await resume._run_unified_verification("c1", "job-1")
-        run.assert_awaited_once()
-        assert (await mock_db.tasks.find_one({"task_id": "c1"}))["status"] == "done"
 
 
 class TestBE04RepoSizeInKilobytes:
