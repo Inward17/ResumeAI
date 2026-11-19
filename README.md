@@ -7,6 +7,7 @@ AI resume screening for hiring teams. ResumeAI parses every resume with Gemini, 
 - **Bulk screening.** Drop 100+ resumes (PDF, DOCX, TXT) on a job. A durable MongoDB-backed queue parses and verifies them in parallel, with live progress.
 - **Evidence, not keywords.** Per-skill match scores, a 15-step GitHub authenticity pipeline, LinkedIn employment/education matching and a web check combine into one credibility score.
 - **Ranked pipeline.** Sortable candidate table with role match and credibility, inline status changes, and a dossier for each candidate.
+- **Cover letters.** Attach a cover letter (file or pasted text) in a candidate's dossier, or drop letters in with the resumes: each upload is classified as resume or cover letter, and letters are paired with their resume by filename or signed name (a letter-then-resume PDF is split). Letters that match no resume are listed after the upload and never create a candidate. One AI call summarises the letter, checks how well it fits the job, lists differences from the resume by severity, and suggests points to probe; the analysis feeds the interview questions. Letters are evidence only and never change a score.
 - **Interview kit.** AI-generated questions tailored to the job and resume, a checklist scorer, and a fact checker you can ask about any claim.
 - **Teams.** Shared workspaces with owner, admin and member roles, email invitations (via Composio Gmail) or copyable invite links.
 - **Workspace API keys** for calling the API from your own tools.

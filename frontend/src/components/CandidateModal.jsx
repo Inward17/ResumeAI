@@ -7,6 +7,7 @@ import { CANDIDATE_STATUSES } from '../lib/statuses';
 import { DEFAULT_PREFERENCES } from '../lib/preferences';
 import { cn } from '../lib/utils';
 import { ScoreRing, Initials, Button, Select, Tag, scoreLevel } from './common';
+import CoverLetterSection from './CoverLetterSection';
 
 const SOURCES = [
   { key: 'github', label: 'GitHub', Icon: Github },
@@ -133,6 +134,8 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
               <div className="flex flex-wrap gap-1.5">{skills.map((s) => <Tag key={s}>{s}</Tag>)}</div>
             )}
           </section>
+
+          {job?.id && <CoverLetterSection jobId={job.id} candidateId={candidate.id} />}
         </div>
 
         {/* Right: evidence */}
