@@ -1,5 +1,4 @@
 """Competitive-programming claims on a resume, and checks against fetched profiles."""
-import os
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -198,15 +197,6 @@ def check_profiles(profiles: List[dict], claims: List[dict], resume_name: Option
     if any(p.get("status") == "not_found" for p in profiles):
         return "not_found", discrepancies
     return "pending", discrepancies
-
-
-def coding_bonus(status: str) -> float:
-    """Bonus points for a clean, found profile (CODING_PROFILE_BONUS_MAX, default 5)."""
-    try:
-        cap = float(os.getenv("CODING_PROFILE_BONUS_MAX", "5"))
-    except ValueError:
-        cap = 5.0
-    return max(0.0, min(cap, 10.0)) if status == "verified" else 0.0
 
 
 def summary_line(profiles: List[dict]) -> str:

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.services.coding_profiles import check_profiles, coding_bonus, detect_claims, extract_coding_profiles
+from app.services.coding_profiles import check_profiles, detect_claims, extract_coding_profiles
 from app.services.coding_profiles.fetchers import (
     HEADERS,
     fetch_profile,
@@ -273,27 +273,20 @@ def _service(mock_db=None):
 
 
 class TestScoring:
-    def test_bonus_cap_and_env(self, monkeypatch):
-        assert coding_bonus("verified") == 5
-        assert coding_bonus("unverified") == 0 and coding_bonus("not_found") == 0
-        monkeypatch.setenv("CODING_PROFILE_BONUS_MAX", "50")
-        assert coding_bonus("verified") == 10
-        monkeypatch.setenv("CODING_PROFILE_BONUS_MAX", "junk")
-        assert coding_bonus("verified") == 5
-
-    def test_bonus_added_on_top_of_github(self):
-        gh = GitHubDataModel(success=True, score=70.0, score100=70.0)
-        result = _service()._calculate_match_scores(gh, None, None, 5)
-        assert result.overallCredibility == 75 and result.codingProfileBonus == 5
-
-    def test_never_above_100(self):
-        gh = GitHubDataModel(success=True, score=98.0, score100=98.0)
-        assert _service()._calculate_match_scores(gh, None, None, 5).overallCredibility == 100
-
-    def test_web_only_cap_kept(self):
-        web = WebSearchDataModel(results=[WebSearchResult(education=EducationVerification(average_score=100))])
-        result = _service()._calculate_match_scores(None, None, web, 5)
-        assert result.overallCredibility == 50 and result.codingProfileBonus == 0
+    @patch("app.services.unified_verification.fetch_coding_profiles", new_callable=AsyncMock)
+    @patch("app.services.unified_verification.verify_github", new_callable=AsyncMock)
+    async def test_credibility_identical_with_and_without_coding_profiles(self, mock_gh, mock_fetch, mock_db):
+        mock_gh.return_value = _github_ok()
+        mock_fetch.return_value = [dict(p) for p in FETCHED]
+        resume = {"personal_info": {"full_name": "Ada Lovelace"}}
+        without = await _service(mock_db).run_unified_verification(
+            candidate_id="cand-a", github_username="ada", parsed_resume=resume)
+        with_cp = await _service(mock_db).run_unified_verification(
+            candidate_id="cand-b", github_username="ada", parsed_resume=resume,
+            coding_profiles={"leetcode": "ada_dev"}, coding_claims=detect_claims("LeetCode Knight"))
+        assert with_cp.verificationStatus.codingProfiles == "verified"
+        assert with_cp.matchScore.model_dump() == without.matchScore.model_dump()
+        assert "codingProfileBonus" not in with_cp.matchScore.model_dump()
 
 
 # ── Pipeline ─────────────────────────────────────────────────────────
@@ -313,7 +306,7 @@ def _github_ok():
 class TestPipeline:
     @patch("app.services.unified_verification.fetch_coding_profiles", new_callable=AsyncMock)
     @patch("app.services.unified_verification.verify_github", new_callable=AsyncMock)
-    async def test_results_stored_with_bonus(self, mock_gh, mock_fetch, mock_db):
+    async def test_results_stored(self, mock_gh, mock_fetch, mock_db):
         mock_gh.return_value = _github_ok()
         mock_fetch.return_value = [dict(p) for p in FETCHED]
         await _service(mock_db).run_unified_verification(
@@ -322,11 +315,11 @@ class TestPipeline:
         doc = await mock_db.verification_data.find_one({"candidateId": "cand-cp"})
         assert doc["verificationStatus"]["codingProfiles"] == "verified"
         assert doc["codingProfilesData"][0]["rating"] == 1900
-        assert doc["matchScore"]["overallCredibility"] == 75 and doc["matchScore"]["codingProfileBonus"] == 5
+        assert doc["matchScore"]["overallCredibility"] == 70
 
     @patch("app.services.unified_verification.fetch_coding_profiles", new_callable=AsyncMock)
     @patch("app.services.unified_verification.verify_github", new_callable=AsyncMock)
-    async def test_overstated_claim_adds_discrepancy_and_no_bonus(self, mock_gh, mock_fetch, mock_db):
+    async def test_overstated_claim_adds_discrepancy(self, mock_gh, mock_fetch, mock_db):
         mock_gh.return_value = _github_ok()
         mock_fetch.return_value = [dict(p) for p in FETCHED]
         result = await _service(mock_db).run_unified_verification(

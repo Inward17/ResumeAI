@@ -194,7 +194,6 @@ class MatchScoreModel(BaseModel):
     skillsMatch: float = 0
     linkedinMatch: float = 0  # how well LinkedIn agrees with the resume (0-100)
     overallCredibility: float = 0
-    codingProfileBonus: float = 0  # points added to overallCredibility
 
 
 # --- Main Verification Data Model ---

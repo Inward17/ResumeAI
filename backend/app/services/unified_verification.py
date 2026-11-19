@@ -13,7 +13,7 @@ from app.database import db
 from app.services.linkedinScraper import scrape_linkedin_profiles
 from app.services.verifier import verify_profile, _clean_company_name, _clean_education_name
 from app.services.github_services_v2 import verify_github, GitHubVerificationResult
-from app.services.coding_profiles import fetch_all as fetch_coding_profiles, check_profiles, coding_bonus
+from app.services.coding_profiles import fetch_all as fetch_coding_profiles, check_profiles
 from app.models.verification_data_model import (
     VerificationDataModel,
     GitHubDataModel,
@@ -442,13 +442,11 @@ class UnifiedVerificationService:
             discrepancies=discrepancies,
         )
         
-        # Calculate match scores. Coding profiles alone give no credibility score:
-        # they say nothing about the candidate's history, so the UI shows "not verified".
+        # Calculate match scores. Coding profiles are extra evidence only: they never
+        # change credibility, and alone they give no score (the UI shows "not verified").
         match_score = None
         if any(cached.get(k) is not None for k in ("github", "linkedin", "webSearch")):
-            match_score = self._calculate_match_scores(
-                github_data, linkedin_match, web_search_data, coding_bonus(coding_status)
-            )
+            match_score = self._calculate_match_scores(github_data, linkedin_match, web_search_data)
         
         # Create verification data model
         verification_data = VerificationDataModel(
@@ -472,8 +470,7 @@ class UnifiedVerificationService:
         self,
         github_data: Optional[GitHubDataModel],
         linkedin_match: Optional[float],
-        web_search_data: Optional[WebSearchDataModel],
-        coding_bonus_points: float = 0,
+        web_search_data: Optional[WebSearchDataModel]
     ) -> MatchScoreModel:
         """Calculate credibility match scores.
 
@@ -520,20 +517,12 @@ class UnifiedVerificationService:
             weights += 0.3
         
         overall_credibility = round(overall / weights, 2) if weights > 0 else 0
-
-        # Small bonus for a clean coding profile, only on top of evidence about the
-        # person (GitHub or LinkedIn). The web check alone stays capped at WEB_CHECK_MAX.
-        bonus = 0
-        if coding_bonus_points > 0 and ((github_data and github_data.success) or linkedin_match is not None):
-            bonus = round(min(coding_bonus_points, 100 - overall_credibility), 2)
-            overall_credibility = round(overall_credibility + bonus, 2)
         
         return MatchScoreModel(
             experienceMatch=experience_match,
             skillsMatch=skills_match,
             linkedinMatch=round(linkedin_match, 2) if linkedin_match is not None else 0,
-            overallCredibility=overall_credibility,
-            codingProfileBonus=bonus,
+            overallCredibility=overall_credibility
         )
     
     async def _persist_to_db(self, verification_data: VerificationDataModel):
