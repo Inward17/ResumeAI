@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional, List
 import httpx
 
 from app.database import db
+from app.services.coding_profiles import summary_line
 from app.utils.text_utils import UNTRUSTED_NOTE, as_data
 
 
@@ -253,7 +254,8 @@ Experience:
 Projects:
 {proj_text if proj_text else 'No project data'}
 GitHub Score: {github_score}/100
-Red Flags: {', '.join(red_flags) if red_flags else 'None'}"""
+Red Flags: {', '.join(red_flags) if red_flags else 'None'}
+Coding profiles: {summary_line(verification.get("codingProfilesData"))}"""
 
     user_msg = f"""{as_data(candidate_text)}
 

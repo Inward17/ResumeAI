@@ -150,6 +150,26 @@ const transformCandidateFromAPI = (c) => ({
     experience: strings(c.experience),
     githubUrl: c.github_url || null,
     linkedinUrl: c.linkedin_url || null,
+    codingProfiles: Array.isArray(c.coding_profiles) ? c.coding_profiles.map(transformCodingProfile) : [],
+});
+
+const numOrNull = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
+
+const transformCodingProfile = (p) => ({
+    platform: p.platform,
+    handle: p.handle,
+    // Built by the backend from a validated handle; https only
+    profileUrl: typeof p.profile_url === 'string' && p.profile_url.startsWith('https://') ? p.profile_url : null,
+    status: p.status || 'pending',
+    name: p.name || null,
+    rating: numOrNull(p.rating),
+    maxRating: numOrNull(p.max_rating),
+    title: p.title || null,
+    maxTitle: p.max_title || null,
+    stars: numOrNull(p.stars),
+    problemsSolved: numOrNull(p.problems_solved),
+    contests: numOrNull(p.contests),
+    issues: strings(p.issues),
 });
 
 /** One candidate of a job (the list endpoint is the only candidate source) */

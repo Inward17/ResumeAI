@@ -13,6 +13,7 @@ from app.database import db
 from app.services.linkedinScraper import scrape_linkedin_profiles
 from app.services.verifier import verify_profile, _clean_company_name, _clean_education_name
 from app.services.github_services_v2 import verify_github, GitHubVerificationResult
+from app.services.coding_profiles import fetch_all as fetch_coding_profiles, check_profiles, coding_bonus
 from app.models.verification_data_model import (
     VerificationDataModel,
     GitHubDataModel,
@@ -92,6 +93,8 @@ class UnifiedVerificationService:
         linkedin_url: Optional[str] = None,
         profile_data: Optional[dict] = None,
         parsed_resume: Optional[dict] = None,
+        coding_profiles: Optional[Dict[str, str]] = None,
+        coding_claims: Optional[List[dict]] = None,
     ) -> VerificationDataModel:
         """
         Run all verifications concurrently and store results.
@@ -101,6 +104,8 @@ class UnifiedVerificationService:
             github_username: GitHub username to verify
             linkedin_url: LinkedIn profile URL to scrape
             profile_data: Parsed resume/profile data for web verification
+            coding_profiles: {platform: handle} for LeetCode, Codeforces, etc.
+            coding_claims: claims about those profiles found in the resume text
             
         Returns:
             Complete verification data model
@@ -111,6 +116,7 @@ class UnifiedVerificationService:
         task_names = []
         # Kept so LinkedIn data can be compared with the resume's claims
         self.cache.set(candidate_id, "resume", parsed_resume or {})
+        self.cache.set(candidate_id, "codingClaims", coding_claims or [])
         
         if github_username:
             # Pass the full parsed resume (not just the web-search stub)
@@ -131,6 +137,10 @@ class UnifiedVerificationService:
             task_names.append("webSearch")
         else:
             self.cache.set(candidate_id, "webSearch", None)
+
+        if coding_profiles:
+            tasks.append(self._verify_coding_profiles(candidate_id, coding_profiles))
+            task_names.append("codingProfiles")
         
         # Execute all tasks concurrently
         if tasks:
@@ -210,6 +220,16 @@ class UnifiedVerificationService:
             self.cache.set(candidate_id, "webSearch", error_result)
             return error_result
     
+    async def _verify_coding_profiles(self, candidate_id: str, handles: Dict[str, str]) -> list:
+        """Look up the candidate's competitive-programming profiles (never raises into the pipeline)."""
+        try:
+            profiles = await fetch_coding_profiles(handles)
+        except Exception as e:
+            logger.warning("Coding profile lookup failed for candidate %s: %s", candidate_id, type(e).__name__)
+            profiles = []
+        self.cache.set(candidate_id, "codingProfiles", profiles)
+        return profiles
+
     async def _build_and_persist(self, candidate_id: str) -> VerificationDataModel:
         """Build verification model from cache and persist to MongoDB"""
         cached = self.cache.get_all(candidate_id)
@@ -403,16 +423,32 @@ class UnifiedVerificationService:
         elif cached.get("webSearch"):
             web_status = "unverified"
         
+        # Competitive-programming profiles
+        coding_profiles = cached.get("codingProfiles")
+        coding_status = "pending"
+        if coding_profiles:
+            resume_name = ((cached.get("resume") or {}).get("personal_info") or {}).get("full_name")
+            coding_status, coding_discrepancies = check_profiles(
+                coding_profiles, cached.get("codingClaims") or [], resume_name
+            )
+            discrepancies.extend(Discrepancy(**d) for d in coding_discrepancies)
+
         # Build verification status
         verification_status = VerificationStatusModel(
             linkedin=linkedin_status,
             github=github_status,
             webCheck=web_status,
+            codingProfiles=coding_status,
             discrepancies=discrepancies,
         )
         
-        # Calculate match scores
-        match_score = self._calculate_match_scores(github_data, linkedin_match, web_search_data)
+        # Calculate match scores. Coding profiles alone give no credibility score:
+        # they say nothing about the candidate's history, so the UI shows "not verified".
+        match_score = None
+        if any(cached.get(k) is not None for k in ("github", "linkedin", "webSearch")):
+            match_score = self._calculate_match_scores(
+                github_data, linkedin_match, web_search_data, coding_bonus(coding_status)
+            )
         
         # Create verification data model
         verification_data = VerificationDataModel(
@@ -422,6 +458,7 @@ class UnifiedVerificationService:
             githubData=github_data,
             linkedinData=linkedin_data,
             webSearchData=web_search_data,
+            codingProfilesData=coding_profiles or None,
             verificationStatus=verification_status,
             matchScore=match_score
         )
@@ -435,7 +472,8 @@ class UnifiedVerificationService:
         self,
         github_data: Optional[GitHubDataModel],
         linkedin_match: Optional[float],
-        web_search_data: Optional[WebSearchDataModel]
+        web_search_data: Optional[WebSearchDataModel],
+        coding_bonus_points: float = 0,
     ) -> MatchScoreModel:
         """Calculate credibility match scores.
 
@@ -482,12 +520,20 @@ class UnifiedVerificationService:
             weights += 0.3
         
         overall_credibility = round(overall / weights, 2) if weights > 0 else 0
+
+        # Small bonus for a clean coding profile, only on top of evidence about the
+        # person (GitHub or LinkedIn). The web check alone stays capped at WEB_CHECK_MAX.
+        bonus = 0
+        if coding_bonus_points > 0 and ((github_data and github_data.success) or linkedin_match is not None):
+            bonus = round(min(coding_bonus_points, 100 - overall_credibility), 2)
+            overall_credibility = round(overall_credibility + bonus, 2)
         
         return MatchScoreModel(
             experienceMatch=experience_match,
             skillsMatch=skills_match,
             linkedinMatch=round(linkedin_match, 2) if linkedin_match is not None else 0,
-            overallCredibility=overall_credibility
+            overallCredibility=overall_credibility,
+            codingProfileBonus=bonus,
         )
     
     async def _persist_to_db(self, verification_data: VerificationDataModel):

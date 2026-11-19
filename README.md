@@ -6,6 +6,7 @@ AI resume screening for hiring teams. ResumeAI parses every resume with Gemini, 
 
 - **Bulk screening.** Drop 100+ resumes (PDF, DOCX, TXT) on a job. A durable MongoDB-backed queue parses and verifies them in parallel, with live progress.
 - **Evidence, not keywords.** Per-skill match scores, a 15-step GitHub authenticity pipeline, LinkedIn employment/education matching and a web check combine into one credibility score.
+- **Coding profiles.** LeetCode, HackerRank, HackerEarth, Codeforces and CodeChef profiles linked on the resume are looked up; ratings, titles and problems solved are shown in the dossier, overstated claims ("Codeforces Expert", "500+ problems") and name mismatches are flagged, and a clean profile adds a small credibility bonus.
 - **Ranked pipeline.** Sortable candidate table with role match and credibility, inline status changes, and a dossier for each candidate.
 - **Interview kit.** AI-generated questions tailored to the job and resume, a checklist scorer, and a fact checker you can ask about any claim.
 - **Teams.** Shared workspaces with owner, admin and member roles, email invitations (via Composio Gmail) or copyable invite links.
