@@ -76,6 +76,9 @@ Given the interviewer's message, classify it into EXACTLY ONE of these categorie
 3. "verify_project" — The interviewer wants to verify whether a candidate has actually built or worked on a specific project (by name or description).
 4. "verify_authenticity" — The interviewer wants to check if a project on the candidate's GitHub is genuinely built by them (not forked/copied).
 
+Questions about competitive-programming profiles (LeetCode, HackerRank, HackerEarth, Codeforces, CodeChef),
+their ratings, stars, badges, titles or problems solved, or whether they match the resume, are "general_qa".
+
 Return ONLY a JSON object with these fields:
 {
   "condition": "<one of: general_qa, verify_tech, verify_project, verify_authenticity>",
@@ -344,6 +347,8 @@ async def _handle_verify_tech(
     else:
         evidence_parts.append(f"❌ **GitHub:** No repositories found using '{tech_query}'.")
 
+    # In every handler, so a misrouted coding-profile question still has the data
+    evidence_parts.append(f"Coding profiles: {summary_line(verification.get('codingProfilesData'))}")
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying a candidate's tech stack claim during a live interview.
@@ -456,6 +461,8 @@ async def _handle_verify_project(
     else:
         evidence_parts.append(f"❌ **GitHub:** No matching repository found for '{project_query}'.")
 
+    # In every handler, so a misrouted coding-profile question still has the data
+    evidence_parts.append(f"Coding profiles: {summary_line(verification.get('codingProfilesData'))}")
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying a candidate's project claim during a live interview.
@@ -572,6 +579,8 @@ async def _handle_verify_authenticity(
     else:
         evidence_parts.append("❌ No analysis data available and could not perform live verification.")
 
+    # In every handler, so a misrouted coding-profile question still has the data
+    evidence_parts.append(f"Coding profiles: {summary_line(verification.get('codingProfilesData'))}")
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying whether a candidate genuinely built a project during a live interview.

@@ -434,3 +434,50 @@ class TestPreviewRegression:
         assert not any("Codeforces expert" in i for i in profiles[1]["issues"])
         assert profiles[1]["name_conflict"] is True                   # Gennady Korotkevich vs Asha Verma
         assert status == "unverified"
+
+
+# ── Fact checker sees coding profiles in every handler ──
+
+CODING_VERIFICATION = {"codingProfilesData": [
+    {"platform": "hackerrank", "handle": "ada_l", "status": "found", "stars": 6, "title": "6★ Problem Solving",
+     "problems_solved": 382, "issues": []},
+    {"platform": "codechef", "handle": "ada.c", "status": "found", "rating": 3355, "max_rating": 3445, "stars": 7,
+     "problems_solved": 632, "issues": ["Resume claims rating 3600; profile shows 3445"]},
+]}
+
+
+class TestFactCheckerCodingProfiles:
+    def test_router_prompt_sends_platform_questions_to_general_qa(self):
+        from app.services.fact_checker_service import ROUTER_SYSTEM_PROMPT
+        for name in ("LeetCode", "HackerRank", "HackerEarth", "Codeforces", "CodeChef"):
+            assert name in ROUTER_SYSTEM_PROMPT
+        assert '"general_qa"' in ROUTER_SYSTEM_PROMPT.split("CodeChef", 1)[1]
+
+    @pytest.mark.parametrize("handler", ["_handle_general_qa", "_handle_verify_tech",
+                                         "_handle_verify_project", "_handle_verify_authenticity"])
+    async def test_summary_reaches_prompt(self, handler):
+        from app.services import fact_checker_service as fc
+        groq = AsyncMock(return_value="ok")
+        with patch.object(fc, "_call_groq", groq):
+            await getattr(fc, handler)("HackerRank stats", {"parsed": {}}, CODING_VERIFICATION, "Ada")
+        prompt = groq.call_args.args[1]
+        assert "hackerrank ada_l" in prompt and "problems solved 382" in prompt
+        assert "rating 3355" in prompt and "max rating 3445" in prompt and "stars 7" in prompt
+        assert "Resume claims rating 3600" in prompt
+
+
+class TestMissingProfiles:
+    def test_not_found_profile_is_a_minor_discrepancy(self):
+        profiles = [{"platform": "leetcode", "handle": "this-user-does-not-exist-zz9q", "status": "not_found"},
+                    {"platform": "hackerearth", "handle": "a_handle_that_does_not_exist_zz9q", "status": "not_found"},
+                    {"platform": "codechef", "handle": "down", "status": "unavailable"}]
+        status, disc = check_profiles(profiles, [], "Ada Lovelace")
+        assert status == "not_found"
+        assert [(d["source"], d["severity"]) for d in disc] == [("leetcode", "minor"), ("hackerearth", "minor")]
+        assert disc[0]["description"] == ("LeetCode profile 'this-user-does-not-exist-zz9q' listed on the resume "
+                                          "doesn't exist (check for a typo)")
+
+    def test_missing_profile_next_to_a_clean_one(self):
+        profiles = [_found("leetcode", name="Ada Lovelace"), {"platform": "codechef", "handle": "typo", "status": "not_found"}]
+        status, disc = check_profiles(profiles, [], "Ada Lovelace")
+        assert status == "verified" and len(disc) == 1 and disc[0]["severity"] == "minor"

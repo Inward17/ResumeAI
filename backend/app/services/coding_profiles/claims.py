@@ -183,8 +183,18 @@ def check_profiles(profiles: List[dict], claims: List[dict], resume_name: Option
                                       "resumeValue": claim.get("text"), "actualValue": msg,
                                       "severity": "major", "description": msg})
 
+    # A listed profile that doesn't exist is worth a look (often a typo); one we
+    # couldn't reach is not
+    for p in profiles:
+        if p.get("status") == "not_found":
+            msg = f"{label.get(p['platform'], p['platform'])} profile '{p.get('handle')}' listed on the resume doesn't exist (check for a typo)"
+            discrepancies.append({"field": "coding_profile", "source": p["platform"], "resumeValue": p.get("handle"),
+                                  "actualValue": "not found", "severity": "minor", "description": msg})
+
     if found:
-        return ("unverified" if discrepancies else "verified"), discrepancies
+        # Missing profiles alone don't overturn a found, consistent one
+        major = [d for d in discrepancies if d["severity"] != "minor"]
+        return ("unverified" if major else "verified"), discrepancies
     if any(p.get("status") == "not_found" for p in profiles):
         return "not_found", discrepancies
     return "pending", discrepancies
@@ -205,7 +215,11 @@ def summary_line(profiles: List[dict]) -> str:
     for p in profiles or []:
         if p.get("status") != "found":
             continue
-        stats = [f"{k.replace('_', ' ')} {p[k]}" for k in ("rating", "max_rating", "title", "problems_solved", "contests")
+        stats = [f"{k.replace('_', ' ')} {p[k]}" for k in ("rating", "max_rating", "title", "stars", "problems_solved", "contests")
                  if p.get(k) is not None]
-        parts.append(f"{p['platform']} {p['handle']}: " + (", ".join(stats) or "no stats"))
+        if p.get("name"):
+            stats.insert(0, f"name {p['name']}")
+        issues = p.get("issues") or []
+        stats.append("mismatches: " + " / ".join(issues) if issues else "no mismatch with the resume")
+        parts.append(f"{p['platform']} {p['handle']}: " + ", ".join(stats))
     return "; ".join(parts) or "None"
