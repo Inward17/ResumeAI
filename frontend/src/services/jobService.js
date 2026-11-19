@@ -143,7 +143,9 @@ const transformCandidateFromAPI = (c) => ({
     interviewedAt: c.interviewed_at || null,
     scoreDetails: c.score_details || {},
     filename: c.filename,
-    verificationStatus: c.verification_status || null,
+    verificationStatus: c.verification_status
+        ? { ...c.verification_status, discrepancies: (c.verification_status.discrepancies || []).map(transformDiscrepancy).filter(Boolean) }
+        : null,
     skillMatches: c.skill_matches || [],
     skills: strings(c.skills),
     education: strings(c.education),
@@ -152,6 +154,21 @@ const transformCandidateFromAPI = (c) => ({
     linkedinUrl: c.linkedin_url || null,
     codingProfiles: Array.isArray(c.coding_profiles) ? c.coding_profiles.map(transformCodingProfile) : [],
 });
+
+// Fields are already camelCase (verification model); LinkedIn's actual value is linkedinValue
+const transformDiscrepancy = (d) => {
+    if (!d || typeof d !== 'object') return null;
+    const description = d.description || d.field;
+    if (!description) return null;
+    return {
+        field: d.field || null,
+        source: d.source || null,
+        severity: d.severity || 'minor',
+        description: String(description),
+        resumeValue: d.resumeValue ?? null,
+        actualValue: d.actualValue ?? d.linkedinValue ?? null,
+    };
+};
 
 const numOrNull = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));
 

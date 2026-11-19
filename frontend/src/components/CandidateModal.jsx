@@ -36,7 +36,35 @@ const PROFILE_STATE = {
 };
 const dash = (v) => (v == null || v === '' ? '—' : v);
 
-const CodingProfiles = ({ profiles }) => (
+// Discrepancies from the LinkedIn comparison carry no source
+const SOURCE_LABEL = { ...PLATFORM_LABEL, coding_profiles: 'Coding profiles', github: 'GitHub', linkedin: 'LinkedIn', webCheck: 'Web check' };
+const sourceLabel = (source) => (source ? SOURCE_LABEL[source] || String(source) : 'LinkedIn');
+const SEVERITY_ORDER = { critical: 0, major: 1, minor: 2 };
+const severityRank = (s) => SEVERITY_ORDER[s] ?? 2;
+const isMinor = (s) => severityRank(s) >= 2;
+
+const Discrepancies = ({ items }) => (
+  <div className="mt-4">
+    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-3">Discrepancies</h4>
+    <ul className="space-y-2">
+      {items.map((d, i) => (
+        <li key={i} className={cn(
+          'flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed ring-1 ring-inset',
+          isMinor(d.severity) ? 'bg-surface text-ink-2 ring-line' : 'bg-warning-soft text-warning ring-warning/25',
+        )}>
+          {isMinor(d.severity)
+            ? <CircleDashed className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden="true" />
+            : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+          <span>
+            <span className="font-semibold">{isMinor(d.severity) ? 'Minor' : 'Major'} · {sourceLabel(d.source)}:</span> {d.description}
+          </span>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
+
+const CodingProfiles = ({ profiles, notes = {} }) => (
   <section>
     <h3 className="mb-2.5 text-sm font-semibold text-ink">Coding profiles</h3>
     <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
@@ -68,6 +96,11 @@ const CodingProfiles = ({ profiles }) => (
             {p.issues.map((issue) => (
               <p key={issue} className="flex items-start gap-2 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs leading-relaxed text-warning ring-1 ring-inset ring-warning/25">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{issue}
+              </p>
+            ))}
+            {(notes[p.platform] || []).map((note) => (
+              <p key={note} className="flex items-start gap-2 text-xs leading-relaxed text-ink-3">
+                <CircleDashed className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{note}
               </p>
             ))}
           </li>
@@ -104,6 +137,14 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
   const skillMatches = [...(candidate.skillMatches || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
   const needsReview = candidate.verificationScore != null && candidate.verificationScore < prefs.verificationThreshold;
   const skills = candidate.skills || [];
+  // Coding-platform discrepancies show under their profile, everything else in one list
+  const allDiscrepancies = verificationStatus.discrepancies || [];
+  const discrepancies = allDiscrepancies
+    .filter((d) => !PLATFORM_LABEL[d.source])
+    .sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+  const profileNotes = {};
+  allDiscrepancies.filter((d) => PLATFORM_LABEL[d.source] && d.field === 'coding_profile')
+    .forEach((d) => { (profileNotes[d.source] ||= []).push(d.description); });
 
   return (
     <Modal
@@ -210,9 +251,10 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
                 );
               })}
             </ul>
+            {discrepancies.length > 0 && <Discrepancies items={discrepancies} />}
           </section>
 
-          {candidate.codingProfiles?.length > 0 && <CodingProfiles profiles={candidate.codingProfiles} />}
+          {candidate.codingProfiles?.length > 0 && <CodingProfiles profiles={candidate.codingProfiles} notes={profileNotes} />}
 
           <section>
             <h3 className="mb-2.5 text-sm font-semibold text-ink">Job skills match</h3>
