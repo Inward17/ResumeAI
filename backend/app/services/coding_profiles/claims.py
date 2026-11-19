@@ -37,13 +37,21 @@ def _platforms_in(text: str) -> List[str]:
     return [p for p, rx in _PLATFORM_RE.items() if rx.search(text)]
 
 
+_LINK_RE = re.compile(r"\S*(?:https?://|www\.|\.(?:com|org|net|io|dev|in|co)\b)\S*", re.I)
+_SENTENCE_RE = re.compile(r"\n|(?<=[.!?])\s+")
+
+
 def detect_claims(text: str) -> List[dict]:
     """Claims like "LeetCode Knight", "5-star on CodeChef", "solved 500+ problems".
 
     platform is None for a claim that names no single platform (a combined total).
     """
     claims: List[dict] = []
-    for line in (text or "").splitlines():
+    # Links are not claims: a handle like "tourist" must not read as a title
+    text = _LINK_RE.sub(" ", text or "")
+    # One sentence at a time, so "LeetCode Knight. Codeforces Expert." keeps both
+    # ("B.Tech" and "3.9" have no space after the dot and stay whole)
+    for line in _SENTENCE_RE.split(text):
         line_platforms = _platforms_in(line)
         for clause in re.split(r"[,;|•·]|\band\b", line):
             found = _platforms_in(clause)

@@ -394,3 +394,43 @@ class TestCandidatesApi:
         await mock_db.candidates.insert_one({"candidate_id": "c3", "parsed": {}})
         resp = await client.get(f"/api/v1/jobs/{owned_job_id}/candidates")
         assert resp.json()["candidates"][0]["coding_profiles"] == []
+
+
+# ── Regression: live preview resume (sentence splitting, URLs not read as claims) ──
+
+PREVIEW_RESUME = """Asha Verma
+LeetCode: https://leetcode.com/u/lee215/ | Codeforces: https://codeforces.com/profile/tourist | CodeChef: https://www.codechef.com/users/gennady.korotkevich | HackerEarth: https://www.hackerearth.com/@vivek
+
+SUMMARY
+Backend engineer. LeetCode Knight with a contest rating of 2500. Codeforces Expert. Solved 3000+ problems across platforms.
+"""
+
+
+class TestPreviewRegression:
+    def test_claims_from_preview_resume(self):
+        got = {(c["platform"], c["kind"], c["value"]) for c in detect_claims(PREVIEW_RESUME)}
+        assert got == {("leetcode", "title", "knight"), ("leetcode", "rating", 2500),
+                       ("codeforces", "title", "expert"), (None, "problems", 3000)}
+
+    def test_urls_and_bare_links_give_no_claims(self):
+        assert detect_claims("Codeforces: https://codeforces.com/profile/tourist") == []
+        assert detect_claims("Codeforces: codeforces.com/profile/tourist") == []
+        assert detect_claims("LeetCode: leetcode.com/u/expert_1900") == []
+
+    def test_decimals_and_abbreviations_stay_whole(self):
+        got = {(c["platform"], c["kind"], c["value"]) for c in detect_claims("B.Tech grad, LeetCode rating 1850.5 peak")}
+        assert ("leetcode", "rating", 1850) in got
+
+    def test_preview_checks_against_live_like_profiles(self):
+        profiles = [
+            _found("leetcode", name="lee", rating=2204, title="Guardian", problems_solved=704),
+            _found("codeforces", name="Gennady Korotkevich", rating=3408, max_rating=4009,
+                   title="legendary grandmaster", max_title="tourist"),
+        ]
+        status, disc = check_profiles(profiles, detect_claims(PREVIEW_RESUME), "Asha Verma")
+        lc_issues = profiles[0]["issues"]
+        assert any("rating 2500" in i for i in lc_issues)             # 2500 vs 2204 is overstated
+        assert not any("Knight" in i for i in lc_issues)              # Guardian is above Knight
+        assert not any("Codeforces expert" in i for i in profiles[1]["issues"])
+        assert profiles[1]["name_conflict"] is True                   # Gennady Korotkevich vs Asha Verma
+        assert status == "unverified"
