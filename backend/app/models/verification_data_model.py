@@ -176,12 +176,16 @@ class Discrepancy(BaseModel):
     linkedinValue: Optional[str] = None
     severity: Optional[str] = None  # minor/major/critical
     description: Optional[str] = None
+    # Coding profiles: which platform, and what it actually shows
+    source: Optional[str] = None
+    actualValue: Optional[str] = None
 
 
 class VerificationStatusModel(BaseModel):
     linkedin: str = "pending"  # verified/unverified/pending
     github: str = "pending"
     webCheck: str = "pending"
+    codingProfiles: str = "pending"  # verified/unverified/not_found/pending
     discrepancies: List[Discrepancy] = Field(default_factory=list)
 
 
@@ -203,6 +207,8 @@ class VerificationDataModel(BaseModel):
     githubData: Optional[GitHubDataModel] = None
     webSearchData: Optional[WebSearchDataModel] = None
     linkedinData: Optional[LinkedInDataModel] = None
+    # One entry per listed profile (see app.services.coding_profiles.fetchers)
+    codingProfilesData: Optional[List[dict]] = None
     
     verificationStatus: VerificationStatusModel = Field(default_factory=VerificationStatusModel)
     matchScore: Optional[MatchScoreModel] = None
