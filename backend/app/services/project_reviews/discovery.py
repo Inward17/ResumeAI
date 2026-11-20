@@ -14,7 +14,7 @@ import re
 from typing import Iterable, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-from app.services.portfolios.links import _BARE_DOMAIN, _SITE_WORDS, _URL_TOKEN, _host_in, public_url, website_url
+from app.services.portfolios.links import _BARE_DOMAIN, _SITE_LABEL, _URL_TOKEN, _host_in, public_url, website_url
 
 APP_STORES = ("play.google.com", "apps.apple.com", "itunes.apple.com", "apps.microsoft.com",
               "chromewebstore.google.com", "chrome.google.com", "addons.mozilla.org", "microsoftedge.microsoft.com")
@@ -146,7 +146,7 @@ def from_resume(text: str, uris: Iterable[str], parsed: dict, portfolio_site: Op
         host = urlparse(link["url"]).hostname
         job = next((e for e in experience if host in e.lower()), None)
         project = _project_for(link["url"], lines, i, projects, lookback=not job)
-        if not project and (normalize(link["url"]) == site_key or _SITE_WORDS.search(line)):
+        if not project and (normalize(link["url"]) == site_key or _SITE_LABEL.search(line)):
             return
         if project:
             found.append(_entry(link, project["name"], "resume", project.get("details") or project["name"],
