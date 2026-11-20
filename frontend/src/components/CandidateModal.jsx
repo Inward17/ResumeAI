@@ -7,6 +7,7 @@ import { CANDIDATE_STATUSES } from '../lib/statuses';
 import { DEFAULT_PREFERENCES } from '../lib/preferences';
 import { cn } from '../lib/utils';
 import { ScoreRing, Initials, Button, Select, Tag, scoreLevel } from './common';
+import ProjectReviews, { useProjectReviews } from './ProjectReviews';
 
 const SOURCES = [
   { key: 'github', label: 'GitHub', Icon: Github },
@@ -45,7 +46,7 @@ const PORTFOLIO_LABEL = {
 const PORTFOLIO_ICON = { behance: Palette, dribbble: Palette, website: Globe, kaggle: Users, stackoverflow: Users };
 const PROFILE_SOURCE = { ...PLATFORM_LABEL, ...PORTFOLIO_LABEL };
 
-const SOURCE_LABEL = { ...PROFILE_SOURCE, coding_profiles: 'Coding profiles', github: 'GitHub', linkedin: 'LinkedIn', webCheck: 'Web check' };
+const SOURCE_LABEL = { ...PROFILE_SOURCE, projects: 'Projects', coding_profiles: 'Coding profiles', github: 'GitHub', linkedin: 'LinkedIn', webCheck: 'Web check' };
 const sourceLabel = (source) => (source ? SOURCE_LABEL[source] || String(source) : 'LinkedIn');
 const SEVERITY_ORDER = { critical: 0, major: 1, minor: 2 };
 const severityRank = (s) => SEVERITY_ORDER[s] ?? 2;
@@ -246,6 +247,8 @@ const Section = ({ title, Icon, items, empty }) => (
 const SKILL_BAR = { good: 'bg-success', fair: 'bg-primary', low: 'bg-warning', none: 'bg-line-strong' };
 
 const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onClose, onStatusUpdate, onTakeInterview }) => {
+  // Hooks before the early return; only fetched while the dossier is open
+  const projectReviews = useProjectReviews(open && job?.id, open && candidate?.id);
   if (!candidate) return null;
 
   const verificationStatus = candidate.verificationStatus || {};
@@ -253,7 +256,7 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
   const needsReview = candidate.verificationScore != null && candidate.verificationScore < prefs.verificationThreshold;
   const skills = candidate.skills || [];
   // Coding-platform and portfolio discrepancies show under their profile, everything else in one list
-  const allDiscrepancies = verificationStatus.discrepancies || [];
+  const allDiscrepancies = [...(verificationStatus.discrepancies || []), ...(projectReviews.data?.discrepancies || [])];
   const discrepancies = allDiscrepancies
     .filter((d) => !PROFILE_SOURCE[d.source])
     .sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
@@ -344,6 +347,8 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
               <div className="flex flex-wrap gap-1.5">{skills.map((s) => <Tag key={s}>{s}</Tag>)}</div>
             )}
           </section>
+
+          {job?.id && <ProjectReviews jobId={job.id} candidateId={candidate.id} state={projectReviews} />}
         </div>
 
         {/* Right: evidence */}
