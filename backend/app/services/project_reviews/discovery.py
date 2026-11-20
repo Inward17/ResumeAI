@@ -12,7 +12,7 @@ reviewable". Candidate URLs are only ever fetched through Firecrawl (SSRF rule).
 import hashlib
 import re
 from typing import Iterable, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from app.services.portfolios.links import _BARE_DOMAIN, _SITE_WORDS, _URL_TOKEN, _host_in, public_url, website_url
 
@@ -22,6 +22,7 @@ APP_STORES = ("play.google.com", "apps.apple.com", "itunes.apple.com", "apps.mic
 DEPLOY_HOSTS = ("vercel.app", "netlify.app", "github.io", "herokuapp.com", "onrender.com", "pages.dev", "web.app",
                 "firebaseapp.com", "streamlit.app", "fly.dev", "railway.app", "surge.sh", "glitch.me", "gitlab.io",
                 "azurewebsites.net", "appspot.com", "deno.dev", "replit.app", "up.railway.app")
+_APP_ID = re.compile(r"[A-Za-z][A-Za-z0-9_.]{0,149}")
 _LIVE_WORDS = re.compile(r"\b(live|demo|deployed|hosted|link|url|website|site|visit|app)\b", re.I)
 _YEAR = re.compile(r"\b(19[5-9]\d|20\d\d)\b")
 _PRESENT = re.compile(r"\b(present|current|ongoing|now)\b", re.I)
@@ -39,7 +40,7 @@ def normalize(url: str) -> str:
     """Dedupe key: host without www, path without trailing slash."""
     p = urlparse(url)
     host = p.hostname[4:] if p.hostname.startswith("www.") else p.hostname
-    return host + (p.path.rstrip("/") or "")
+    return host + (p.path.rstrip("/") or "") + (f"?{p.query}" if p.query else "")
 
 
 def project_id(url: str) -> str:
@@ -53,6 +54,10 @@ def classify(url) -> Optional[dict]:
         return None
     host = urlparse(clean).hostname
     if _host_in(host, APP_STORES):
+        # Keep the app id (Play Store ?id=...) so the link still names the app
+        app_id = parse_qs(urlparse(url.strip()).query).get("id", [""])[0]
+        if _APP_ID.fullmatch(app_id):
+            clean += "?id=" + app_id
         return {"url": clean, "reviewable": False,
                 "note": "App store listing: not visited (only websites are reviewed)"}
     site = website_url(clean)

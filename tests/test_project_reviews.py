@@ -50,13 +50,24 @@ class TestDiscovery:
     def test_resume_links_with_source(self):
         found = discovery.from_resume(TEXT, [], PARSED, "https://ada-portfolio.dev/")
         by_url = {p["url"]: p for p in found}
-        assert set(by_url) == {SHOP, "https://play.google.com/store/apps/details", "https://widgets-demo.netlify.app/"}
+        assert set(by_url) == {SHOP, "https://play.google.com/store/apps/details?id=com.example.weather", "https://widgets-demo.netlify.app/"}
         shop = by_url[SHOP]
         assert shop["name"] == "ShopEase" and shop["source_label"] == "Resume" and shop["reviewable"]
         assert shop["mention"].startswith("ShopEase (2024) - e-commerce app") and shop["tech"] == ["React", "Node.js"]
-        store = by_url["https://play.google.com/store/apps/details"]
+        store = by_url["https://play.google.com/store/apps/details?id=com.example.weather"]
         assert not store["reviewable"] and "App store" in store["note"] and store["name"] == "WeatherNow"
         assert "Widgets Co" in by_url["https://widgets-demo.netlify.app/"]["mention"]
+
+    def test_app_store_keeps_app_id_and_dedupes_by_it(self):
+        a = discovery.classify("https://play.google.com/store/apps/details?id=com.example.shop&hl=en")
+        assert a == {"url": "https://play.google.com/store/apps/details?id=com.example.shop", "reviewable": False,
+                     "note": a["note"]}
+        assert discovery.classify("https://play.google.com/store/apps/details?id=bad<id>")["url"] ==             "https://play.google.com/store/apps/details"
+        found = discovery.from_resume("", ["https://play.google.com/store/apps/details?id=com.example.shop",
+                                           "https://play.google.com/store/apps/details?id=com.example.chat",
+                                           "https://play.google.com/store/apps/details?id=com.example.shop"], PARSED)
+        assert [p["url"].split("=")[1] for p in found] == ["com.example.shop", "com.example.chat"]
+        assert discovery.classify("https://apps.apple.com/us/app/shop/id123456")["url"] == "https://apps.apple.com/us/app/shop/id123456"
 
     def test_pdf_link_attributed_by_name(self):
         found = discovery.from_resume("WeatherNow - weather dashboard", ["https://weathernow-app.onrender.com/"], PARSED)
