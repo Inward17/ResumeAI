@@ -167,36 +167,93 @@ def parse_profile_url(url: str) -> Optional[tuple]:
     return (platform, handle) if valid_handle(platform, handle) else None
 
 
+
 _URL_TOKEN = re.compile(r"(?<![\w.@/-])(?:https?://|www\.)[^\s<>\"'\])]+", re.I)
 _KNOWN_BARE = re.compile(r"(?<![\w.@/-])(?:behance\.net|dribbble\.com|kaggle\.com|stackoverflow\.com)/[^\s<>\"'\])]+", re.I)
-# A bare domain ("adalovelace.dev") only counts on a line that calls it a site, and
-# only with a common top-level domain, so "Node.js" or "B.Tech" never read as sites
+# A bare domain ("adalovelace.dev") only counts where a website may be named (a
+# labelled line or the header), and only with a common top-level domain, so
+# "Node.js" or "B.Tech" never read as sites
 _BARE_TLDS = ("com|org|io|dev|me|co|in|ai|app|design|art|xyz|site|page|studio|online|pro|info|us|uk|ca|"
               "de|eu|au|portfolio|blog|website|space|live|gg|codes|works|ink|one|fyi|sh")
 _BARE_DOMAIN = re.compile(rf"(?<![\w.@/-])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:{_BARE_TLDS})(?![\w.-])(?:/[^\s<>\"'\])]*)?", re.I)
-_SITE_WORDS = re.compile(r"\b(portfolio|website|web\s?site|personal\s+site|blog)\b", re.I)
+
+# The personal website is the URL the resume labels as one, the one in the
+# header/contact block, or one whose host carries the candidate's name. A
+# project's deployed link ("deployed at", "live demo", a Projects section) is not.
+_SITE_LABEL = re.compile(r"\b(portfolio|website|web\s?site|personal\s+(?:site|page)|blog|home\s?page)\b", re.I)
+_PROJECT_LINK = re.compile(r"\b(deployed\s+(?:at|on|to)|live\s+(?:demo|at|on|site|link|version|url)|demo\s*:|"
+                           r"demo\s+(?:at|link|url)|hosted\s+(?:at|on)|try\s+it)\b", re.I)
+_HEADING = re.compile(
+    r"(?:[a-z]+\s+){0,2}(summary|profile|objective|about(?: me)?|experience|employment|work history|education|"
+    r"skills|projects?|certifications?|achievements|awards|publications|contact|interests|languages|activities|"
+    r"volunteering|leadership|internships?|courses|coursework|hobbies|references|links)"
+    r"(?:\s*(?:&|and|/)\s*[a-z ]{1,25})?")
+_CONTACT = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+|\+?\d[\d\s().-]{7,}\d")
+HEADER_LINES = 8
 
 
-def _tokens(source: str):
-    yield from _URL_TOKEN.findall(source)
-    yield from _KNOWN_BARE.findall(source)
-    for line in source.splitlines():
-        if _SITE_WORDS.search(line):
-            yield from _BARE_DOMAIN.findall(_URL_TOKEN.sub(" ", line))
+def _heading(line: str) -> Optional[str]:
+    """The section name when the line is a heading ("PROJECTS", "Work Experience:"), else None."""
+    text = re.sub(r"^[\s#*•\-]+|[\s:]+$", "", line).lower()
+    return text if len(text) <= 40 and _HEADING.fullmatch(text) else None
 
 
-def extract_portfolios(sources: Iterable[str]) -> Dict[str, str]:
-    """{platform: handle} plus "website": url; the first valid one of each wins (one website per candidate)."""
+def _host_has_name(url: str, name: Optional[str]) -> bool:
+    """nikhilrao.dev or nikhil-rao.github.io for Nikhil Rao: two name parts, or one long part as a whole label."""
+    tokens = {t for t in re.findall(r"[a-z]+", (name or "").lower()) if len(t) >= 2}
+    if not tokens:
+        return False
+    host = urlparse(url).hostname or ""
+    labels = host.split(".")
+    compact = host.replace("-", "")
+    return sum(t in compact for t in tokens) >= 2 or any(len(t) >= 4 and t in labels for t in tokens)
+
+
+def _website_lines(text: str):
+    """(line, may_name_site, header) for each line, with project lines marked as never naming the site."""
+    lines = text.splitlines()
+    first_heading = next((i for i, l in enumerate(lines) if _heading(l)), len(lines))
+    header = lines[:min(first_heading, HEADER_LINES)]
+    has_contact = any(_CONTACT.search(l) for l in header)
+    section = None
+    for i, line in enumerate(lines):
+        heading = _heading(line)
+        if heading:
+            section = heading
+            continue
+        in_projects = section is not None and "project" in section
+        in_header = has_contact and i < len(header)
+        yield line, not in_projects and not _PROJECT_LINK.search(line), in_header
+
+
+def extract_portfolios(sources: Iterable[str], name: Optional[str] = None) -> Dict[str, str]:
+    """{platform: handle} plus "website": url; the first valid one of each wins (one website per candidate).
+
+    sources: the resume text, then PDF link targets. A link target alone has no
+    label or position, so it counts as the website only when its host carries
+    the candidate's name; a labelled or header URL is found in the text.
+    """
     found: Dict[str, str] = {}
     for source in sources:
         if not isinstance(source, str):
             continue
-        for token in _tokens(source):
-            hit = parse_profile_url(token)
-            if hit:
-                found.setdefault(hit[0], hit[1])
+        if not any(c.isspace() for c in source.strip()):
+            lines = [(source.strip(), True, False)]  # a bare link target: needs the name in its host
+        else:
+            lines = _website_lines(source)
+        for line, may_name_site, header in lines:
+            urls = _URL_TOKEN.findall(line)
+            for token in urls + _KNOWN_BARE.findall(line):
+                hit = parse_profile_url(token)
+                if hit:
+                    found.setdefault(hit[0], hit[1])
+            if "website" in found or not may_name_site:
                 continue
-            site = website_url(token)
-            if site:
-                found.setdefault("website", site)
+            labelled = header or bool(_SITE_LABEL.search(line))
+            candidates = urls + (_BARE_DOMAIN.findall(_URL_TOKEN.sub(" ", line)) if labelled else [])
+            for token in candidates:
+                site = website_url(token)
+                if site and (labelled or _host_has_name(site, name)):
+                    found["website"] = site
+                    break
     return found

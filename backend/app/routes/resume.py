@@ -283,7 +283,8 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         coding_profiles = extract_coding_profiles([text, *hyperlinks.get("uris", [])])
         coding_claims = detect_claims(text) if coding_profiles else []
         # Behance, Dribbble, Kaggle, Stack Overflow and one personal website
-        portfolios = portfolio_checks.extract_portfolios([text, *hyperlinks.get("uris", [])])
+        portfolios = portfolio_checks.extract_portfolios(
+            [text, *hyperlinks.get("uris", [])], name=personal_info.get("full_name"))
         portfolio_claims = portfolio_checks.detect_claims(text) if portfolios else []
 
         # Fallback: extract URLs from PDF hyperlinks if not found or invalid

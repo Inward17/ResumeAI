@@ -31,10 +31,12 @@ class TestExtraction:
             "website": "https://ada.github.io/",
         }
 
-    def test_pdf_link_targets_and_first_website_wins(self):
-        found = extract_portfolios(["no links", "mailto:ada@example.com", "https://ada.dev/work?ref=cv#top",
-                                    "https://second-site.dev/"])
-        assert found == {"website": "https://ada.dev/work"}
+    def test_pdf_link_targets_need_the_name_and_first_website_wins(self):
+        links = ["no links", "mailto:ada@example.com", "https://todo-app.dev/", "https://ada-lovelace.dev/work?ref=cv#top",
+                 "https://adalovelace.dev/"]
+        assert extract_portfolios(links, name="Ada Lovelace") == {"website": "https://ada-lovelace.dev/work"}
+        # Without the name, an unlabelled link target is not the candidate's site
+        assert extract_portfolios(links) == {}
 
     def test_reserved_paths_are_not_profiles(self):
         for url in ("https://www.behance.net/gallery/1/x", "https://dribbble.com/shots/1", "https://www.kaggle.com/c/titanic",
@@ -48,6 +50,52 @@ class TestExtraction:
         # Tech names and degrees are not sites, even on a portfolio line
         assert extract_portfolios(["Portfolio website built with Node.js and Socket.io, B.Tech 2021"]) == {}
         assert extract_portfolios(["Website: ada@adalovelace.dev"]) == {}
+
+    def test_project_links_are_not_the_website(self):
+        # Regression: a project's deployed link was taken as the portfolio website
+        resume = """Nikhil Rao
+PROJECTS
+TodoMVC (2024) - task app built with React and TypeScript, deployed at https://todomvc.com
+Whiteboard (2023) - collaborative drawing tool in React and WebSockets. Live demo: https://excalidraw.com"""
+        assert extract_portfolios([resume, "https://todomvc.com", "https://excalidraw.com"], name="Nikhil Rao") == {}
+
+    @pytest.mark.parametrize("line", [
+        "Shop app, deployed at https://shop.example.com",
+        "Live demo: https://shop.example.com",
+        "Chat app (live at https://chat.example.com)",
+        "Demo: https://shop.example.com",
+        "Portfolio tracker app, deployed on https://shop.example.com",  # a label word on a project line
+    ])
+    def test_project_link_phrases(self, line):
+        text = f"Nikhil Rao\nnikhil@example.com\n\nEXPERIENCE\nDeveloper at Acme, 2022-2024\n{line}"
+        assert "website" not in extract_portfolios([text], name="Nikhil Rao")
+
+    def test_under_a_projects_heading(self):
+        text = "Nikhil Rao | nikhil@example.com\n\nKey Projects:\nTodo app https://todo.example.com\n\nSKILLS\nReact"
+        assert extract_portfolios([text], name="Nikhil Rao") == {}
+
+    @pytest.mark.parametrize("text", [
+        # Labelled, anywhere outside projects
+        "Nikhil Rao\n\nEXPERIENCE\nDeveloper at Acme\n\nLINKS\nPortfolio: https://studio-nr.example.com",
+        "Nikhil Rao\n\nSUMMARY\nDesigner. Website - https://studio-nr.example.com",
+        "Nikhil Rao\n\nSUMMARY\n[Homepage](https://studio-nr.example.com)",
+        "Nikhil Rao\nBlog: studio-nr.example.com",
+        # Header / contact block
+        "Nikhil Rao\nnikhil@example.com | +91 98765 43210 | https://studio-nr.example.com\n\nEXPERIENCE\nDev at Acme",
+    ])
+    def test_labelled_or_header_website(self, text):
+        assert extract_portfolios([text], name="Nikhil Rao") == {"website": "https://studio-nr.example.com/"}
+
+    def test_header_needs_contact_details(self):
+        # Without an email or phone the first lines are not a contact block
+        assert extract_portfolios(["Nikhil Rao\nhttps://studio-nr.example.com\n\nSKILLS\nReact"]) == {}
+
+    def test_host_with_the_name(self):
+        text = "Nikhil Rao\n\nEXPERIENCE\nDeveloper at Acme, see https://nikhilrao.dev for more"
+        assert extract_portfolios([text], name="Nikhil Rao") == {"website": "https://nikhilrao.dev/"}
+        assert extract_portfolios([text], name="Ada Lovelace") == {}
+        # One short name part is not enough
+        assert extract_portfolios(["see https://rao-tools.dev"], name="Nikhil Rao") == {}
 
     @pytest.mark.parametrize("url", [
         "https://bit.ly/abc", "https://linktr.ee/ada", "https://www.linkedin.com/in/ada", "https://github.com/ada",
