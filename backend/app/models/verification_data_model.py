@@ -186,6 +186,7 @@ class VerificationStatusModel(BaseModel):
     github: str = "pending"
     webCheck: str = "pending"
     codingProfiles: str = "pending"  # verified/unverified/not_found/pending
+    portfolios: str = "pending"  # verified/unverified/not_found/not_configured/pending
     discrepancies: List[Discrepancy] = Field(default_factory=list)
 
 
@@ -209,6 +210,8 @@ class VerificationDataModel(BaseModel):
     linkedinData: Optional[LinkedInDataModel] = None
     # One entry per listed profile (see app.services.coding_profiles.fetchers)
     codingProfilesData: Optional[List[dict]] = None
+    # Behance, Dribbble, personal website, Kaggle, Stack Overflow (see app.services.portfolios.fetchers)
+    portfoliosData: Optional[List[dict]] = None
     
     verificationStatus: VerificationStatusModel = Field(default_factory=VerificationStatusModel)
     matchScore: Optional[MatchScoreModel] = None

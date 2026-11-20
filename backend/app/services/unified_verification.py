@@ -14,6 +14,7 @@ from app.services.linkedinScraper import scrape_linkedin_profiles
 from app.services.verifier import verify_profile, _clean_company_name, _clean_education_name
 from app.services.github_services_v2 import verify_github, GitHubVerificationResult
 from app.services.coding_profiles import fetch_all as fetch_coding_profiles, check_profiles
+from app.services.portfolios import fetch_all as fetch_portfolios, check_portfolios
 from app.models.verification_data_model import (
     VerificationDataModel,
     GitHubDataModel,
@@ -95,6 +96,8 @@ class UnifiedVerificationService:
         parsed_resume: Optional[dict] = None,
         coding_profiles: Optional[Dict[str, str]] = None,
         coding_claims: Optional[List[dict]] = None,
+        portfolios: Optional[Dict[str, str]] = None,
+        portfolio_claims: Optional[List[dict]] = None,
     ) -> VerificationDataModel:
         """
         Run all verifications concurrently and store results.
@@ -106,6 +109,8 @@ class UnifiedVerificationService:
             profile_data: Parsed resume/profile data for web verification
             coding_profiles: {platform: handle} for LeetCode, Codeforces, etc.
             coding_claims: claims about those profiles found in the resume text
+            portfolios: {platform: handle} for Behance, Dribbble, Kaggle, Stack Overflow, plus "website": url
+            portfolio_claims: claims about those found in the resume text
             
         Returns:
             Complete verification data model
@@ -117,6 +122,7 @@ class UnifiedVerificationService:
         # Kept so LinkedIn data can be compared with the resume's claims
         self.cache.set(candidate_id, "resume", parsed_resume or {})
         self.cache.set(candidate_id, "codingClaims", coding_claims or [])
+        self.cache.set(candidate_id, "portfolioClaims", portfolio_claims or [])
         
         if github_username:
             # Pass the full parsed resume (not just the web-search stub)
@@ -141,6 +147,10 @@ class UnifiedVerificationService:
         if coding_profiles:
             tasks.append(self._verify_coding_profiles(candidate_id, coding_profiles))
             task_names.append("codingProfiles")
+
+        if portfolios:
+            tasks.append(self._verify_portfolios(candidate_id, portfolios))
+            task_names.append("portfolios")
         
         # Execute all tasks concurrently
         if tasks:
@@ -229,6 +239,16 @@ class UnifiedVerificationService:
             profiles = []
         self.cache.set(candidate_id, "codingProfiles", profiles)
         return profiles
+
+    async def _verify_portfolios(self, candidate_id: str, portfolios: Dict[str, str]) -> list:
+        """Look up portfolio and community profiles (never raises into the pipeline)."""
+        try:
+            entries = await fetch_portfolios(portfolios)
+        except Exception as e:
+            logger.warning("Portfolio lookup failed for candidate %s: %s", candidate_id, type(e).__name__)
+            entries = []
+        self.cache.set(candidate_id, "portfolios", entries)
+        return entries
 
     async def _build_and_persist(self, candidate_id: str) -> VerificationDataModel:
         """Build verification model from cache and persist to MongoDB"""
@@ -433,16 +453,26 @@ class UnifiedVerificationService:
             )
             discrepancies.extend(Discrepancy(**d) for d in coding_discrepancies)
 
+        # Portfolios and community profiles: evidence only, like coding profiles
+        portfolio_entries = cached.get("portfolios")
+        portfolio_status = "pending"
+        if portfolio_entries:
+            portfolio_status, portfolio_discrepancies = check_portfolios(
+                portfolio_entries, cached.get("portfolioClaims") or [], cached.get("resume") or {}
+            )
+            discrepancies.extend(Discrepancy(**d) for d in portfolio_discrepancies)
+
         # Build verification status
         verification_status = VerificationStatusModel(
             linkedin=linkedin_status,
             github=github_status,
             webCheck=web_status,
             codingProfiles=coding_status,
+            portfolios=portfolio_status,
             discrepancies=discrepancies,
         )
         
-        # Calculate match scores. Coding profiles are extra evidence only: they never
+        # Calculate match scores. Coding profiles and portfolios are extra evidence only: they never
         # change credibility, and alone they give no score (the UI shows "not verified").
         match_score = None
         if any(cached.get(k) is not None for k in ("github", "linkedin", "webSearch")):
@@ -457,6 +487,7 @@ class UnifiedVerificationService:
             linkedinData=linkedin_data,
             webSearchData=web_search_data,
             codingProfilesData=coding_profiles or None,
+            portfoliosData=portfolio_entries or None,
             verificationStatus=verification_status,
             matchScore=match_score
         )
