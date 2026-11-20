@@ -230,6 +230,7 @@ async def delete_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     # Candidate records stay: the same person can be in other jobs' pipelines.
     await db.applications.delete_many({"job_id": job_id})
     await db.evaluations.delete_many({"job_id": job_id})
-    await db.tasks.delete_many({"job_id": job_id, "status": "queued"})
+    # Cover letters waiting for a resume hold the letter text, so they go too
+    await db.tasks.delete_many({"job_id": job_id, "status": {"$in": ["queued", "cover_letter_pending"]}})
 
     return {"message": "Job deleted successfully"}
