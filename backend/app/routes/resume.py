@@ -13,6 +13,7 @@ from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
 from app.services.coding_profiles import detect_claims, extract_coding_profiles, profile_url
 from app.services import portfolios as portfolio_checks
+from app.services.project_reviews import from_resume as project_links_from_resume
 from app.utils.file_utils import read_file
 from app.services.skill_matching.pipeline import run_unified_skill_scoring
 from app.services.task_queue import task_queue, TERMINAL_STATUSES
@@ -285,6 +286,8 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         # Behance, Dribbble, Kaggle, Stack Overflow and one personal website
         portfolios = portfolio_checks.extract_portfolios([text, *hyperlinks.get("uris", [])])
         portfolio_claims = portfolio_checks.detect_claims(text) if portfolios else []
+        # Deployed project links and the resume line that mentions them (reviewed on demand)
+        project_links = project_links_from_resume(text, hyperlinks.get("uris", []), parsed, portfolios.get("website"))
 
         # Fallback: extract URLs from PDF hyperlinks if not found or invalid
         if (not github_valid or not linkedin_valid) and is_pdf:
@@ -373,6 +376,7 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
                         "coding_claims": coding_claims,
                         "portfolios": portfolios,
                         "portfolio_claims": portfolio_claims,
+                        "project_links": project_links,
                         "education": education,
                         "experience_companies": experience_companies,
                         "universities": parsed.get("university") or [],
@@ -403,6 +407,7 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
             # {platform: handle} for Behance, Dribbble, Kaggle, Stack Overflow, plus "website": url
             "portfolios": portfolios,
             "portfolio_claims": portfolio_claims,
+            "project_links": project_links,
             # Store education and experience for verification
             "education": education,
             "experience_companies": experience_companies,
