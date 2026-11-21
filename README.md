@@ -34,7 +34,7 @@ Prerequisites: Python 3.11+, Node 20+ with Yarn 1, a MongoDB database (local or 
 # Backend: copy backend/.env.example to backend/.env and fill it in
 cd backend
 python -m venv venv && venv/Scripts/activate      # macOS/Linux: source venv/bin/activate
-pip install -r requirements.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-dev.txt   # runtime + test tools
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -104,3 +104,7 @@ docs/                    Architecture, setup guides, reports
 - [Evaluation results](docs/EVALUATION_RESULTS.md)
 - Review records: [backend analysis](docs/BACKEND_ANALYSIS.md), [bugs found on 28 Oct 2026](docs/BUGS_FOUND_2026-10-28.md)
 - [LangGraph migration plan](docs/LANGGRAPH_MIGRATION_PLAN.md) (proposal, not implemented)
+
+## License
+
+[MIT](LICENSE)
