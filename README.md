@@ -33,7 +33,7 @@ Prerequisites: Python 3.11+, Node 20+ with Yarn 1, a MongoDB database (local or 
 # Backend: copy backend/.env.example to backend/.env and fill it in
 cd backend
 python -m venv venv && venv/Scripts/activate      # macOS/Linux: source venv/bin/activate
-pip install -r requirements.txt
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-dev.txt   # runtime + test tools
 uvicorn app.main:app --reload --port 8000
 ```
 
