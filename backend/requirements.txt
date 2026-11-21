@@ -114,7 +114,7 @@ tqdm==4.67.1
 transformers==5.22.2
 typer==0.24.1
 typing-extensions==4.16.0
-typing-inspection==0.4.2
+typing-inspection==0.4.5
 tzdata==2025.2
 urllib3==2.8.0
 uvicorn==0.54.0
