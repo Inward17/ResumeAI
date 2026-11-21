@@ -379,6 +379,15 @@ class TestEndpoints:
         assert (await client.post(_url(owned_job_id))).status_code == 429
         assert no_run.call_count == 1
 
+    async def test_each_project_counts_against_ai_quota(self, client, mock_db, owned_job_id, firecrawl, no_run, monkeypatch):
+        # Two projects selected, one AI call left for today: refused before anything runs
+        monkeypatch.setenv("QUOTA_AI_CALLS_PER_DAY", "1")
+        await _setup(mock_db, owned_job_id)
+        r = await client.post(_url(owned_job_id))
+        assert r.status_code == 429 and "Daily limit" in r.json()["detail"]
+        assert "project_review" not in await mock_db.candidates.find_one({"candidate_id": CID})
+        assert no_run.call_count == 0
+
     async def test_stale_run_can_restart(self, client, mock_db, owned_job_id, firecrawl, no_run):
         old = datetime.utcnow() - timedelta(minutes=20)
         await _setup(mock_db, owned_job_id, {"status": "running", "requested_at": old, "started_at": old, "projects": []})
