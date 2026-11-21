@@ -103,7 +103,7 @@ INSTRUCTIONS:
 2. Mix question types: technical depth, system design, behavioral, and problem-solving.
 3. Tailor questions to the candidate's background — reference their skills and experience where relevant.
 4. For each question, generate 3-6 short keyword tags (2-3 words each) representing key topics the answer should cover.
-5. If reviewed deployed projects are listed, make at least one question about a specific product by name (what it does, a feature, a weakness or red flag found).
+5. If reviewed deployed projects are listed, make at least one question about a specific product by name. If project concerns to challenge are listed, at least one question must challenge one of them directly (what exactly the candidate built, their commits, why the site credits someone else); don't soften it into a hypothetical.
 6. Questions should be challenging but fair — appropriate for a senior-level technical interview.
 
 Return ONLY a valid JSON array with exactly this structure:

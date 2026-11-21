@@ -39,20 +39,25 @@ Job: {job_title}. Job skills: {skills}.
 
 {context}
 
-Judge only from what the pages and screenshot show. Return ONLY a JSON object:
+Judge only from what the pages and screenshot show. The four ratings judge the project itself, as any
+reviewer would, whatever the job: never lower them because the project uses other skills than the job.
+How well the project fits this job goes only in "job_relevance".
+Each "summary" is one complete sentence of at most 25 words.
+Return ONLY a JSON object:
 {{
   "what_it_does": "1-2 sentences",
   "live_and_working": {{"verdict": "yes|partly|no", "reason": "one line"}},
-  "matches_claim": {{"verdict": "yes|partly|no", "details": "how the product compares with what the resume or portfolio says"}},
+  "matches_claim": {{"verdict": "yes|partly|no", "details": "how the product compares with what the resume or portfolio says", "summary": "one sentence"}},
   "ratings": {{
     "working": {{"score": 1-5, "reason": "one line"}},
     "polish": {{"score": 1-5, "reason": "one line on visual polish and UX"}},
-    "technical_depth": {{"score": 1-5, "reason": "signals visible from outside: features, frameworks, performance hints"}},
+    "technical_depth": {{"score": 1-5, "reason": "signals visible from outside: features, frameworks, performance hints; not job fit"}},
     "originality": {{"score": 1-5, "reason": "signs of a template or tutorial clone, or original work"}}
   }},
-  "ownership_evidence": {{"verdict": "supports|conflicts|unclear", "details": "name in footer or about page, links to the candidate's GitHub or LinkedIn, or another person or company credited"}},
+  "job_relevance": {{"score": 1-5, "reason": "how much this project shows the skills this job needs"}},
+  "ownership_evidence": {{"verdict": "supports|conflicts|unclear", "details": "name in footer or about page, links to the candidate's GitHub or LinkedIn, or another person or company credited", "summary": "one sentence"}},
   "red_flags": ["short items; empty list if none"],
-  "interview_questions": ["2-3 specific questions about this product"],
+  "interview_questions": ["2-3 specific questions about this product; if there are red flags, an ownership conflict or a claim mismatch, at least one must challenge it directly (what exactly they built, their commits, why the site credits someone else)"],
   "overall": {{"score": 1-5, "justification": "short"}}
 }}"""
 
@@ -76,10 +81,14 @@ def build_context(project: dict, pages: List[dict], candidate: dict) -> str:
 # ── Validation of the model's answer ───────────────────────────────
 
 def _s(value, limit: int) -> Optional[str]:
+    """Whitespace-collapsed text, cut at a word boundary with "…" when longer than limit."""
     if not isinstance(value, str) or not value.strip():
         return None
     value = " ".join(value.split())
-    return value[:limit]
+    if len(value) <= limit:
+        return value
+    cut = value[:limit - 1]
+    return (cut.rsplit(" ", 1)[0] if " " in cut else cut).rstrip(" ,;:-") + "…"
 
 
 def _score(value) -> int:
@@ -93,7 +102,11 @@ def _verdict(obj, allowed, text_key: str) -> dict:
     verdict = str(obj.get("verdict", "")).strip().lower()
     if verdict not in allowed:
         raise ValueError("bad verdict")
-    return {"verdict": verdict, text_key: _s(obj.get(text_key), 400) or ""}
+    out = {"verdict": verdict, text_key: _s(obj.get(text_key), 400) or ""}
+    if text_key == "details":
+        # Short form for the Discrepancies list; falls back to the details cut at a word
+        out["summary"] = _s(obj.get("summary"), 200) or _s(out["details"], 160) or ""
+    return out
 
 
 def _list(value, limit: int, item: int) -> List[str]:
@@ -110,6 +123,7 @@ def validate(data) -> dict:
         r = ratings_in.get(key) if isinstance(ratings_in.get(key), dict) else {}
         ratings[key] = {"score": _score(r.get("score")), "reason": _s(r.get("reason"), 200) or ""}
     overall = data.get("overall") if isinstance(data.get("overall"), dict) else {}
+    relevance = data.get("job_relevance") if isinstance(data.get("job_relevance"), dict) else {}
     what = _s(data.get("what_it_does"), 400)
     if not what:
         raise ValueError("missing what_it_does")
@@ -121,6 +135,7 @@ def validate(data) -> dict:
         "live_and_working": _verdict(data.get("live_and_working"), VERDICTS, "reason"),
         "matches_claim": _verdict(data.get("matches_claim"), VERDICTS, "details"),
         "ratings": ratings,
+        "job_relevance": {"score": _score(relevance.get("score")), "reason": _s(relevance.get("reason"), 200) or ""},
         "ownership_evidence": _verdict(data.get("ownership_evidence"), OWNERSHIP, "details"),
         "red_flags": _list(data.get("red_flags"), 6, 200),
         "interview_questions": questions,
@@ -196,12 +211,13 @@ def discrepancies(projects: List[dict]) -> List[dict]:
             continue
         claim = r.get("matches_claim") or {}
         if claim.get("verdict") in ("no", "partly"):
-            add(f"{name} doesn't match the {p.get('source_label', 'resume')} claim"
-                + (f": {claim.get('details')}" if claim.get("details") else ""),
+            text = claim.get("summary") or _s(claim.get("details"), 160)
+            add(f"{name} doesn't match the {p.get('source_label', 'resume')} claim" + (f": {text}" if text else ""),
                 "major" if claim["verdict"] == "no" else "minor")
         owner = r.get("ownership_evidence") or {}
         if owner.get("verdict") == "conflicts":
-            add(f"{name}: the site credits someone else" + (f" ({owner.get('details')})" if owner.get("details") else ""), "major")
+            text = owner.get("summary") or _s(owner.get("details"), 160)
+            add(f"{name}: the site credits someone else" + (f" ({text})" if text else ""), "major")
         for flag in r.get("red_flags") or []:
             add(f"{name}: {flag}", "minor")
     return out
@@ -215,6 +231,8 @@ def summary_line(state: Optional[dict]) -> str:
         head = f"{p.get('name')} ({p.get('url')}, from {p.get('source_label')}: \"{p.get('mention')}\")"
         if r:
             ratings = ", ".join(f"{RATING_LABEL[k]} {v['score']}/5" for k, v in r["ratings"].items())
+            if r.get("job_relevance"):
+                ratings += f"; job relevance {r['job_relevance']['score']}/5 ({r['job_relevance']['reason']})"
             parts.append(
                 f"{head}: {r['what_it_does']} Live: {r['live_and_working']['verdict']}. Matches claim: "
                 f"{r['matches_claim']['verdict']} ({r['matches_claim']['details']}). Overall {r['overall']['score']}/5; "
@@ -225,7 +243,29 @@ def summary_line(state: Optional[dict]) -> str:
     return " | ".join(parts) or "None"
 
 
+def concerns(state: Optional[dict]) -> List[str]:
+    """Red flags, ownership conflicts and claim mismatches the interviewer should challenge directly."""
+    out = []
+    for p in (state or {}).get("projects") or []:
+        r = p.get("review") or {}
+        name = p.get("name") or p.get("url")
+        owner, claim = r.get("ownership_evidence") or {}, r.get("matches_claim") or {}
+        if owner.get("verdict") == "conflicts":
+            out.append(f"{name}: the site credits someone else ({owner.get('summary') or owner.get('details')})")
+        if claim.get("verdict") in ("no", "partly"):
+            out.append(f"{name}: doesn't match what the candidate claims ({claim.get('summary') or claim.get('details')})")
+        out += [f"{name}: {f}" for f in r.get("red_flags") or []]
+    return out
+
+
 def interview_context(candidate: Optional[dict]) -> str:
     """Block for the interview-question prompt; empty when no project was reviewed."""
-    line = summary_line((candidate or {}).get("project_review"))
-    return "" if line == "None" else f"- Reviewed deployed projects: {line}"
+    state = (candidate or {}).get("project_review")
+    line = summary_line(state)
+    if line == "None":
+        return ""
+    block = f"- Reviewed deployed projects: {line}"
+    found = concerns(state)
+    if found:
+        block += "\n- Project concerns to challenge directly: " + " | ".join(found[:6])
+    return block

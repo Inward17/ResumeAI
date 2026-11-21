@@ -104,6 +104,13 @@ const Result = ({ p, onRetry, busy }) => {
               </div>
             ))}
           </dl>
+          {r.jobRelevance?.score != null && (
+            <p className="text-xs leading-relaxed text-ink-2">
+              <span className="text-ink-3">Relevance to this job: </span>
+              <span className="font-medium tabular-nums text-ink">{r.jobRelevance.score}/5</span>
+              {r.jobRelevance.reason && <> · {r.jobRelevance.reason}</>}
+            </p>
+          )}
           {r.redFlags.map((f) => (
             <p key={f} className="flex items-start gap-2 rounded-lg bg-warning-soft px-2.5 py-1.5 text-xs leading-relaxed text-warning ring-1 ring-inset ring-warning/25">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{f}
