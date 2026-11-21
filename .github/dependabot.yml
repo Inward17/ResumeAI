@@ -4,6 +4,11 @@ updates:
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      # langextract (resume parsing) runs on google-genai; a new major needs
+      # testing with it and newer google-auth/pydantic pins, so it is done by hand
+      - dependency-name: google-genai
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
