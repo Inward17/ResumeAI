@@ -11,6 +11,7 @@ from app.auth import AuthUser, get_current_user, require_job_owner
 from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
+from app.services.coding_profiles import detect_claims, extract_coding_profiles, profile_url
 from app.utils.file_utils import read_file, content_matches_type
 from app.services.quota import rate_limit, use_quota
 from app.org import ensure_org
@@ -202,8 +203,9 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
 
     Many resumes embed URLs as clickable hyperlinks rather than visible text.
     pdfminer can read PDF annotations to find these embedded URIs.
+    "uris" holds every link target (used to find coding-profile handles).
     """
-    result = {"github": None, "linkedin": None}
+    result = {"github": None, "linkedin": None, "uris": []}
     try:
         from pdfminer.pdfpage import PDFPage
         from pdfminer.pdfparser import PDFParser
@@ -231,6 +233,8 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
                             if uri:
                                 if isinstance(uri, bytes):
                                     uri = uri.decode("utf-8", errors="ignore")
+                                if len(result["uris"]) < 200:
+                                    result["uris"].append(uri)
                                 uri_lower = uri.lower()
                                 if "github.com" in uri_lower and not result["github"]:
                                     # Skip org/repo URLs — only keep profile URLs
@@ -278,9 +282,14 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         github_valid = github_url and "github.com" in github_url.lower()
         linkedin_valid = linkedin_url and "linkedin.com" in linkedin_url.lower()
         
+        is_pdf = filepath.lower().endswith(".pdf")
+        hyperlinks = await asyncio.to_thread(extract_pdf_hyperlinks, filepath) if is_pdf else {}
+        # Competitive-programming handles and claims, from the text and link targets
+        coding_profiles = extract_coding_profiles([text, *hyperlinks.get("uris", [])])
+        coding_claims = detect_claims(text) if coding_profiles else []
+
         # Fallback: extract URLs from PDF hyperlinks if not found or invalid
-        if (not github_valid or not linkedin_valid) and filepath.lower().endswith(".pdf"):
-            hyperlinks = await asyncio.to_thread(extract_pdf_hyperlinks, filepath)
+        if (not github_valid or not linkedin_valid) and is_pdf:
             if not github_valid and hyperlinks.get("github"):
                 github_url = hyperlinks["github"]
                 personal_info["github"] = github_url
@@ -362,6 +371,8 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
                         "parsed": parsed,
                         "github_username": extract_github_username(github_url),
                         "linkedin_url": extract_linkedin_url(linkedin_url),
+                        "coding_profiles": coding_profiles,
+                        "coding_claims": coding_claims,
                         "education": education,
                         "experience_companies": experience_companies,
                         "universities": parsed.get("university") or [],
@@ -386,6 +397,9 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
             # Store extracted identifiers for linking
             "github_username": extract_github_username(github_url),
             "linkedin_url": extract_linkedin_url(linkedin_url),
+            # {platform: handle} for LeetCode, Codeforces, etc., and the resume's claims about them
+            "coding_profiles": coding_profiles,
+            "coding_claims": coding_claims,
             # Store education and experience for verification
             "education": education,
             "experience_companies": experience_companies,
@@ -502,6 +516,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         
         github_username = candidate.get("github_username")
         linkedin_url = candidate.get("linkedin_url")
+        coding_profiles = candidate.get("coding_profiles") or {}
         parsed = candidate.get("parsed", {})
         
         # Build profile data for web search verification
@@ -525,7 +540,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         )
         
         # Run verification
-        if github_username or linkedin_url or profile_data:
+        if github_username or linkedin_url or profile_data or coding_profiles:
             print(f"[VERIFY] Running verification for {candidate_id}")
             result = await unified_verification_service.run_unified_verification(
                 candidate_id=candidate_id,
@@ -533,6 +548,8 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
                 linkedin_url=linkedin_url,
                 profile_data=profile_data,
                 parsed_resume=parsed,
+                coding_profiles=coding_profiles,
+                coding_claims=candidate.get("coding_claims") or [],
             )
             print(f"[VERIFY] Verification complete for {candidate_id}")
 
@@ -857,12 +874,35 @@ async def _verification_by_candidate(collection, candidate_ids: List[str]) -> Di
     by_id: Dict[str, dict] = {}
     cursor = db[collection].find(
         {"$or": [{"candidateId": {"$in": candidate_ids}}, {"candidate_id": {"$in": candidate_ids}}]},
-        {"candidateId": 1, "candidate_id": 1, "verificationStatus": 1, "matchScore": 1},
+        {"candidateId": 1, "candidate_id": 1, "verificationStatus": 1, "matchScore": 1, "codingProfilesData": 1},
     )
     async for doc in cursor:
         cid = doc.get("candidateId") or doc.get("candidate_id")
         by_id.setdefault(cid, doc)
     return by_id
+
+
+_CODING_FIELDS = ("platform", "handle", "status", "name", "rating", "max_rating", "title", "max_title",
+                  "stars", "problems_solved", "contests", "issues", "checked_at")
+
+
+def _coding_profiles_summary(candidate: dict | None, verification: dict | None) -> List[dict]:
+    """Coding profiles for the dossier: checked results, or the listed handles while pending.
+
+    The profile link is rebuilt from the validated handle, never taken from stored data.
+    """
+    checked = (verification or {}).get("codingProfilesData") or []
+    if not checked:
+        checked = [{"platform": p, "handle": h, "status": "pending"}
+                   for p, h in ((candidate or {}).get("coding_profiles") or {}).items()]
+    out = []
+    for p in checked:
+        try:
+            url = profile_url(p.get("platform"), p.get("handle"))
+        except (KeyError, ValueError):
+            continue
+        out.append({**{k: p.get(k) for k in _CODING_FIELDS}, "issues": p.get("issues") or [], "profile_url": url})
+    return out
 
 
 @router.get("/{job_id}/candidates", dependencies=[Depends(require_job_owner)])
@@ -880,7 +920,8 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         async for c in db.candidates.find(
             {"candidate_id": {"$in": candidate_ids}},
             {"candidate_id": 1, "parsed.personal_info": 1, "parsed.skills": 1, "parsed.education": 1,
-             "parsed.experience": 1, "filename": 1, "github_username": 1, "linkedin_url": 1},
+             "parsed.experience": 1, "filename": 1, "github_username": 1, "linkedin_url": 1,
+             "coding_profiles": 1},
         )
     }
 
@@ -936,6 +977,7 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             "linkedin_url": candidate.get("linkedin_url") if candidate else None,
             "filename": candidate.get("filename") if candidate else None,
             "verification_status": verification.get("verificationStatus") if verification else None,
+            "coding_profiles": _coding_profiles_summary(candidate, verification),
             "skill_matches": skill_matches  # NEW: Real skill matches
         })
     
