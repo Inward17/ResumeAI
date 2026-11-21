@@ -16,7 +16,7 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-def _build_prompt(job: dict, candidate: dict, verification: dict | None) -> str:
+def _build_prompt(job: dict, candidate: dict, verification: dict | None, cover_letter: dict | None = None) -> str:
     """Build a rich prompt from JD + candidate context."""
 
     # ── Job context ──────────────────────────────────────────────────────
@@ -77,6 +77,15 @@ def _build_prompt(job: dict, candidate: dict, verification: dict | None) -> str:
                 recent = positions[0] if positions else {}
                 verification_context += f"Current role: {recent.get('title', '')} at {recent.get('companyName', '')}. "
 
+    # ── Cover letter analysis (stored validated model output) ────────────
+    letter_context = ""
+    if cover_letter:
+        lines = [f"- Cover letter summary: {cover_letter.get('summary', '')}"]
+        lines += [f"- Cover letter vs resume ({c.get('severity')}): letter says {c.get('letter_claim')}; "
+                  f"resume: {c.get('resume_says')}" for c in (cover_letter.get("contradictions") or [])[:5]]
+        lines += [f"- Probe: {p}" for p in (cover_letter.get("probe_points") or [])[:4]]
+        letter_context = "\n".join(lines)
+
     candidate_context = f"""- Name: {candidate_name}
 - Skills: {candidate_skills}
 - Experience:
@@ -84,6 +93,7 @@ def _build_prompt(job: dict, candidate: dict, verification: dict | None) -> str:
 - Education:
 {edu_summary if edu_summary else '  No education data available'}
 {f'- Verification: {verification_context}' if verification_context else ''}
+{letter_context}
 {project_review_context(candidate, str(job.get("_id")) if job.get("_id") else None)}"""
 
     return f"""You are an expert technical interviewer. Generate exactly 5 interview questions for the following candidate applying to a specific job role.
@@ -101,7 +111,7 @@ INSTRUCTIONS:
 0. {UNTRUSTED_NOTE}
 1. Generate 5 interview questions that probe the candidate's fit for THIS specific role.
 2. Mix question types: technical depth, system design, behavioral, and problem-solving.
-3. Tailor questions to the candidate's background — reference their skills and experience where relevant.
+3. Tailor questions to the candidate's background — reference their skills and experience where relevant. If cover letter notes are given, use at least one question to probe a contradiction or probe point from them.
 4. For each question, generate 3-6 short keyword tags (2-3 words each) representing key topics the answer should cover.
 5. If reviewed deployed projects are listed, make at least one question about a specific product by name. If project concerns to challenge are listed, at least one question must challenge one of them directly (what exactly the candidate built, their commits, why the site credits someone else); don't soften it into a hypothetical.
 6. Questions should be challenging but fair — appropriate for a senior-level technical interview.
@@ -119,6 +129,7 @@ async def generate_interview_questions(
     job: dict,
     candidate: dict,
     verification: dict | None = None,
+    cover_letter: dict | None = None,
 ) -> list[dict] | None:
     """Call Groq API to generate interview questions. Returns list of dicts or None on failure."""
 
@@ -127,7 +138,7 @@ async def generate_interview_questions(
         print("[InterviewQ] No GROQ_API_KEY configured")
         return None
 
-    prompt = _build_prompt(job, candidate, verification)
+    prompt = _build_prompt(job, candidate, verification, cover_letter)
 
     payload = {
         "model": GROQ_MODEL,

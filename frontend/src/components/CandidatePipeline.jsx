@@ -20,8 +20,9 @@ const ACCEPTED_TYPES = '.pdf,.docx,.doc,.txt';
 
 // Failed uploads stay in the task log, so remember how many the user already dismissed
 const dismissedKey = (jobId) => `resumeai:dismissed-failures:${jobId}`;
-const readDismissed = (jobId) => {
-  try { return Number(localStorage.getItem(dismissedKey(jobId))) || 0; } catch { return 0; }
+const dismissedLettersKey = (jobId) => `resumeai:dismissed-unpaired-letters:${jobId}`;
+const readDismissed = (jobId, key = dismissedKey) => {
+  try { return Number(localStorage.getItem(key(jobId))) || 0; } catch { return 0; }
 };
 
 const SORTS = {
@@ -80,6 +81,9 @@ const CandidatePipeline = () => {
   const [sort, setSort] = useState('match');
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [dismissedFailures, setDismissedFailures] = useState(() => readDismissed(jobId));
+  // Cover letters in an upload that matched no resume: { count, files }
+  const [unpairedLetters, setUnpairedLetters] = useState({ count: 0, files: [] });
+  const [dismissedLetters, setDismissedLetters] = useState(() => readDismissed(jobId, dismissedLettersKey));
   const lastFinished = useRef(null);
   const fileInputRef = useRef(null);
   const dragDepth = useRef(0);
@@ -89,6 +93,7 @@ const CandidatePipeline = () => {
 
   useEffect(() => {
     setDismissedFailures(readDismissed(jobId));
+    setDismissedLetters(readDismissed(jobId, dismissedLettersKey));
     setJob(null);
     setJobError(null);
     getJob(jobId).then(setJob).catch((err) => setJobError(err.message));
@@ -114,9 +119,13 @@ const CandidatePipeline = () => {
     let timer = null;
     const tick = async () => {
       try {
-        const { counts } = await getJobTasks(jobId);
+        const { counts, unpaired_cover_letters: unpaired = 0, tasks = [] } = await getJobTasks(jobId);
         if (cancelled) return;
         setTaskCounts(counts);
+        setUnpairedLetters({
+          count: unpaired,
+          files: tasks.filter((t) => t.status === 'cover_letter_unpaired').map((t) => t.original_filename).filter(Boolean),
+        });
         const finished = counts.done + counts.failed;
         if (lastFinished.current !== null && finished !== lastFinished.current) fetchCandidates(true);
         lastFinished.current = finished;
@@ -173,6 +182,11 @@ const CandidatePipeline = () => {
 
   const activeTasks = taskCounts ? taskCounts.queued + taskCounts.processing : 0;
   const newFailures = taskCounts ? Math.max(0, taskCounts.failed - dismissedFailures) : 0;
+  const newUnpaired = Math.max(0, unpairedLetters.count - dismissedLetters);
+  const dismissUnpaired = () => {
+    setDismissedLetters(unpairedLetters.count);
+    try { localStorage.setItem(dismissedLettersKey(jobId), String(unpairedLetters.count)); } catch { /* storage blocked */ }
+  };
   const dismissFailures = () => {
     setDismissedFailures(taskCounts.failed);
     try { localStorage.setItem(dismissedKey(jobId), String(taskCounts.failed)); } catch { /* storage blocked: hides until reload */ }
@@ -252,7 +266,7 @@ const CandidatePipeline = () => {
         />
 
         {/* Upload / screening progress */}
-        {(uploading || activeTasks > 0 || newFailures > 0) && (
+        {(uploading || activeTasks > 0 || newFailures > 0 || newUnpaired > 0) && (
           <Card className="mb-5 p-4" aria-live="polite">
             {(uploading && uploadProgress) || activeTasks > 0 ? (
               <>
@@ -281,6 +295,17 @@ const CandidatePipeline = () => {
                 <Button variant="ghost" size="sm" onClick={dismissFailures}>Dismiss</Button>
               </div>
             )}
+            {newUnpaired > 0 && !uploading && (
+              <div className={cn('flex items-start gap-2 text-sm text-warning', (activeTasks > 0 || newFailures > 0) && 'mt-3 border-t border-line pt-3')}>
+                <FileText className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <p className="flex-1">
+                  {newUnpaired} cover letter{newUnpaired === 1 ? '' : 's'} had no matching resume
+                  {unpairedLetters.files.length > 0 && `: ${unpairedLetters.files.slice(0, newUnpaired).join(', ')}`}.
+                  {' '}Open the candidate and attach it under Cover letter.
+                </p>
+                <Button variant="ghost" size="sm" onClick={dismissUnpaired}>Dismiss</Button>
+              </div>
+            )}
           </Card>
         )}
 
@@ -292,7 +317,7 @@ const CandidatePipeline = () => {
               </div>
               <p className="font-serif text-3xl text-ink">Upload resumes to start screening</p>
               <p className="mt-1 max-w-md text-sm text-ink-3">
-                Drag and drop PDF, DOCX or TXT files anywhere on this page. Each resume is parsed, verified and ranked against this job.
+                Drag and drop PDF, DOCX or TXT files anywhere on this page. Each resume is parsed, verified and ranked against this job. Cover letters in the same upload are matched to their resumes.
               </p>
               <Button onClick={chooseFiles} className="mt-5"><Upload aria-hidden="true" /> Choose files</Button>
             </div>
@@ -341,7 +366,7 @@ const CandidatePipeline = () => {
                                   className="block max-w-full truncate rounded text-left font-medium text-ink hover:text-primary-text">
                                   {c.name}
                                 </button>
-                                <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}</p>
+                                <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}{c.hasCoverLetter && ' · Cover letter'}</p>
                               </div>
                             </div>
                           </td>
@@ -364,7 +389,7 @@ const CandidatePipeline = () => {
                             <Initials name={c.name} />
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-ink">{c.name}</p>
-                              <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}</p>
+                              <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}{c.hasCoverLetter && ' · Cover letter'}</p>
                             </div>
                           </button>
                           <StatusSelect candidate={c} onChange={handleStatusUpdate} />

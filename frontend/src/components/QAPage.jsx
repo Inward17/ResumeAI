@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw, UserRound, X } from 'lucide-react';
+import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw, AlertTriangle, UserRound, X } from 'lucide-react';
 import {
   getJob, getJobCandidate, getInterviewQuestions, getEvaluation, submitEvaluation, updateCandidateStatus,
 } from '../services/jobService';
@@ -84,6 +84,8 @@ const QAPage = () => {
   const [questions, setQuestions] = useState([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [questionError, setQuestionError] = useState(null);
+  // The cover letter changed after these questions were generated
+  const [questionsStale, setQuestionsStale] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [panel, setPanel] = useState(readPanel); // null (closed) | 'candidate' | 'factChecker'
   // Visited tabs stay mounted while the panel is open, so the chat survives a tab switch
@@ -102,16 +104,20 @@ const QAPage = () => {
       .catch((err) => setLoadError(err.message));
   }, [jobId, candidateId]);
 
-  const loadQuestions = useCallback(async () => {
+  const loadQuestions = useCallback(async (regenerate) => {
     setLoadingQuestions(true);
     setQuestionError(null);
     try {
       const [data, previous] = await Promise.all([
-        getInterviewQuestions(jobId, candidateId),
+        // Called from click handlers too, so only an explicit true regenerates
+        getInterviewQuestions(jobId, candidateId, regenerate === true),
         getEvaluation(jobId, candidateId).catch(() => null),
       ]);
       const qs = data.questions || [];
       setQuestions(qs);
+      setQuestionsStale(!!data.stale);
+      // New questions: ticks for the old ones no longer apply
+      if (regenerate === true) setSelectedKeywords({});
       // Re-opening an interview restores the ticks from the last submission
       if (previous) {
         const restored = {};
@@ -330,6 +336,19 @@ const QAPage = () => {
                   description={`${questionError} Scoring and submitting the evaluation need the questions, so they're disabled too.`}
                   action={<Button variant="secondary" onClick={loadQuestions}><RefreshCw aria-hidden="true" /> Try again</Button>} />
               </Card>
+            )}
+
+            {!loadingQuestions && !questionError && questionsStale && (
+              <div className="mb-4 flex flex-col gap-3 rounded-lg bg-warning-soft px-4 py-3 text-sm text-warning ring-1 ring-inset ring-warning/25 sm:flex-row sm:items-center" role="status">
+                <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <p className="flex-1">
+                  The cover letter changed after these questions were generated, so they don't use it.
+                  Regenerating replaces them{lastSubmitted ? ' and clears the ticks restored from the last evaluation' : ''}.
+                </p>
+                <Button size="sm" variant="secondary" onClick={() => loadQuestions(true)}>
+                  <RefreshCw aria-hidden="true" /> Regenerate questions
+                </Button>
+              </div>
             )}
 
             {!loadingQuestions && !questionError && (

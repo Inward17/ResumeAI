@@ -152,6 +152,7 @@ const transformCandidateFromAPI = (c) => ({
     experience: strings(c.experience),
     githubUrl: c.github_url || null,
     linkedinUrl: c.linkedin_url || null,
+    hasCoverLetter: !!c.has_cover_letter,
     codingProfiles: Array.isArray(c.coding_profiles) ? c.coding_profiles.map(transformCodingProfile) : [],
     portfolios: Array.isArray(c.portfolios) ? c.portfolios.map(transformPortfolio) : [],
     portfolioSkillEvidence: Array.isArray(c.portfolio_skill_evidence)
@@ -285,10 +286,14 @@ export const updateCandidateStatus = async (jobId, candidateId, status) => {
     return response.json();
 };
 
-/** Fetch AI-generated interview questions (GET /api/jobs/:jobId/candidates/:candidateId/interview-questions) */
-export const getInterviewQuestions = async (jobId, candidateId) => {
+/**
+ * Fetch AI-generated interview questions (GET /api/jobs/:jobId/candidates/:candidateId/interview-questions).
+ * The result's `stale` is true when the cover letter changed after the questions were made;
+ * regenerate=true makes new ones (one AI call).
+ */
+export const getInterviewQuestions = async (jobId, candidateId, regenerate = false) => {
     const response = await apiFetch(
-        `/api/jobs/${jobId}/candidates/${candidateId}/interview-questions`
+        `/api/jobs/${jobId}/candidates/${candidateId}/interview-questions${regenerate ? '?regenerate=true' : ''}`
     );
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -334,6 +339,68 @@ export const factCheck = async (candidateId, message, candidateName) => {
         throw new Error(err.detail || 'Something went wrong while checking that claim. Please try again.');
     }
     return response.json();
+};
+
+/* ─────────────────────────────────────────────────────────────
+ *  Cover letter of one application (/api/v1/jobs/:jobId/candidates/:candidateId/cover-letter)
+ * ───────────────────────────────────────────────────────────── */
+
+const transformCoverLetter = (l) => (l ? {
+    text: l.text || '',
+    truncated: !!l.truncated,
+    source: l.source,
+    filename: l.filename || null,
+    uploadedAt: l.uploaded_at,
+    analysisStatus: l.analysis_status,
+    analysisError: l.analysis_error || null,
+    analysis: l.analysis ? {
+        summary: l.analysis.summary || '',
+        fit: {
+            specificity: l.analysis.fit?.specificity || null,
+            addressesRole: l.analysis.fit?.addresses_role ?? null,
+            requirementsAddressed: strings(l.analysis.fit?.requirements_addressed),
+            notes: l.analysis.fit?.notes || '',
+        },
+        contradictions: (l.analysis.contradictions || []).map((c) => ({
+            topic: c.topic, letterClaim: c.letter_claim, resumeSays: c.resume_says, severity: c.severity,
+        })),
+        probePoints: strings(l.analysis.probe_points),
+    } : null,
+} : null);
+
+const coverLetterUrl = (jobId, candidateId) => `/api/v1/jobs/${jobId}/candidates/${candidateId}/cover-letter`;
+
+const coverLetterRequest = async (path, options, fallback) => {
+    const response = await apiFetch(path, options);
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || fallback);
+    }
+    return transformCoverLetter((await response.json()).cover_letter);
+};
+
+export const getCoverLetter = (jobId, candidateId) =>
+    coverLetterRequest(coverLetterUrl(jobId, candidateId), {}, 'Could not load the cover letter');
+
+/** Attach a file (File) or pasted text (string); replaces any existing letter */
+export const attachCoverLetter = (jobId, candidateId, fileOrText) => {
+    let options;
+    if (typeof fileOrText === 'string') {
+        options = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: fileOrText }) };
+    } else {
+        const formData = new FormData();
+        formData.append('file', fileOrText);
+        options = { method: 'POST', body: formData };
+    }
+    return coverLetterRequest(coverLetterUrl(jobId, candidateId), options, 'Could not attach the cover letter');
+};
+
+export const retryCoverLetterAnalysis = (jobId, candidateId) =>
+    coverLetterRequest(`${coverLetterUrl(jobId, candidateId)}/analysis`, { method: 'POST' }, 'Could not analyse the cover letter');
+
+export const deleteCoverLetter = async (jobId, candidateId) => {
+    const response = await apiFetch(coverLetterUrl(jobId, candidateId), { method: 'DELETE' });
+    if (!response.ok) throw new Error('Could not remove the cover letter');
 };
 
 /* ─────────────────────────────────────────────────────────────

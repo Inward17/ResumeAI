@@ -15,10 +15,14 @@ router = APIRouter(prefix="/jobs", tags=["interview-questions"])
 
 
 @router.get("/{job_id}/candidates/{candidate_id}/interview-questions", dependencies=[Depends(require_job_owner)])
-async def get_interview_questions(job_id: str, candidate_id: str, user: AuthUser = Depends(get_current_user)):
+async def get_interview_questions(job_id: str, candidate_id: str, regenerate: bool = False,
+                                  user: AuthUser = Depends(get_current_user)):
     """
     Get AI-generated interview questions for a candidate + job pair.
     Generates via Groq on first call, then caches in applications collection.
+
+    Cached questions are "stale" when the cover letter analysis changed since they
+    were generated; they are only regenerated when the caller asks (regenerate=true).
     """
     rate_limit(user.uid, "ai")
 
@@ -31,9 +35,12 @@ async def get_interview_questions(job_id: str, candidate_id: str, user: AuthUser
     # Only candidates who applied to this job; 404 so other workspaces' ids aren't revealed
     if not application:
         raise HTTPException(404, "Candidate not found")
+    letter = application.get("cover_letter") or {}
+    letter_at = letter.get("analyzed_at") if letter.get("analysis_status") == "done" else None
     cached = application.get("interview_questions")
-    if cached:
-        return {"status": "success", "questions": cached, "cached": True}
+    if cached and not regenerate:
+        stale = application.get("interview_questions_cover_letter_at") != letter_at
+        return {"status": "success", "questions": cached, "cached": True, "stale": stale}
 
     # ── 2. Fetch context data ────────────────────────────────────────────
     # Job
@@ -65,15 +72,16 @@ async def get_interview_questions(job_id: str, candidate_id: str, user: AuthUser
         job=dict(job),
         candidate=dict(candidate),
         verification=dict(verification) if verification else None,
+        cover_letter=letter.get("analysis") if letter_at else None,
     )
 
     if questions:
         # ── 4. Cache on the existing application (never create one) ──────
         await db.applications.update_one(
             {"_id": application["_id"]},
-            {"$set": {"interview_questions": questions}},
+            {"$set": {"interview_questions": questions, "interview_questions_cover_letter_at": letter_at}},
         )
         print(f"[InterviewQ] ✅ Cached {len(questions)} questions for {candidate_id}")
-        return {"status": "success", "questions": questions, "cached": False}
+        return {"status": "success", "questions": questions, "cached": False, "stale": False}
     # No made-up fallback: the interviewer should know the AI part isn't working
     raise HTTPException(503, "The AI service is down, so interview questions can't be generated right now. Try again later.")

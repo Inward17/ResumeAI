@@ -10,6 +10,7 @@ import { DEFAULT_PREFERENCES } from '../lib/preferences';
 import { cn } from '../lib/utils';
 import { ScoreRing, Initials, Tag, scoreLevel } from './common';
 import ProjectReviews, { useProjectReviews } from './ProjectReviews';
+import CoverLetterSection from './CoverLetterSection';
 
 const SOURCES = [
   { key: 'github', label: 'GitHub', Icon: Github },
@@ -333,6 +334,8 @@ const CandidateDossier = ({ candidate, job, prefs = DEFAULT_PREFERENCES, compact
             <div className="flex flex-wrap gap-1.5">{skills.map((s) => <Tag key={s}>{s}</Tag>)}</div>
           )}
         </Block>
+
+        {job?.id && <CoverLetterSection jobId={job.id} candidateId={candidate.id} />}
 
         {job?.id && <ProjectReviews jobId={job.id} candidateId={candidate.id} state={projectReviews} />}
       </div>

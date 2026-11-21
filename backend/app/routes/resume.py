@@ -19,6 +19,7 @@ from app.services.quota import rate_limit, use_quota
 from app.org import ensure_org
 from app.services.skill_matching.pipeline import run_unified_skill_scoring
 from app.services.task_queue import task_queue, TERMINAL_STATUSES
+from app.services import cover_letter_service
 
 # Gemini concurrency, retries and rate-limit backoff are handled in
 # app.services.parser; the number of resumes processed at once is set by
@@ -252,10 +253,12 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
     return result
 
 
-async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None, org_id: str | None = None) -> str:
+async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None, org_id: str | None = None,
+                           text: str | None = None) -> str:
     """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID.
 
     org_id is the workspace of the job the resume was uploaded to; duplicates are matched within it.
+    text, when given, is the resume part of a combined cover letter + resume PDF.
     """
     candidate_id = task_id
     try:
@@ -265,9 +268,10 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         with open(filepath, "rb") as f:
             content = await asyncio.to_thread(f.read)
         
-        # ponytail: on timeout the extraction thread can't be killed and runs on
-        # in the background; move parsing to a subprocess if that ever bites.
-        text = await asyncio.wait_for(asyncio.to_thread(read_file, filename, content), TEXT_EXTRACT_TIMEOUT_SECONDS)
+        if text is None:
+            # ponytail: on timeout the extraction thread can't be killed and runs on
+            # in the background; move parsing to a subprocess if that ever bites.
+            text = await asyncio.wait_for(asyncio.to_thread(read_file, filename, content), TEXT_EXTRACT_TIMEOUT_SECONDS)
         if not text:
             raise ValueError("Empty file")
         
@@ -737,7 +741,7 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
 
 
 async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid: str | None = None,
-                            resolved_candidate_id: str | None = None):
+                            resolved_candidate_id: str | None = None, text: str | None = None):
     """Combined background task: parse resume, then run verification"""
     # A task re-queued after a crash during verification was already parsed and its file deleted
     if resolved_candidate_id:
@@ -747,7 +751,8 @@ async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid:
             job = await db.jobs.find_one({"_id": ObjectId(job_id)}, {"org_id": 1})
         except Exception:
             job = None
-        real_candidate_id = await _parse_and_store(filename, task_id, owner_uid, (job or {}).get("org_id"))
+        real_candidate_id = await _parse_and_store(filename, task_id, owner_uid, (job or {}).get("org_id"),
+                                                   **({"text": text} if text is not None else {}))
     # The candidate is stored (or the parse failed for good): the file isn't needed any more.
     # Not in a finally, so a cancelled task keeps its file for the retry.
     await asyncio.to_thread(_remove_stored_file, filename)
@@ -759,9 +764,26 @@ async def _parse_and_verify(filename: str, task_id: str, job_id: str, owner_uid:
 
 
 async def process_resume_task(task: dict):
-    """Queue handler (see app.services.task_queue): runs one uploaded resume end to end."""
+    """Queue handler (see app.services.task_queue): runs one uploaded resume end to end.
+
+    Cover letters in the upload are recognised first: they never become candidates,
+    and are paired with a resume of the same job instead.
+    """
+    resolved = task.get("resolved_candidate_id")
+    if resolved:
+        # A retried task was already classified and parsed, and its file is gone.
+        # ponytail: a letter split from a combined PDF is lost on that rare retry;
+        # store letter_text on the task if it ever matters.
+        doc = {"kind": "resume", "resume_text": None, "letter_text": None}
+    else:
+        doc = await cover_letter_service.prepare_upload(task, os.path.join(RESUMES_DIR, task["filename"]))
+    if doc["kind"] == "cover_letter":
+        await cover_letter_service.after_resume(task, None)
+        return
+    split = {"text": doc["resume_text"]} if doc["resume_text"] else {}
     await _parse_and_verify(task["filename"], task["task_id"], task["job_id"], task.get("owner_uid"),
-                            task.get("resolved_candidate_id"))
+                            resolved, **split)
+    await cover_letter_service.after_resume(task, doc["letter_text"])
 
 
 def _write_file(path: str, content: bytes):
@@ -840,7 +862,9 @@ async def upload_resumes(
 @router.get("/{job_id}/tasks", dependencies=[Depends(require_job_owner)])
 async def get_job_tasks(job_id: str, limit: int = 200):
     """Processing progress for uploaded resumes (the frontend polls this)."""
+    await cover_letter_service.expire_waiting_letters(job_id)
     counts = {"queued": 0, "processing": 0, "done": 0, "failed": 0}
+    unpaired_letters = 0
     async for row in db.tasks.aggregate([
         {"$match": {"job_id": job_id}},
         {"$group": {"_id": "$status", "n": {"$sum": 1}}},
@@ -848,9 +872,11 @@ async def get_job_tasks(job_id: str, limit: int = 200):
         status = row["_id"]
         if status == "queued":
             counts["queued"] += row["n"]
-        elif status in ("done", "verification_failed"):
+        elif status in ("done", "verification_failed", cover_letter_service.ATTACHED, cover_letter_service.UNPAIRED):
             # verification_failed still creates the candidate (with unverified scores)
             counts["done"] += row["n"]
+            if status == cover_letter_service.UNPAIRED:
+                unpaired_letters += row["n"]
         elif status in TERMINAL_STATUSES:
             counts["failed"] += row["n"]
         else:  # processing / parsed / verifying
@@ -865,6 +891,8 @@ async def get_job_tasks(job_id: str, limit: int = 200):
     return {
         "job_id": job_id,
         "counts": {**counts, "total": sum(counts.values())},
+        # Included in "done"; these letters need attaching by hand
+        "unpaired_cover_letters": unpaired_letters,
         "tasks": recent,
     }
 
@@ -956,7 +984,7 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
     """Get all candidates for a job from applications collection"""
     # Previously capped at 100 with 2-3 queries per candidate; now batched
     limit = min(max(limit, 1), 5000)
-    applications = await db.applications.find({"job_id": job_id}).sort(
+    applications = await db.applications.find({"job_id": job_id}, {"cover_letter.text": 0}).sort(
         "application_date", -1
     ).skip(max(skip, 0)).to_list(length=limit)
     candidate_ids = [app.get("candidate_id") for app in applications]
@@ -1030,7 +1058,8 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             "portfolios": portfolios,
             # Job skills shown on portfolios or Stack Overflow tags: evidence only, not scored
             "portfolio_skill_evidence": portfolio_checks.skill_evidence(portfolios, required_skills),
-            "skill_matches": skill_matches  # NEW: Real skill matches
+            "skill_matches": skill_matches,  # NEW: Real skill matches
+            "has_cover_letter": bool(app.get("cover_letter")),
         })
     
     return {"job_id": job_id, "candidates": result}

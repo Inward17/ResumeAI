@@ -60,6 +60,8 @@ def _patch_db(mock_db):
         "app.routes.evaluation_routes.db",
         "app.routes.interview_questions_routes.db",
         "app.services.fact_checker_service.db",
+        "app.services.cover_letter_service.db",
+        "app.routes.cover_letter_routes.db",
         "app.routes.project_review_routes.db",
         "app.services.quota.db",
     ]
@@ -86,6 +88,15 @@ def _isolate_resume_storage(tmp_path):
     """Uploaded files go to a temp dir instead of the repo's resumes/ folder."""
     with patch("app.routes.resume.RESUMES_DIR", str(tmp_path)):
         yield
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """Per-user rate limits are in-memory: start every test with none used."""
+    from app.services import quota
+    quota._hits.clear()
+    yield
+    quota._hits.clear()
 
 
 # ---------------------------------------------------------------------------

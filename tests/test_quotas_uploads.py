@@ -16,14 +16,6 @@ from tests.conftest import create_owned_job
 PDF = b"%PDF-1.4 resume"
 
 
-@pytest.fixture(autouse=True)
-def _fresh_rate_limits():
-    from app.services import quota
-    quota._hits.clear()
-    yield
-    quota._hits.clear()
-
-
 def _pdfs(n):
     return [("files", (f"r{i}.pdf", PDF, "application/pdf")) for i in range(n)]
 
