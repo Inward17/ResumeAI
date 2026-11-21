@@ -335,3 +335,86 @@ export const factCheck = async (candidateId, message, candidateName) => {
     }
     return response.json();
 };
+
+/* ─────────────────────────────────────────────────────────────
+ *  Project reviews (deployed projects visited and rated by AI on demand)
+ *  All text is candidate- or model-controlled: render as plain text.
+ * ───────────────────────────────────────────────────────────── */
+// Project links were validated by the backend (public http/https only); nothing else is used as an href
+const webUrlOrNull = (url) => (typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null);
+const verdict = (v, key) => (v && typeof v === 'object' ? { verdict: String(v.verdict || ''), text: String(v[key] || '') } : null);
+
+const transformProjectReview = (r) => {
+    if (!r || typeof r !== 'object') return null;
+    const ratings = r.ratings && typeof r.ratings === 'object' ? r.ratings : {};
+    return {
+        whatItDoes: String(r.what_it_does || ''),
+        live: verdict(r.live_and_working, 'reason'),
+        matchesClaim: verdict(r.matches_claim, 'details'),
+        ownership: verdict(r.ownership_evidence, 'details'),
+        ratings: ['working', 'polish', 'technical_depth', 'originality']
+            .filter((k) => ratings[k])
+            .map((k) => ({ key: k, score: numOrNull(ratings[k].score), reason: String(ratings[k].reason || '') })),
+        redFlags: strings(r.red_flags),
+        interviewQuestions: strings(r.interview_questions),
+        jobRelevance: r.job_relevance ? { score: numOrNull(r.job_relevance.score), reason: String(r.job_relevance.reason || '') } : null,
+        overall: r.overall ? { score: numOrNull(r.overall.score), justification: String(r.overall.justification || '') } : null,
+    };
+};
+
+const transformProject = (p) => ({
+    id: String(p.id),
+    url: webUrlOrNull(p.url),
+    name: String(p.name || ''),
+    sourceLabel: String(p.source_label || 'Resume'),
+    mention: String(p.mention || ''),
+    reviewable: Boolean(p.reviewable),
+    note: p.note || null,
+    selected: Boolean(p.selected),
+    state: p.state || null,
+    siteStatus: p.site_status || null,
+    siteNote: p.site_note || null,
+    pages: (Array.isArray(p.pages) ? p.pages : []).map((pg) => ({ url: webUrlOrNull(pg.url), title: pg.title || '', failed: Boolean(pg.failed) })),
+    // Only our own stored JPEG thumbnail, as a data URL
+    screenshot: typeof p.screenshot === 'string' && p.screenshot.startsWith('data:image/jpeg;base64,') ? p.screenshot : null,
+    screenshotNote: p.screenshot_note || null,
+    review: transformProjectReview(p.review),
+    reviewStatus: p.review_status || null,
+    reviewNote: p.review_note || null,
+});
+
+/** Discovered projects and the latest review (GET /api/v1/jobs/:jobId/candidates/:candidateId/project-reviews) */
+export const getProjectReviews = async (jobId, candidateId) => {
+    const response = await apiFetch(`/api/v1/jobs/${jobId}/candidates/${candidateId}/project-reviews`);
+    if (!response.ok) throw new Error('Could not load project reviews');
+    const d = await response.json();
+    return {
+        firecrawlConfigured: Boolean(d.firecrawl_configured),
+        maxProjects: numOrNull(d.max_projects) ?? 3,
+        maxPages: numOrNull(d.max_pages) ?? 3,
+        projects: (Array.isArray(d.projects) ? d.projects : []).map(transformProject),
+        review: d.review ? {
+            status: d.review.status,
+            error: d.review.error || null,
+            requestedBy: d.review.requested_by || null,
+            requestedAt: d.review.requested_at || null,
+            reviewedAt: d.review.reviewed_at || null,
+            otherJob: Boolean(d.review.other_job),
+            projects: (Array.isArray(d.review.projects) ? d.review.projects : []).map(transformProject),
+        } : null,
+        discrepancies: (Array.isArray(d.discrepancies) ? d.discrepancies : []).map(transformDiscrepancy).filter(Boolean),
+    };
+};
+
+/** Start a review, or with retry re-run only the AI step (POST .../project-reviews) */
+export const startProjectReviews = async (jobId, candidateId, { retry = false } = {}) => {
+    const response = await apiFetch(
+        `/api/v1/jobs/${jobId}/candidates/${candidateId}/project-reviews${retry ? '?retry=true' : ''}`,
+        { method: 'POST' },
+    );
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Could not start the project review');
+    }
+    return response.json();
+};

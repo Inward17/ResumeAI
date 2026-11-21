@@ -16,7 +16,7 @@ from app.database import db
 # kind: (env var, default per day, what the limit counts)
 QUOTAS = {
     "resume_upload": ("QUOTA_RESUME_UPLOADS_PER_DAY", 500, "resume uploads"),
-    "ai_call": ("QUOTA_AI_CALLS_PER_DAY", 300, "AI calls (interview questions and fact checks)"),
+    "ai_call": ("QUOTA_AI_CALLS_PER_DAY", 300, "AI calls"),
 }
 
 

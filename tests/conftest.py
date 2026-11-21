@@ -60,6 +60,7 @@ def _patch_db(mock_db):
         "app.routes.evaluation_routes.db",
         "app.routes.interview_questions_routes.db",
         "app.services.fact_checker_service.db",
+        "app.routes.project_review_routes.db",
         "app.services.quota.db",
     ]
 
