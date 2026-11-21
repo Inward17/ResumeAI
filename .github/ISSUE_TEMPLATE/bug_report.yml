@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in ResumeAI doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For security problems, don't use this form: follow [SECURITY.md](https://github.com/Inward17/ResumeAI/blob/main/SECURITY.md) instead.
+        Don't include real candidate data, resumes or keys.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a job's pipeline
+        2. Upload a resume
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Resume upload and parsing
+        - Scoring and verification
+        - Interviews and fact checker
+        - Jobs and pipeline
+        - Team, invites and API keys
+        - Sign-in
+        - Deployment and CI
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Live site
+        - Local development
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or logs
+      description: Browser console or backend output. Remove keys and personal data first.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Commit or branch
+      description: For local runs, the output of `git rev-parse --short HEAD`.

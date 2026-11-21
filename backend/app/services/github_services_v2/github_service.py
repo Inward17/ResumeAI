@@ -239,8 +239,21 @@ async def _run_pipeline(
         behavioralAnalysis=behavioral,
         repositoryStats=repo_stats,
         llmEscalation=llm_escalation,
+        homepages=_homepages(all_repos),
         analyzedAt=now_iso,
     )
+
+
+def _homepages(repos: List[Dict[str, Any]], limit: int = 15) -> List[Dict[str, Any]]:
+    """Homepage links of the candidate's own (non-fork) repos, newest push first. Not fetched here."""
+    out = []
+    for r in sorted(repos, key=lambda r: r.get("pushed_at") or "", reverse=True):
+        url = r.get("homepage")
+        if r.get("fork") or not isinstance(url, str) or not url.strip():
+            continue
+        out.append({"repo": r.get("name"), "url": url.strip()[:300], "description": (r.get("description") or "")[:200],
+                    "language": r.get("language"), "topics": (r.get("topics") or [])[:8], "pushed_at": r.get("pushed_at")})
+    return out[:limit]
 
 
 # ═══════════════════════════════════════════════════════════════════
