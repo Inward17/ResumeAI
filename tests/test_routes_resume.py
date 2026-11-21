@@ -62,7 +62,7 @@ class TestExtractLinkedinUrl:
 class TestUploadResumes:
     async def test_upload_valid_file(self, client, mock_db, owned_job_id):
         """Valid PDF upload should be accepted."""
-        files = [("files", ("resume.pdf", b"fake-pdf-content", "application/pdf"))]
+        files = [("files", ("resume.pdf", b"%PDF-1.4 fake", "application/pdf"))]
         resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
         assert resp.status_code == 200
         data = resp.json()
@@ -83,7 +83,7 @@ class TestUploadResumes:
     async def test_upload_unsupported_file_rejects_whole_batch(self, client, mock_db, owned_job_id):
         """A bad file must not leave the valid files of the batch queued."""
         files = [
-            ("files", ("good.pdf", b"pdf", "application/pdf")),
+            ("files", ("good.pdf", b"%PDF-1.4", "application/pdf")),
             ("files", ("bad.xyz", b"content", "application/octet-stream")),
         ]
         resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
@@ -92,8 +92,8 @@ class TestUploadResumes:
 
     async def test_upload_multiple_files(self, client, mock_db, owned_job_id):
         files = [
-            ("files", ("resume1.pdf", b"pdf1", "application/pdf")),
-            ("files", ("resume2.docx", b"docx1", "application/vnd.openxmlformats")),
+            ("files", ("resume1.pdf", b"%PDF-1.4", "application/pdf")),
+            ("files", ("resume2.docx", b"PKdocx", "application/vnd.openxmlformats")),
         ]
         resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
         assert resp.status_code == 200
@@ -101,12 +101,12 @@ class TestUploadResumes:
         assert await mock_db.tasks.count_documents({"job_id": owned_job_id, "status": "queued"}) == 2
 
     async def test_upload_large_batch_is_queued(self, client, mock_db, owned_job_id):
-        """100 resumes in one request are all queued (previously processed one by one in-request)."""
-        files = [("files", (f"resume{i}.txt", b"resume text", "text/plain")) for i in range(100)]
+        """A full batch (MAX_FILES_PER_UPLOAD) in one request is all queued."""
+        files = [("files", (f"resume{i}.txt", b"resume text", "text/plain")) for i in range(50)]
         resp = await client.post(f"/api/v1/jobs/{owned_job_id}/upload", files=files)
         assert resp.status_code == 200
-        assert len(resp.json()["saved"]) == 100
-        assert await mock_db.tasks.count_documents({"job_id": owned_job_id, "status": "queued"}) == 100
+        assert len(resp.json()["saved"]) == 50
+        assert await mock_db.tasks.count_documents({"job_id": owned_job_id, "status": "queued"}) == 50
 
     async def test_upload_to_other_users_job_is_404(self, client, mock_db):
         other_job = await create_owned_job(mock_db, owner_uid="someone-else")
