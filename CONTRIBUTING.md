@@ -12,7 +12,7 @@ By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md). Re
 
 ## Set up
 
-Follow [Run locally](README.md#run-locally) in the README: Python 3.11+, Node 20+ with Yarn 1, a MongoDB database and a Firebase project. Copy `backend/.env.example` and `frontend/.env.example` to `.env` files and fill them in. Never commit a `.env` file or a real key.
+Follow [Run locally](README.md#run-locally) in the README: Python 3.11+, Node 24.12+ with Yarn 1, a MongoDB database and a Firebase project. Copy `backend/.env.example` and `frontend/.env.example` to `.env` files and fill them in. Never commit a `.env` file or a real key.
 
 ## Make the change
 

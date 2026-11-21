@@ -17,9 +17,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Long-lived vendor chunks; pages are lazy-loaded in App.jsx
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
-          firebase: ['firebase/app', 'firebase/auth'],
+        // Vite 8 (Rolldown) takes only the function form
+        manualChunks(id) {
+          if (/node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'react';
+          if (/node_modules[\\/](firebase|@firebase)[\\/]/.test(id)) return 'firebase';
+          return undefined;
         },
       },
     },

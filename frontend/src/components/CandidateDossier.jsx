@@ -4,9 +4,10 @@
  */
 import React from 'react';
 import {
-  Github, Linkedin, Mail, Phone, Briefcase, GraduationCap, AlertTriangle, CheckCircle2, CircleDashed, XCircle, Globe, Code2, Palette, Users, ChevronDown,
+  Mail, Phone, Briefcase, GraduationCap, AlertTriangle, CheckCircle2, CircleDashed, XCircle, Globe, Code2, Palette, Users, ChevronDown,
 } from 'lucide-react';
 import { DEFAULT_PREFERENCES } from '../lib/preferences';
+import { Github, Linkedin } from './BrandIcons';
 import { cn } from '../lib/utils';
 import { ScoreRing, Initials, Tag, scoreLevel } from './common';
 import ProjectReviews, { useProjectReviews } from './ProjectReviews';
