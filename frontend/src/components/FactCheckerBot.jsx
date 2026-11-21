@@ -6,7 +6,7 @@ import { IconButton } from './common';
 
 const SUGGESTIONS = ['Is their most recent role verified?', 'Do their GitHub projects match the resume?', 'Which resume claims have no supporting evidence?'];
 
-const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
+const FactCheckerBot = ({ candidateId, candidateName, onClose, showHeader = true }) => {
   const [messages, setMessages] = useState([
     { role: 'assistant', text: `Ask me to check any claim about ${candidateName}. I'll look at the resume and the verification evidence.` },
   ]);
@@ -39,6 +39,7 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
 
   return (
     <div className="flex h-full w-full flex-1 flex-col bg-surface">
+      {showHeader && (
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-line px-4">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-soft">
@@ -51,6 +52,7 @@ const FactCheckerBot = ({ candidateId, candidateName, onClose }) => {
         </div>
         <IconButton label="Close fact checker" onClick={onClose}><X aria-hidden="true" /></IconButton>
       </div>
+      )}
 
       <div className="flex-1 space-y-3 overflow-y-auto bg-canvas p-4" aria-live="polite">
         {messages.map((msg, idx) => (
