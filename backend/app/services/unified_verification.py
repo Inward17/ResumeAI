@@ -537,10 +537,19 @@ class UnifiedVerificationService:
     async def _persist_to_db(self, verification_data: VerificationDataModel):
         """Persist verification data to MongoDB"""
         doc = verification_data.to_mongo_dict()
-        
+        created_at = doc.pop("createdAt", None)
+        # to_mongo_dict leaves out empty fields, so clear them explicitly: a source
+        # that is gone on re-verification (e.g. the resume no longer links GitHub)
+        # must not keep showing the result from an earlier run
+        cleared = {field: "" for field in type(verification_data).model_fields
+                   if field not in doc and field != "createdAt"}
+        update = {"$set": doc, "$setOnInsert": {"createdAt": created_at}}
+        if cleared:
+            update["$unset"] = cleared
+
         await self.db.verification_data.update_one(
             {"candidateId": verification_data.candidateId},
-            {"$set": doc},
+            update,
             upsert=True
         )
 
