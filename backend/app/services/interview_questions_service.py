@@ -84,7 +84,7 @@ def _build_prompt(job: dict, candidate: dict, verification: dict | None) -> str:
 - Education:
 {edu_summary if edu_summary else '  No education data available'}
 {f'- Verification: {verification_context}' if verification_context else ''}
-{project_review_context(candidate)}"""
+{project_review_context(candidate, str(job.get("_id")) if job.get("_id") else None)}"""
 
     return f"""You are an expert technical interviewer. Generate exactly 5 interview questions for the following candidate applying to a specific job role.
 

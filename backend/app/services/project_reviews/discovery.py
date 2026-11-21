@@ -101,7 +101,10 @@ def _project_for(url: str, lines: List[str], i: Optional[int], projects: List[di
     host = urlparse(url).hostname
     if i is not None and _named_in(lines[i], projects):
         return _named_in(lines[i], projects)
-    hit = next((p for p in projects if host in (p.get("details") or "").lower()), None)
+    # The full link (host and path) in a project's text; a shared host alone (user.github.io/a vs /b)
+    # doesn't decide it, so those fall through to the name and nearby-heading checks
+    bare = re.compile(re.escape(url.split("://", 1)[-1].rstrip("/").lower()) + r"(?![\w-])")
+    hit = next((p for p in projects if bare.search((p.get("details") or "").lower())), None)
     if hit:
         return hit
     url_key = _key(host + urlparse(url).path)

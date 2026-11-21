@@ -223,15 +223,19 @@ def discrepancies(projects: List[dict]) -> List[dict]:
     return out
 
 
-def summary_line(state: Optional[dict]) -> str:
-    """One line per reviewed project for the fact checker and interview questions."""
+def summary_line(state: Optional[dict], job_id: Optional[str] = None) -> str:
+    """One line per reviewed project for the fact checker and interview questions.
+
+    Job relevance is included only for the job the review was run from (job_id).
+    """
     parts = []
+    same_job = job_id is not None and (state or {}).get("job_id") == job_id
     for p in (state or {}).get("projects") or []:
         r = p.get("review")
         head = f"{p.get('name')} ({p.get('url')}, from {p.get('source_label')}: \"{p.get('mention')}\")"
         if r:
             ratings = ", ".join(f"{RATING_LABEL[k]} {v['score']}/5" for k, v in r["ratings"].items())
-            if r.get("job_relevance"):
+            if same_job and r.get("job_relevance"):
                 ratings += f"; job relevance {r['job_relevance']['score']}/5 ({r['job_relevance']['reason']})"
             parts.append(
                 f"{head}: {r['what_it_does']} Live: {r['live_and_working']['verdict']}. Matches claim: "
@@ -258,10 +262,10 @@ def concerns(state: Optional[dict]) -> List[str]:
     return out
 
 
-def interview_context(candidate: Optional[dict]) -> str:
+def interview_context(candidate: Optional[dict], job_id: Optional[str] = None) -> str:
     """Block for the interview-question prompt; empty when no project was reviewed."""
     state = (candidate or {}).get("project_review")
-    line = summary_line(state)
+    line = summary_line(state, job_id)
     if line == "None":
         return ""
     block = f"- Reviewed deployed projects: {line}"

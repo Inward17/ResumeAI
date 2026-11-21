@@ -86,6 +86,16 @@ class TestDiscovery:
     def test_rejected_urls(self, url):
         assert discovery.classify(url) is None
 
+    def test_shared_host_links_go_to_the_project_they_sit_under(self):
+        parsed = {"projects": [
+            {"name": "Inventory Manager", "details": "Inventory Manager - stock app, https://ada.github.io/inventory"},
+            {"name": "Weather Dashboard", "details": "Weather Dashboard - forecasts in charts"}]}
+        text = ("PROJECTS\nInventory Manager - stock app, https://ada.github.io/inventory\n"
+                "Weather Dashboard - forecasts in charts\nLive: https://ada.github.io/weather")
+        by_url = {p["url"]: p["name"] for p in discovery.from_resume(text, [], parsed)}
+        assert by_url == {"https://ada.github.io/inventory": "Inventory Manager",
+                          "https://ada.github.io/weather": "Weather Dashboard"}
+
     def test_personal_site_is_not_a_project(self):
         assert discovery.from_resume("Portfolio: https://ada-portfolio.dev", [], PARSED, "https://ada-portfolio.dev/") == []
 
@@ -142,7 +152,7 @@ SHOT = "https://storage.googleapis.com/firecrawl-scrape-media/screenshot-1.png"
 LIVE_MD = "# ShopEase\n" + "Shop thousands of products with fast checkout and order tracking. " * 10
 
 
-def _firecrawl_handler(landing=None, status=200, pages=None, shot_bytes=None, calls=None):
+def _firecrawl_handler(landing=None, status=200, pages=None, shot_bytes=None, calls=None, error="x"):
     def handler(request: httpx.Request):
         if request.url.host == "storage.googleapis.com":
             return httpx.Response(200, content=shot_bytes or _png())
@@ -150,7 +160,7 @@ def _firecrawl_handler(landing=None, status=200, pages=None, shot_bytes=None, ca
         if calls is not None:
             calls.append(body)
         if status != 200:
-            return httpx.Response(status, json={"success": False, "error": "x"})
+            return httpx.Response(status, json={"success": False, "error": error})
         if "links" in body["formats"]:
             return httpx.Response(200, json={"data": landing or {
                 "markdown": LIVE_MD, "links": ["/features", "/login", "/privacy", "https://other.example.com/about", "/about#team", "/"],
@@ -171,8 +181,16 @@ class TestVisit:
         assert len(base64.b64decode(result["screenshot"])) < visit.THUMB_MAX_BYTES
 
     async def test_down(self, firecrawl):
-        result = await visit.visit(SHOP, _firecrawl_handler(status=500))
+        error = "Specified URL is failing to load in the browser. Error code: ERR_NAME_NOT_RESOLVED"
+        result = await visit.visit(SHOP, _firecrawl_handler(status=500, error=error))
         assert result["site_status"] == "down" and result["pages"] == []
+
+    async def test_firecrawl_failure_is_not_a_down_site(self, firecrawl):
+        # A bad key or a Firecrawl outage says nothing about the candidate's site
+        for status in (401, 500, 503):
+            result = await visit.visit(SHOP, _firecrawl_handler(status=status, error="Internal server error"))
+            assert result["site_status"] == "error" and f"HTTP {status}" in result["site_note"]
+            assert review.discrepancies([{"name": "ShopEase", **result}]) == []
 
     async def test_http_404_is_down_and_403_blocked(self, firecrawl):
         for code, state in ((404, "down"), (403, "blocked")):
@@ -394,6 +412,16 @@ class TestEndpoints:
         assert (await client.get(_url(owned_job_id))).json()["review"]["status"] == "failed"
         assert (await client.post(_url(owned_job_id))).status_code == 202
 
+    async def test_job_relevance_only_on_the_job_it_was_reviewed_for(self, client, mock_db, owned_job_id, firecrawl):
+        done = {"status": "done", "job_id": "another-job", "requested_at": datetime.utcnow(),
+                "projects": [{**PROJECT, "site_status": "live", "review": review.validate(GOOD)}]}
+        await _setup(mock_db, owned_job_id, done)
+        shown = (await client.get(_url(owned_job_id))).json()["review"]
+        assert shown["other_job"] is True and "job_relevance" not in shown["projects"][0]["review"]
+        assert "job relevance" in review.summary_line(done, "another-job")
+        assert "job relevance" not in review.summary_line(done, owned_job_id)
+        assert "job relevance" not in review.summary_line(done)  # fact checker: no job
+
     async def test_no_projects(self, client, mock_db, owned_job_id, firecrawl, no_run):
         await mock_db.applications.insert_one({"job_id": owned_job_id, "candidate_id": CID})
         await mock_db.candidates.insert_one({"candidate_id": CID, "parsed": {}})
@@ -401,10 +429,12 @@ class TestEndpoints:
 
 
 class TestBackgroundRun:
-    async def _run(self, mock_db, owned_job_id, client, gemini_answers, monkeypatch):
+    async def _run(self, mock_db, owned_job_id, client, gemini_answers, monkeypatch, questions=None):
         from app.routes import project_review_routes as routes
         monkeypatch.setenv("GEMINI_API_KEY", "gm-test-placeholder")
         await _setup(mock_db, owned_job_id)
+        if questions:
+            await mock_db.applications.update_one({"candidate_id": CID}, {"$set": {"interview_questions": questions}})
         before_app = await mock_db.applications.find_one({"candidate_id": CID}, {"_id": 0})
         with patch.object(routes, "run_review", new=AsyncMock()):
             assert (await client.post(_url(owned_job_id))).status_code == 202
@@ -438,6 +468,10 @@ class TestBackgroundRun:
         shown = next(p for p in body["review"]["projects"] if p["url"] == SHOP)
         assert shown["screenshot"].startswith("data:image/jpeg;base64,") and "text" not in shown["pages"][0]
         assert any("doesn't match" in d["description"] for d in body["discrepancies"])
+
+    async def test_new_results_clear_cached_interview_questions(self, client, mock_db, owned_job_id, firecrawl, monkeypatch):
+        await self._run(mock_db, owned_job_id, client, [GOOD], monkeypatch, questions=[{"question": "old"}])
+        assert "interview_questions" not in await mock_db.applications.find_one({"candidate_id": CID})
 
     async def test_ai_down_then_retry(self, client, mock_db, owned_job_id, firecrawl, monkeypatch):
         from app.routes import project_review_routes as routes

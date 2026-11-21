@@ -399,6 +399,7 @@ export const getProjectReviews = async (jobId, candidateId) => {
             requestedBy: d.review.requested_by || null,
             requestedAt: d.review.requested_at || null,
             reviewedAt: d.review.reviewed_at || null,
+            otherJob: Boolean(d.review.other_job),
             projects: (Array.isArray(d.review.projects) ? d.review.projects : []).map(transformProject),
         } : null,
         discrepancies: (Array.isArray(d.discrepancies) ? d.discrepancies : []).map(transformDiscrepancy).filter(Boolean),

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle, CheckCircle2, CircleDashed, ExternalLink, Loader2, MessageSquareText, RefreshCw, Rocket, XCircle,
 } from 'lucide-react';
@@ -27,16 +27,22 @@ const when = (iso) => { const d = iso ? new Date(`${iso}`.endsWith('Z') ? iso : 
 export const useProjectReviews = (jobId, candidateId) => {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  // The dossier is reused across candidates: drop answers for one no longer shown
+  const current = useRef('');
+  current.current = `${jobId}/${candidateId}`;
   const load = useCallback(async () => {
+    const key = `${jobId}/${candidateId}`;
     try {
-      setData(await getProjectReviews(jobId, candidateId));
+      const result = await getProjectReviews(jobId, candidateId);
+      if (current.current !== key) return;
+      setData(result);
       setError(null);
     } catch (e) {
-      setError(e.message);
+      if (current.current === key) setError(e.message);
     }
   }, [jobId, candidateId]);
 
-  useEffect(() => { setData(null); if (jobId && candidateId) load(); }, [jobId, candidateId, load]);
+  useEffect(() => { setData(null); setError(null); if (jobId && candidateId) load(); }, [jobId, candidateId, load]);
   const running = data?.review?.status === 'running';
   useEffect(() => {
     if (!running) return undefined;
@@ -228,6 +234,7 @@ const ProjectReviews = ({ jobId, candidateId, state }) => {
           <p className="mb-1.5 text-xs text-ink-3">
             {running ? 'Review in progress…' : review.status === 'failed' ? (review.error || 'The review failed.') : `Reviewed ${when(review.reviewedAt) || ''}`}
             {review.requestedBy && ` · requested by ${review.requestedBy}`}
+            {review.otherJob && ' · reviewed for another job, so job relevance isn’t shown'}
           </p>
           <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
             {review.projects.map((p) => <Result key={p.id} p={p} busy={busy || running} onRetry={() => start(true)} />)}

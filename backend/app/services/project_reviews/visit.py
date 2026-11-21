@@ -24,6 +24,12 @@ from app.services.portfolios.links import _FILE_EXT, public_url
 
 logger = logging.getLogger(__name__)
 
+# Firecrawl error text that means the candidate's site failed (DNS, TLS, refused, no answer),
+# as opposed to a Firecrawl problem (bad key, outage)
+_SITE_FAILURE = re.compile(
+    r"dns|name.not.resolved|enotfound|getaddrinfo|ssl|tls|certificate|cert_|refused|econnrefused|"
+    r"connection (reset|closed)|err_connection|err_name|err_address|unreachable|site_error|site error", re.I)
+
 LANDING_CHARS = 8000
 PAGE_CHARS = 4000
 
@@ -85,14 +91,21 @@ async def scrape(client: httpx.AsyncClient, url: str, landing: bool) -> dict:
         resp = await client.post(f"{api_url}/v2/scrape", json=body, headers={"Authorization": f"Bearer {key}"},
                                  timeout=httpx.Timeout(timeout, connect=10.0))
     except httpx.TimeoutException:
-        raise RuntimeError("timeout")
+        raise RuntimeError("Firecrawl did not answer in time")
+    except httpx.HTTPError:
+        raise RuntimeError("Firecrawl could not be reached")
     if resp.status_code == 402:
         raise RuntimeError("Firecrawl credits are used up")
     if resp.status_code == 429:
         raise RuntimeError("Firecrawl rate limit reached")
     if resp.status_code >= 400:
-        # Firecrawl answers an error when the site itself can't be loaded (DNS, TLS, refused)
-        raise RuntimeError("site_unreachable")
+        # Only an error that names a site failure says the project is down; anything
+        # else (bad key, Firecrawl outage) is our problem, not the candidate's
+        if resp.status_code == 408:
+            raise RuntimeError("timeout")
+        if resp.status_code not in (401, 403) and _SITE_FAILURE.search(resp.text or ""):
+            raise RuntimeError("site_unreachable")
+        raise RuntimeError(f"Firecrawl error (HTTP {resp.status_code})")
     data = (resp.json() or {}).get("data") or {}
     meta = data.get("metadata") or {}
     return {"markdown": data.get("markdown") or "", "links": data.get("links") or [],

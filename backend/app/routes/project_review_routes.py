@@ -53,21 +53,27 @@ def _is_stale(state: dict) -> bool:
     return state.get("status") == "running" and isinstance(started, datetime) and datetime.utcnow() - started > STALE
 
 
-def _public_state(state: dict | None) -> dict | None:
+def _public_state(state: dict | None, job_id: str) -> dict | None:
     if not state:
         return None
+    # Job relevance was judged against the job the review was run from; never show it on another job
+    other_job = state.get("job_id") != job_id
     projects = []
     for p in state.get("projects") or []:
         shot = p.get("screenshot")
+        review_ = p.get("review")
+        if other_job and isinstance(review_, dict):
+            review_ = {k: v for k, v in review_.items() if k != "job_relevance"}
         projects.append({
             **{k: v for k, v in p.items() if k not in ("pages", "screenshot")},
+            "review": review_,
             "pages": [{k: pg.get(k) for k in ("url", "title", "status_code", "failed")} for pg in p.get("pages") or []],
             "screenshot": f"data:image/jpeg;base64,{shot}" if shot else None,
         })
     status, error = state.get("status"), state.get("error")
     if _is_stale(state):
         status, error = "failed", "The review was interrupted. Run it again."
-    return {"status": status, "error": error, "job_id": state.get("job_id"),
+    return {"status": status, "error": error, "job_id": state.get("job_id"), "other_job": other_job,
             "requested_by": (state.get("requested_by") or {}).get("email"),
             "requested_at": state.get("requested_at"), "reviewed_at": state.get("reviewed_at"), "projects": projects}
 
@@ -83,7 +89,7 @@ async def get_project_reviews(job_id: str, candidate_id: str, job: dict = Depend
         "max_projects": max_projects(),
         "max_pages": visit.max_pages(),
         "projects": [{**p, "selected": p["id"] in selected} for p in projects],
-        "review": _public_state(state),
+        "review": _public_state(state, job_id),
         "discrepancies": review.discrepancies((state or {}).get("projects")),
     }
 
@@ -183,6 +189,10 @@ async def run_review(candidate_id: str, job: dict, retry: bool = False) -> None:
                                    if not retry or p.get("review_status") == "ai_unavailable"))
         await db.candidates.update_one({"candidate_id": candidate_id}, {"$set": {
             "project_review.status": "done", "project_review.reviewed_at": datetime.utcnow()}})
+        # Cached interview questions predate these results: regenerate them on next open.
+        # Saved evaluations keep their own copy of the questions.
+        await db.applications.update_many({"candidate_id": candidate_id, "interview_questions": {"$exists": True}},
+                                          {"$unset": {"interview_questions": ""}})
     except Exception as e:
         logger.warning("Project review run failed for candidate %s: %s", candidate_id, type(e).__name__)
         await db.candidates.update_one({"candidate_id": candidate_id}, {"$set": {
