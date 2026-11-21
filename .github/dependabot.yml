@@ -9,6 +9,10 @@ updates:
       # testing with it and newer google-auth/pydantic pins, so it is done by hand
       - dependency-name: google-genai
         update-types: ["version-update:semver-major"]
+      # sympy 1.14 (needed by torch) requires mpmath<1.4; drop this once a stable
+      # sympy accepts mpmath 1.4
+      - dependency-name: mpmath
+        versions: [">=1.4"]
   - package-ecosystem: npm
     directory: /frontend
     schedule:

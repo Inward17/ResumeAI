@@ -31,7 +31,7 @@ The `main` branch deploys automatically: the app to **GitHub Pages** (<https://i
 
 ## Run locally
 
-Prerequisites: Python 3.11+, Node 20+ with Yarn 1, a MongoDB database (local or Atlas) and a Firebase project with Google sign-in enabled.
+Prerequisites: Python 3.11+, Node 24.12+ with Yarn 1, a MongoDB database (local or Atlas) and a Firebase project with Google sign-in enabled.
 
 ```bash
 # Backend: copy backend/.env.example to backend/.env and fill it in
