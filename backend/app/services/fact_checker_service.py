@@ -24,6 +24,7 @@ import httpx
 
 from app.database import db
 from app.services.coding_profiles import summary_line
+from app.services.portfolios import summary_line as portfolio_summary
 from app.utils.text_utils import UNTRUSTED_NOTE, as_data
 
 
@@ -78,6 +79,8 @@ Given the interviewer's message, classify it into EXACTLY ONE of these categorie
 
 Questions about competitive-programming profiles (LeetCode, HackerRank, HackerEarth, Codeforces, CodeChef),
 their ratings, stars, badges, titles or problems solved, or whether they match the resume, are "general_qa".
+Questions about portfolios and community profiles (Behance, Dribbble, a personal portfolio website, Kaggle,
+Stack Overflow), their projects, tiers, medals, reputation or tags, or whether they match the resume, are also "general_qa".
 
 Return ONLY a JSON object with these fields:
 {
@@ -258,7 +261,8 @@ Projects:
 {proj_text if proj_text else 'No project data'}
 GitHub Score: {github_score}/100
 Red Flags: {', '.join(red_flags) if red_flags else 'None'}
-Coding profiles: {summary_line(verification.get("codingProfilesData"))}"""
+Coding profiles: {summary_line(verification.get("codingProfilesData"))}
+Portfolios and community profiles: {portfolio_summary(verification.get("portfoliosData"))}"""
 
     user_msg = f"""{as_data(candidate_text)}
 
@@ -349,6 +353,7 @@ async def _handle_verify_tech(
 
     # In every handler, so a misrouted coding-profile question still has the data
     evidence_parts.append(f"Coding profiles: {summary_line(verification.get('codingProfilesData'))}")
+    evidence_parts.append(f"Portfolios and community profiles: {portfolio_summary(verification.get('portfoliosData'))}")
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying a candidate's tech stack claim during a live interview.
@@ -463,6 +468,7 @@ async def _handle_verify_project(
 
     # In every handler, so a misrouted coding-profile question still has the data
     evidence_parts.append(f"Coding profiles: {summary_line(verification.get('codingProfilesData'))}")
+    evidence_parts.append(f"Portfolios and community profiles: {portfolio_summary(verification.get('portfoliosData'))}")
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying a candidate's project claim during a live interview.
@@ -581,6 +587,7 @@ async def _handle_verify_authenticity(
 
     # In every handler, so a misrouted coding-profile question still has the data
     evidence_parts.append(f"Coding profiles: {summary_line(verification.get('codingProfilesData'))}")
+    evidence_parts.append(f"Portfolios and community profiles: {portfolio_summary(verification.get('portfoliosData'))}")
     evidence = "\n".join(evidence_parts)
 
     system = """You are an AI fact-checker verifying whether a candidate genuinely built a project during a live interview.

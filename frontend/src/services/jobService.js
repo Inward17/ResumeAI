@@ -153,6 +153,10 @@ const transformCandidateFromAPI = (c) => ({
     githubUrl: c.github_url || null,
     linkedinUrl: c.linkedin_url || null,
     codingProfiles: Array.isArray(c.coding_profiles) ? c.coding_profiles.map(transformCodingProfile) : [],
+    portfolios: Array.isArray(c.portfolios) ? c.portfolios.map(transformPortfolio) : [],
+    portfolioSkillEvidence: Array.isArray(c.portfolio_skill_evidence)
+        ? c.portfolio_skill_evidence.filter((e) => e && e.skill).map((e) => ({ skill: String(e.skill), sources: strings(e.sources) }))
+        : [],
 });
 
 // Fields are already camelCase (verification model); LinkedIn's actual value is linkedinValue
@@ -187,6 +191,38 @@ const transformCodingProfile = (p) => ({
     problemsSolved: numOrNull(p.problems_solved),
     contests: numOrNull(p.contests),
     issues: strings(p.issues),
+});
+
+const httpsOrNull = (url) => (typeof url === 'string' && url.startsWith('https://') ? url : null);
+const counts = (o) => (o && typeof o === 'object'
+    ? Object.fromEntries(Object.entries(o).filter(([, v]) => numOrNull(v) != null).map(([k, v]) => [k, numOrNull(v)]))
+    : {});
+
+// Behance, Dribbble, personal website, Kaggle, Stack Overflow. All text is candidate-controlled: render as plain text.
+const transformPortfolio = (p) => ({
+    platform: p.platform,
+    handle: p.handle,
+    // Built by the backend from a validated handle or URL; https only
+    profileUrl: httpsOrNull(p.profile_url),
+    status: p.status || 'pending',
+    name: p.name || null,
+    headline: p.headline || null,
+    followers: numOrNull(p.followers),
+    appreciations: numOrNull(p.appreciations),
+    reputation: numOrNull(p.reputation),
+    badges: counts(p.badges),
+    topTags: strings(p.top_tags),
+    tiers: p.tiers && typeof p.tiers === 'object'
+        ? Object.fromEntries(Object.entries(p.tiers).filter(([, v]) => typeof v === 'string'))
+        : {},
+    medals: counts(p.medals),
+    competitions: numOrNull(p.competitions),
+    projects: (Array.isArray(p.projects) ? p.projects : [])
+        .filter((pr) => pr && pr.title)
+        .map((pr) => ({ title: String(pr.title), tools: strings(pr.tools), dates: pr.dates || null, url: httpsOrNull(pr.url) })),
+    skills: strings(p.skills),
+    issues: strings(p.issues),
+    note: p.note || null,
 });
 
 /** One candidate of a job (the list endpoint is the only candidate source) */
