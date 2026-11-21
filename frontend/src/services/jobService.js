@@ -357,6 +357,7 @@ const transformProjectReview = (r) => {
             .map((k) => ({ key: k, score: numOrNull(ratings[k].score), reason: String(ratings[k].reason || '') })),
         redFlags: strings(r.red_flags),
         interviewQuestions: strings(r.interview_questions),
+        jobRelevance: r.job_relevance ? { score: numOrNull(r.job_relevance.score), reason: String(r.job_relevance.reason || '') } : null,
         overall: r.overall ? { score: numOrNull(r.overall.score), justification: String(r.overall.justification || '') } : null,
     };
 };

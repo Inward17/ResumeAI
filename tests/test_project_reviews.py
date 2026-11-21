@@ -240,6 +240,7 @@ GOOD = {
     "live_and_working": {"verdict": "yes", "reason": "Pages load"},
     "matches_claim": {"verdict": "partly", "details": "No payment step visible"},
     "ratings": {k: {"score": 4, "reason": "ok"} for k in review.RATINGS},
+    "job_relevance": {"score": 2, "reason": "Frontend only; the job is backend"},
     "ownership_evidence": {"verdict": "supports", "details": "Footer names Ada Example"},
     "red_flags": ["Lorem ipsum on the about page"],
     "interview_questions": ["How does ShopEase handle checkout?", "Why Next.js?", "How is search done?", "extra"],
@@ -270,7 +271,7 @@ class TestAIReview:
 
     @pytest.mark.parametrize("change", [
         {"overall": {"score": 9}}, {"live_and_working": {"verdict": "maybe"}}, {"what_it_does": ""},
-        {"interview_questions": []}, {"ratings": {}}, {"ownership_evidence": "yes"},
+        {"interview_questions": []}, {"ratings": {}}, {"ownership_evidence": "yes"}, {"job_relevance": None},
     ])
     def test_validate_rejects(self, change):
         with pytest.raises(ValueError):
@@ -469,3 +470,36 @@ class TestPromptContext:
         with patch.object(fc, "_call_groq", new=AsyncMock(return_value="ok")) as groq:
             await fc._handle_general_qa("What does ShopEase do?", {"parsed": {}, "project_review": self.STATE}, {}, "Ada")
         assert "An online store for gadgets." in groq.call_args.args[1]
+
+
+class TestTuning:
+    def test_job_relevance_is_separate(self):
+        out = review.validate(GOOD)
+        assert out["job_relevance"] == {"score": 2, "reason": "Frontend only; the job is backend"}
+        assert "job_relevance" not in out["ratings"]
+        assert "never lower them because the project uses other skills" in review.PROMPT
+
+    def test_long_text_cut_at_word_with_ellipsis(self):
+        long = "The site credits Jane Roe as the author and there is no sign the candidate contributed to the project or its code at all"
+        cut = review._s(long, 80)
+        assert cut.endswith("…") and len(cut) <= 80 and long.startswith(cut[:-1]) and not cut[:-1].endswith(" ")
+        assert long.split()[len(cut[:-1].split()) - 1] == cut[:-1].split()[-1]  # whole last word
+
+    def test_discrepancies_use_summary(self):
+        r = review.validate({**GOOD, "matches_claim": {"verdict": "no", "details": "x " * 300, "summary": "It is a blog, not a store."},
+                             "ownership_evidence": {"verdict": "conflicts", "details": "Built by Acme Ltd " * 40}})
+        d = review.discrepancies([{**PROJECT, "review": r}])
+        assert d[0]["description"] == "ShopEase doesn't match the Resume claim: It is a blog, not a store."
+        assert d[1]["description"].endswith("…)") and "Acme Ltd" in d[1]["description"]
+
+    def test_interview_questions_challenge_concerns(self):
+        from app.services.interview_questions_service import _build_prompt
+        r = review.validate({**GOOD, "ownership_evidence": {"verdict": "conflicts", "details": "Footer credits Jane Roe",
+                                                            "summary": "The footer credits Jane Roe."}})
+        cand = {"parsed": {}, "project_review": {"projects": [{**PROJECT, "site_status": "live", "review": r}]}}
+        prompt = _build_prompt({"job_title": "Dev"}, cand, None)
+        assert "Project concerns to challenge directly: ShopEase: the site credits someone else (The footer credits Jane Roe.)" in prompt
+        assert "Lorem ipsum on the about page" in prompt.split("Project concerns to challenge directly:")[1]
+        assert "must challenge one of them directly" in prompt
+        clean = review.validate({**GOOD, "matches_claim": {"verdict": "yes", "details": "ok"}, "red_flags": []})
+        assert "concerns" not in review.interview_context({"project_review": {"projects": [{**PROJECT, "review": clean}]}})
