@@ -13,6 +13,10 @@ updates:
     directory: /frontend
     schedule:
       interval: weekly
+    ignore:
+      # Tailwind 4 changes the PostCSS plugin and config format: a migration, not a bump
+      - dependency-name: tailwindcss
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
