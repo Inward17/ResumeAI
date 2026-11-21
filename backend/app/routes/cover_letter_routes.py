@@ -5,9 +5,11 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.datastructures import UploadFile
 
-from app.auth import require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_owner
 from app.database import db
+from app.org import ensure_org
 from app.services import cover_letter_service as cl
+from app.services.quota import rate_limit, use_quota
 from app.utils.file_utils import read_file
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
@@ -40,7 +42,10 @@ async def _letter_from_request(request: Request) -> dict:
         if not cl.content_matches_extension(ext, content):
             raise HTTPException(400, f"{name} is not a valid .{ext} file")
         # Read in memory: the upload never touches the disk
-        text = await asyncio.to_thread(read_file, name, content)
+        try:
+            text = await asyncio.wait_for(asyncio.to_thread(read_file, name, content), cl.TEXT_EXTRACT_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            raise HTTPException(400, f"{name} took too long to read")
         source, filename = "uploaded", name
     else:
         try:
@@ -63,19 +68,24 @@ async def get_cover_letter(job_id: str, candidate_id: str):
 
 
 @router.post(PATH, dependencies=[Depends(require_job_owner)])
-async def attach_cover_letter(job_id: str, candidate_id: str, request: Request):
+async def attach_cover_letter(job_id: str, candidate_id: str, request: Request,
+                              user: AuthUser = Depends(get_current_user)):
     """Attach (or replace) the letter from a file upload or pasted text, then analyse it."""
+    rate_limit(user.uid, "ai")
     await _require_application(job_id, candidate_id)
     letter = await _letter_from_request(request)
+    await use_quota(await ensure_org(user), "ai_call")
     await cl.attach(job_id, candidate_id, letter)
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 
 @router.post(PATH + "/analysis", dependencies=[Depends(require_job_owner)])
-async def retry_cover_letter_analysis(job_id: str, candidate_id: str):
+async def retry_cover_letter_analysis(job_id: str, candidate_id: str, user: AuthUser = Depends(get_current_user)):
+    rate_limit(user.uid, "ai")
     app = await _require_application(job_id, candidate_id)
     if not app.get("cover_letter"):
         raise HTTPException(404, "No cover letter attached")
+    await use_quota(await ensure_org(user), "ai_call")
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 

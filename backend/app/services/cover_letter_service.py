@@ -20,6 +20,7 @@ from app.utils.text_utils import as_data
 
 MAX_LETTER_CHARS = 20000
 ALLOWED_EXTENSIONS = ("pdf", "docx", "doc", "txt")
+TEXT_EXTRACT_TIMEOUT_SECONDS = int(os.getenv("TEXT_EXTRACT_TIMEOUT_SECONDS", "60"))
 
 # Task statuses for documents in a bulk upload that turned out to be cover letters
 PENDING = "cover_letter_pending"      # waiting for its resume to finish
@@ -251,7 +252,8 @@ async def prepare_upload(task: dict, path: str) -> dict:
     filename = task.get("original_filename") or task["filename"]
     try:
         content = await asyncio.to_thread(_read_bytes, path)
-        pages = await asyncio.to_thread(extract_pages, task["filename"], content)
+        pages = await asyncio.wait_for(asyncio.to_thread(extract_pages, task["filename"], content),
+                                       TEXT_EXTRACT_TIMEOUT_SECONDS)
         text = "\n".join(pages)
         if not text.strip():
             return resume

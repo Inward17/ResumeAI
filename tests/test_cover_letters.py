@@ -93,6 +93,14 @@ class TestEndpoints:
         assert (await client.delete(url)).status_code == 200
         assert (await client.get(url)).json() == {"cover_letter": None}
 
+    async def test_analysis_counts_against_ai_quota(self, client, mock_db, owned_job_id, monkeypatch):
+        monkeypatch.setenv("QUOTA_AI_CALLS_PER_DAY", "1")
+        await _apply(mock_db, owned_job_id)
+        url = PATH.format(job=owned_job_id, cand="c1")
+        with patch(CL, groq_returns(GOOD_ANALYSIS)):
+            assert (await client.post(url, json={"text": LETTER})).status_code == 200
+            assert (await client.post(url + "/analysis")).status_code == 429
+
     async def test_file_upload_is_read_in_memory(self, client, mock_db, owned_job_id, tmp_path):
         await _apply(mock_db, owned_job_id)
         with patch(CL, groq_returns(GOOD_ANALYSIS)):
