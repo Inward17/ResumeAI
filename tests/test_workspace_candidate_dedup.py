@@ -72,3 +72,24 @@ async def test_queue_passes_the_jobs_workspace(mock_db):
         await resume._parse_and_verify("f.txt", "t2", str(ObjectId()), "alice")
     assert store.await_args_list[0].args == ("f.txt", "t1", "alice", ORG_A)
     assert store.await_args_list[1].args == ("f.txt", "t2", "alice", None)
+
+
+async def test_queue_uses_workspace_and_cleans_up_then_retry_skips_parsing(mock_db):
+    """#13 + #21 together: first run passes the job's workspace and deletes the file;
+    a retry after a crash in verification reuses the resolved candidate and parses nothing."""
+    job_id = str((await mock_db.jobs.insert_one({"org_id": ORG_A})).inserted_id)
+    path = os.path.join(resume.RESUMES_DIR, "f.txt")
+    with open(path, "w") as f:
+        f.write("resume")
+    await mock_db.tasks.insert_one({"task_id": "t1", "status": "parsed"})
+    with patch.object(resume, "_parse_and_store", AsyncMock(return_value="c1")) as store, \
+         patch.object(resume, "_run_unified_verification", AsyncMock()) as verify:
+        await resume.process_resume_task({"filename": "f.txt", "task_id": "t1", "job_id": job_id, "owner_uid": "alice"})
+        assert store.await_args.args == ("f.txt", "t1", "alice", ORG_A)
+        assert not os.path.exists(path)
+
+        store.reset_mock()
+        await resume.process_resume_task({"filename": "f.txt", "task_id": "t1", "job_id": job_id,
+                                          "owner_uid": "alice", "resolved_candidate_id": "c1"})
+        store.assert_not_awaited()
+        assert verify.await_args.args == ("c1", job_id, "t1")

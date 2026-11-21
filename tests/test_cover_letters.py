@@ -250,7 +250,7 @@ class TestBulkUpload:
         letter_task = await self._task(mock_db, tmp_path, owned_job_id, "l1", "letter.txt", LETTER)
         resume_task = await self._task(mock_db, tmp_path, owned_job_id, "r1", "cv.txt", RESUME, status="queued")
 
-        async def fake_parse(filename, task_id, job_id, owner_uid=None, **kw):
+        async def fake_parse(filename, task_id, job_id, owner_uid=None, resolved_candidate_id=None, **kw):
             await _apply(mock_db, job_id, "c1")
             await mock_db.tasks.update_one({"task_id": task_id}, {"$set": {"status": "done", "resolved_candidate_id": "c1"}})
 
@@ -289,7 +289,7 @@ class TestBulkUpload:
         task = await self._task(mock_db, tmp_path, owned_job_id, "r1", "Jane_Doe_Application.pdf", "x")
         seen = {}
 
-        async def fake_parse(filename, task_id, job_id, owner_uid=None, text=None):
+        async def fake_parse(filename, task_id, job_id, owner_uid=None, resolved_candidate_id=None, text=None):
             seen["text"] = text
             await _apply(mock_db, job_id, "c1")
             await mock_db.tasks.update_one({"task_id": task_id}, {"$set": {"status": "done", "resolved_candidate_id": "c1"}})
@@ -306,7 +306,19 @@ class TestBulkUpload:
         task = await self._task(mock_db, tmp_path, owned_job_id, "r1", "cv.txt", RESUME)
         with patch.object(resume, "_parse_and_verify", AsyncMock()) as parse:
             await resume.process_resume_task(task)
-        parse.assert_awaited_once_with(task["filename"], "r1", owned_job_id, None)
+        parse.assert_awaited_once_with(task["filename"], "r1", owned_job_id, None, None)
+
+    async def test_retried_task_skips_classification(self, mock_db, tmp_path, owned_job_id):
+        # A task re-queued after parsing has no file left: don't classify it again
+        from app.routes import resume
+        from app.services import cover_letter_service
+        task = await self._task(mock_db, tmp_path, owned_job_id, "r1", "cv.txt", RESUME)
+        task["resolved_candidate_id"] = "c1"
+        with patch.object(resume, "_parse_and_verify", AsyncMock()) as parse, \
+             patch.object(cover_letter_service, "prepare_upload", AsyncMock()) as prepare:
+            await resume.process_resume_task(task)
+        prepare.assert_not_called()
+        parse.assert_awaited_once_with(task["filename"], "r1", owned_job_id, None, "c1")
 
     async def test_deleting_the_job_drops_waiting_letters(self, client, mock_db, owned_job_id):
         await mock_db.tasks.insert_one({"task_id": "l1", "job_id": owned_job_id, "status": cl.PENDING,
