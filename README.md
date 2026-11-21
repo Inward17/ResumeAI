@@ -7,6 +7,8 @@ AI resume screening for hiring teams. ResumeAI parses every resume with Gemini, 
 - **Bulk screening.** Drop 100+ resumes (PDF, DOCX, TXT) on a job. A durable MongoDB-backed queue parses and verifies them in parallel, with live progress.
 - **Evidence, not keywords.** Per-skill match scores, a 15-step GitHub authenticity pipeline, LinkedIn employment/education matching and a web check combine into one credibility score.
 - **Coding profiles.** LeetCode, HackerRank, HackerEarth, Codeforces and CodeChef profiles linked on the resume are looked up; ratings, titles and problems solved are shown in the dossier, overstated claims ("Codeforces Expert", "500+ problems") and name mismatches are flagged. They are extra evidence and don't change the credibility score.
+- **Portfolios & communities.** Behance, Dribbble, a personal portfolio website, Kaggle and Stack Overflow linked on the resume are read (Stack Overflow through its official API, the rest through Firecrawl). The dossier shows projects, tools, tiers, reputation and top tags; overstated claims ("Kaggle Master", "10k reputation"), name mismatches and history that contradicts the resume are flagged, and job skills shown in the portfolio are listed. Evidence only: no effect on credibility or role match.
+- **Project reviews.** On demand, the AI visits up to three of the candidate's deployed projects (the ones most relevant to the job) through Firecrawl, looks at the landing page, two internal pages and a screenshot, and rates whether it works, polish, technical depth and originality, checks it against the resume or portfolio claim and for ownership signs, and suggests interview questions about it. Each result keeps where the candidate mentioned the project. Evidence only: no effect on credibility or role match.
 - **Ranked pipeline.** Sortable candidate table with role match and credibility, inline status changes, and a dossier for each candidate.
 - **Interview kit.** AI-generated questions tailored to the job and resume, a checklist scorer, and a fact checker you can ask about any claim.
 - **Teams.** Shared workspaces with owner, admin and member roles, email invitations (via Composio Gmail) or copyable invite links.
@@ -65,6 +67,8 @@ All backend settings live in `backend/.env`; [`backend/.env.example`](backend/.e
 | `GITHUB_TOKEN` | GitHub verification (5,000 requests/hour instead of 60) |
 | `GROQ_API_KEY` | Interview questions and the fact checker |
 | `FIRECRAWL_API_KEY` / `APIFY_TOKEN` | LinkedIn verification (Firecrawl first, Apify fallback) |
+| `FIRECRAWL_API_KEY`, `PORTFOLIO_CHECKS_ENABLED` | Behance, Dribbble, Kaggle and portfolio-website checks (one Firecrawl scrape per source per verification; without a key they show "not checked"; `false` switches them off) |
+| `PROJECT_REVIEW_MAX_PROJECTS`, `PROJECT_REVIEW_MAX_PAGES` | Project reviews: projects per review (default 3) and pages per project (default 3). Needs `FIRECRAWL_API_KEY` and `GEMINI_API_KEY`; about 3 Firecrawl credits and 1 Gemini call per project |
 | `COMPOSIO_API_KEY`, `APP_URL` | Invitation emails and their links |
 
 The frontend needs `VITE_API_URL` and the `VITE_FIREBASE_*` values ([`frontend/.env.example`](frontend/.env.example)).

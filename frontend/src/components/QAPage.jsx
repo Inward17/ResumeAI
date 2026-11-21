@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw } from 'lucide-react';
+import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw, UserRound, X } from 'lucide-react';
 import {
   getJob, getJobCandidate, getInterviewQuestions, getEvaluation, submitEvaluation, updateCandidateStatus,
 } from '../services/jobService';
 import { useToast } from '../hooks/use-toast';
 import { cn } from '../lib/utils';
 import FactCheckerBot from './FactCheckerBot';
+import CandidateDossier from './CandidateDossier';
+import { loadPreferences } from '../lib/preferences';
 import { ConfirmDialog } from './Modal';
 import {
-  Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, Skeleton, formatDate,
+  Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, IconButton, Skeleton, formatDate,
 } from './common';
 
 const TopicTag = ({ label, selected, onClick }) => (
@@ -56,6 +58,16 @@ const QuestionCard = ({ index, question, tags, selectedTags, onToggleTag }) => {
   );
 };
 
+const PANEL_TABS = [{ id: 'candidate', label: 'Candidate' }, { id: 'factChecker', label: 'Fact checker' }];
+const PANEL_KEY = 'resumeai.interviewPanel';
+// The open tab (or closed) is remembered for this browser session only
+const readPanel = () => {
+  try { const v = sessionStorage.getItem(PANEL_KEY); return PANEL_TABS.some((t) => t.id === v) ? v : null; } catch { return null; }
+};
+const writePanel = (v) => {
+  try { if (v) sessionStorage.setItem(PANEL_KEY, v); else sessionStorage.removeItem(PANEL_KEY); } catch { /* storage blocked */ }
+};
+
 const QAPage = () => {
   const { jobId, candidateId } = useParams();
   const navigate = useNavigate();
@@ -73,7 +85,13 @@ const QAPage = () => {
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [questionError, setQuestionError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
-  const [isFactCheckerOpen, setIsFactCheckerOpen] = useState(false);
+  const [panel, setPanel] = useState(readPanel); // null (closed) | 'candidate' | 'factChecker'
+  // Visited tabs stay mounted while the panel is open, so the chat survives a tab switch
+  const [mounted, setMounted] = useState({});
+  const [prefs] = useState(loadPreferences);
+  const tabRefs = useRef({});
+  const openerRefs = useRef({});
+  const isPanelOpen = panel != null;
   const [selectedKeywords, setSelectedKeywords] = useState({}); // { [questionId]: ["tag", ...] }
   const [lastSubmitted, setLastSubmitted] = useState(null);
   const [confirmReject, setConfirmReject] = useState(false);
@@ -112,6 +130,33 @@ const QAPage = () => {
   }, [jobId, candidateId]);
 
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
+
+  useEffect(() => {
+    writePanel(panel);
+    if (panel) setMounted((m) => (m[panel] ? m : { ...m, [panel]: true }));
+  }, [panel]);
+
+  const openPanel = (tab) => {
+    const wasOpen = isPanelOpen;
+    setPanel(tab);
+    // A newly opened fact checker focuses its own input; otherwise focus the tab
+    if (wasOpen || tab === 'candidate') requestAnimationFrame(() => tabRefs.current[tab]?.focus());
+  };
+  const closePanel = () => {
+    const opener = openerRefs.current[panel];
+    setPanel(null);
+    setMounted({});
+    requestAnimationFrame(() => opener?.focus());
+  };
+  const onTabKeyDown = (e) => {
+    const n = PANEL_TABS.length;
+    const i = PANEL_TABS.findIndex((t) => t.id === panel);
+    const next = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 }[e.key];
+    if (next == null) return;
+    e.preventDefault();
+    setPanel(PANEL_TABS[next].id);
+    tabRefs.current[PANEL_TABS[next].id]?.focus();
+  };
 
   const handleToggleTag = (questionId, tag) => {
     setSelectedKeywords((prev) => {
@@ -176,7 +221,7 @@ const QAPage = () => {
   const canSubmit = !submitting && !loadingQuestions && !questionError && !!candidate;
 
   return (
-    <div className={cn('flex min-h-full flex-col', isFactCheckerOpen && 'md:pr-[380px]')}>
+    <div className={cn('flex min-h-full flex-col', isPanelOpen && candidate && 'md:pr-[380px]')}>
       <PageContainer className="flex-1 pb-8 md:pb-8">
         <BackLink to={returnTo}>{returnLabel}</BackLink>
 
@@ -200,19 +245,24 @@ const QAPage = () => {
           ) : (
             <div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-7 w-56" /></div>
           )}
-          {!isFactCheckerOpen && (
-            <Button variant="secondary" onClick={() => setIsFactCheckerOpen(true)} disabled={!candidate}>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" ref={(el) => { openerRefs.current.candidate = el; }} onClick={() => openPanel('candidate')}
+              disabled={!candidate} aria-expanded={panel === 'candidate'} aria-controls="interview-panel">
+              <UserRound className="text-primary-text" aria-hidden="true" /> View candidate
+            </Button>
+            <Button variant="secondary" ref={(el) => { openerRefs.current.factChecker = el; }} onClick={() => openPanel('factChecker')}
+              disabled={!candidate} aria-expanded={panel === 'factChecker'} aria-controls="interview-panel">
               <Bot className="text-primary-text" aria-hidden="true" /> Ask the fact checker
             </Button>
-          )}
+          </div>
         </div>
 
         {/* With the fact checker open the page loses 380px, so only go two-column on very wide screens */}
         <div className={cn('grid grid-cols-1 items-start gap-6',
-          isFactCheckerOpen ? '2xl:grid-cols-[300px_minmax(0,1fr)]' : 'lg:grid-cols-[300px_minmax(0,1fr)]')}>
+          isPanelOpen ? '2xl:grid-cols-[300px_minmax(0,1fr)]' : 'lg:grid-cols-[300px_minmax(0,1fr)]')}>
           {/* Scores — stays in view while scrolling the questions */}
           <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2',
-            isFactCheckerOpen ? '2xl:sticky 2xl:top-6 2xl:grid-cols-1' : 'lg:sticky lg:top-6 lg:grid-cols-1')}>
+            isPanelOpen ? '2xl:sticky 2xl:top-6 2xl:grid-cols-1' : 'lg:sticky lg:top-6 lg:grid-cols-1')}>
             <Card>
               <CardHeader title="Interview score" />
               <div className="p-4">
@@ -318,10 +368,39 @@ const QAPage = () => {
         </div>
       </div>
 
-      {isFactCheckerOpen && candidate && (
-        <aside className="fixed inset-0 z-[45] flex flex-col bg-surface md:inset-y-0 md:left-auto md:right-0 md:w-[380px] md:border-l md:border-line md:shadow-pop"
-          aria-label="AI fact checker">
-          <FactCheckerBot candidateId={candidate.id} candidateName={candidate.name} onClose={() => setIsFactCheckerOpen(false)} />
+      {isPanelOpen && candidate && (
+        <aside id="interview-panel" aria-label={`${candidate.name}: candidate and fact checker`}
+          className="fixed inset-0 z-[45] flex flex-col bg-surface md:inset-y-0 md:left-auto md:right-0 md:w-[380px] md:border-l md:border-line md:shadow-pop"
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); closePanel(); } }}>
+          <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line px-3">
+            <div role="tablist" aria-label="Interview side panel" className="inline-flex gap-0.5 rounded-md border border-line bg-subtle p-0.5">
+              {PANEL_TABS.map((t) => {
+                const active = panel === t.id;
+                return (
+                  <button key={t.id} type="button" role="tab" id={`panel-tab-${t.id}`} aria-controls={`panel-${t.id}`}
+                    aria-selected={active} tabIndex={active ? 0 : -1} ref={(el) => { tabRefs.current[t.id] = el; }}
+                    onClick={() => setPanel(t.id)} onKeyDown={onTabKeyDown}
+                    className={cn('whitespace-nowrap rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                      active ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+            <IconButton label="Close panel" onClick={closePanel}><X aria-hidden="true" /></IconButton>
+          </div>
+          {mounted.candidate && (
+            <div role="tabpanel" id="panel-candidate" aria-labelledby="panel-tab-candidate" tabIndex={0}
+              className={cn('min-h-0 flex-1 overflow-y-auto outline-none', panel !== 'candidate' && 'hidden')}>
+              <CandidateDossier compact candidate={candidate} job={job} prefs={prefs} />
+            </div>
+          )}
+          {mounted.factChecker && (
+            <div role="tabpanel" id="panel-factChecker" aria-labelledby="panel-tab-factChecker"
+              className={cn('min-h-0 flex-1 flex-col', panel === 'factChecker' ? 'flex' : 'hidden')}>
+              <FactCheckerBot showHeader={false} candidateId={candidate.id} candidateName={candidate.name} onClose={closePanel} />
+            </div>
+          )}
         </aside>
       )}
 

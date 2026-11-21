@@ -12,6 +12,8 @@ from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
 from app.services.coding_profiles import detect_claims, extract_coding_profiles, profile_url
+from app.services import portfolios as portfolio_checks
+from app.services.project_reviews import from_resume as project_links_from_resume
 from app.utils.file_utils import read_file, content_matches_type
 from app.services.quota import rate_limit, use_quota
 from app.org import ensure_org
@@ -287,6 +289,12 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
         # Competitive-programming handles and claims, from the text and link targets
         coding_profiles = extract_coding_profiles([text, *hyperlinks.get("uris", [])])
         coding_claims = detect_claims(text) if coding_profiles else []
+        # Behance, Dribbble, Kaggle, Stack Overflow and one personal website
+        portfolios = portfolio_checks.extract_portfolios(
+            [text, *hyperlinks.get("uris", [])], name=personal_info.get("full_name"))
+        portfolio_claims = portfolio_checks.detect_claims(text) if portfolios else []
+        # Deployed project links and the resume line that mentions them (reviewed on demand)
+        project_links = project_links_from_resume(text, hyperlinks.get("uris", []), parsed, portfolios.get("website"))
 
         # Fallback: extract URLs from PDF hyperlinks if not found or invalid
         if (not github_valid or not linkedin_valid) and is_pdf:
@@ -373,6 +381,9 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
                         "linkedin_url": extract_linkedin_url(linkedin_url),
                         "coding_profiles": coding_profiles,
                         "coding_claims": coding_claims,
+                        "portfolios": portfolios,
+                        "portfolio_claims": portfolio_claims,
+                        "project_links": project_links,
                         "education": education,
                         "experience_companies": experience_companies,
                         "universities": parsed.get("university") or [],
@@ -400,6 +411,10 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
             # {platform: handle} for LeetCode, Codeforces, etc., and the resume's claims about them
             "coding_profiles": coding_profiles,
             "coding_claims": coding_claims,
+            # {platform: handle} for Behance, Dribbble, Kaggle, Stack Overflow, plus "website": url
+            "portfolios": portfolios,
+            "portfolio_claims": portfolio_claims,
+            "project_links": project_links,
             # Store education and experience for verification
             "education": education,
             "experience_companies": experience_companies,
@@ -517,6 +532,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         github_username = candidate.get("github_username")
         linkedin_url = candidate.get("linkedin_url")
         coding_profiles = candidate.get("coding_profiles") or {}
+        portfolios = candidate.get("portfolios") or {}
         parsed = candidate.get("parsed", {})
         
         # Build profile data for web search verification
@@ -540,7 +556,7 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         )
         
         # Run verification
-        if github_username or linkedin_url or profile_data or coding_profiles:
+        if github_username or linkedin_url or profile_data or coding_profiles or portfolios:
             print(f"[VERIFY] Running verification for {candidate_id}")
             result = await unified_verification_service.run_unified_verification(
                 candidate_id=candidate_id,
@@ -550,6 +566,8 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
                 parsed_resume=parsed,
                 coding_profiles=coding_profiles,
                 coding_claims=candidate.get("coding_claims") or [],
+                portfolios=portfolios,
+                portfolio_claims=candidate.get("portfolio_claims") or [],
             )
             print(f"[VERIFY] Verification complete for {candidate_id}")
 
@@ -874,7 +892,8 @@ async def _verification_by_candidate(collection, candidate_ids: List[str]) -> Di
     by_id: Dict[str, dict] = {}
     cursor = db[collection].find(
         {"$or": [{"candidateId": {"$in": candidate_ids}}, {"candidate_id": {"$in": candidate_ids}}]},
-        {"candidateId": 1, "candidate_id": 1, "verificationStatus": 1, "matchScore": 1, "codingProfilesData": 1},
+        {"candidateId": 1, "candidate_id": 1, "verificationStatus": 1, "matchScore": 1, "codingProfilesData": 1,
+         "portfoliosData": 1},
     )
     async for doc in cursor:
         cid = doc.get("candidateId") or doc.get("candidate_id")
@@ -905,6 +924,33 @@ def _coding_profiles_summary(candidate: dict | None, verification: dict | None) 
     return out
 
 
+_PORTFOLIO_FIELDS = ("platform", "handle", "status", "name", "headline", "location", "followers", "appreciations",
+                     "reputation", "badges", "top_tags", "tiers", "medals", "competitions", "skills", "experience",
+                     "education", "note", "checked_at")
+
+
+def _portfolios_summary(candidate: dict | None, verification: dict | None) -> List[dict]:
+    """Portfolio and community profiles for the dossier: checked results, or the listed ones while pending.
+
+    Profile links are rebuilt from the validated handle or URL; project links are kept only if https and public.
+    """
+    checked = (verification or {}).get("portfoliosData") or []
+    if not checked:
+        checked = [{"platform": p, "handle": h, "status": "pending"}
+                   for p, h in ((candidate or {}).get("portfolios") or {}).items()]
+    out = []
+    for p in checked:
+        try:
+            url = portfolio_checks.profile_url(p.get("platform"), p.get("handle"))
+        except (KeyError, ValueError):
+            continue
+        projects = [{**pr, "url": portfolio_checks.public_url(pr.get("url"), https_only=True)}
+                    for pr in p.get("projects") or [] if isinstance(pr, dict)]
+        out.append({**{k: p.get(k) for k in _PORTFOLIO_FIELDS}, "projects": projects,
+                    "issues": p.get("issues") or [], "profile_url": url})
+    return out
+
+
 @router.get("/{job_id}/candidates", dependencies=[Depends(require_job_owner)])
 async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
     """Get all candidates for a job from applications collection"""
@@ -921,9 +967,11 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             {"candidate_id": {"$in": candidate_ids}},
             {"candidate_id": 1, "parsed.personal_info": 1, "parsed.skills": 1, "parsed.education": 1,
              "parsed.experience": 1, "filename": 1, "github_username": 1, "linkedin_url": 1,
-             "coding_profiles": 1},
+             "coding_profiles": 1, "portfolios": 1},
         )
     }
+    job_doc = await db.jobs.find_one({"_id": ObjectId(job_id)}, {"required_skills": 1})
+    required_skills = (job_doc or {}).get("required_skills") or []
 
     evaluations_by_id = {
         e["candidate_id"]: e
@@ -947,6 +995,7 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
         # Read stored skill_matches from application document (computed at upload time)
         score_details = app.get("score_details") or {}
         skill_matches = score_details.get("skill_matches", [])
+        portfolios = _portfolios_summary(candidate, verification)
 
         result.append({
             "candidate_id": candidate_id,
@@ -978,6 +1027,9 @@ async def get_job_candidates(job_id: str, skip: int = 0, limit: int = 1000):
             "filename": candidate.get("filename") if candidate else None,
             "verification_status": verification.get("verificationStatus") if verification else None,
             "coding_profiles": _coding_profiles_summary(candidate, verification),
+            "portfolios": portfolios,
+            # Job skills shown on portfolios or Stack Overflow tags: evidence only, not scored
+            "portfolio_skill_evidence": portfolio_checks.skill_evidence(portfolios, required_skills),
             "skill_matches": skill_matches  # NEW: Real skill matches
         })
     

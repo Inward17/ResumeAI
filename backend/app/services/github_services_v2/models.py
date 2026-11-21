@@ -129,6 +129,9 @@ class GitHubVerificationResult:
     # LLM escalation (only if triggered)
     llmEscalation: Optional[Dict[str, Any]] = None
 
+    # Homepages set on the candidate's own repos (deployed projects to review on demand)
+    homepages: List[Dict[str, Any]] = field(default_factory=list)
+
     # Metadata
     error: Optional[str] = None
     analyzedAt: Optional[str] = None
@@ -212,6 +215,7 @@ class GitHubVerificationResult:
             "score40": self.score40,
             "confidenceLevel": self.confidenceLevel,
             "redFlags": self.redFlags,
+            "homepages": self.homepages,
         }
 
         if self.authenticity:

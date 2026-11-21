@@ -6,6 +6,7 @@ import json
 import os
 import httpx
 
+from app.services.project_reviews import interview_context as project_review_context
 from app.utils.text_utils import UNTRUSTED_NOTE, as_data
 
 
@@ -82,7 +83,8 @@ def _build_prompt(job: dict, candidate: dict, verification: dict | None) -> str:
 {exp_summary if exp_summary else '  No experience data available'}
 - Education:
 {edu_summary if edu_summary else '  No education data available'}
-{f'- Verification: {verification_context}' if verification_context else ''}"""
+{f'- Verification: {verification_context}' if verification_context else ''}
+{project_review_context(candidate, str(job.get("_id")) if job.get("_id") else None)}"""
 
     return f"""You are an expert technical interviewer. Generate exactly 5 interview questions for the following candidate applying to a specific job role.
 
@@ -101,7 +103,8 @@ INSTRUCTIONS:
 2. Mix question types: technical depth, system design, behavioral, and problem-solving.
 3. Tailor questions to the candidate's background — reference their skills and experience where relevant.
 4. For each question, generate 3-6 short keyword tags (2-3 words each) representing key topics the answer should cover.
-5. Questions should be challenging but fair — appropriate for a senior-level technical interview.
+5. If reviewed deployed projects are listed, make at least one question about a specific product by name. If project concerns to challenge are listed, at least one question must challenge one of them directly (what exactly the candidate built, their commits, why the site credits someone else); don't soften it into a hypothetical.
+6. Questions should be challenging but fair — appropriate for a senior-level technical interview.
 
 Return ONLY a valid JSON array with exactly this structure:
 [
