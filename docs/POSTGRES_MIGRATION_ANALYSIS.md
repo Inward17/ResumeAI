@@ -28,7 +28,7 @@ The work is spread thin, not concentrated: database calls are scattered directly
 | `app/services/jd_matching_service.py` | 7 | Legacy, flagged unused in BACKEND_ANALYSIS |
 | `app/routes/interview_questions_routes.py` | 5 | Question cache on applications |
 | `app/auth.py` | 5 | Job/candidate access checks, user upsert |
-| `app/routes/ai_analysis_routes.py` | 4 | Never mounted (legacy) |
+| `app/routes/ai_analysis_routes.py` | 4 | Removed (issue #27) |
 | `app/agent/core/agent_loop.py` | 4 | Agent verification writes |
 | 8 more files | 1–2 each | Fact checker, evaluations, verification, GitHub writer |
 | `scripts/seed_demo.py`, `assign_job_owner.py` | 21 | Demo data and migration helper |
@@ -114,7 +114,7 @@ Whatever the option, **first move every DB call behind a small data-access layer
 | Buffer | Agent path (`app/agent`), legacy files, surprises | 1 day |
 | **Total** | | **13–19 person-days** |
 
-Dropping the unused legacy files first (`jd_matching_service.py`, `ai_analysis_routes.py`, `models/github_writer.py`, already flagged in BACKEND_ANALYSIS) removes ~13 call sites before you start.
+Dropping the unused legacy files first (`jd_matching_service.py`, `models/github_writer.py`, already flagged in BACKEND_ANALYSIS; `ai_analysis_routes.py` is already gone) removes ~9 call sites before you start.
 
 ## 6. Risks
 

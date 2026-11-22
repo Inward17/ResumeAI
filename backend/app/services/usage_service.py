@@ -59,7 +59,9 @@ async def _firecrawl(http):
 
 
 async def _apify(http):
-    r = await http.get("https://api.apify.com/v2/users/me/limits", params={"token": os.getenv("APIFY_TOKEN")})
+    # Tokens and keys go in headers, never in the URL (SECURITY.md)
+    r = await http.get("https://api.apify.com/v2/users/me/limits",
+                       headers={"Authorization": f"Bearer {os.getenv('APIFY_TOKEN')}"})
     r.raise_for_status()
     d = r.json().get("data") or {}
     return {"metrics": [_metric("Monthly spend", (d.get("current") or {}).get("monthlyUsageUsd"),
@@ -70,7 +72,7 @@ async def _apify(http):
 
 async def _gemini(http):
     r = await http.get("https://generativelanguage.googleapis.com/v1beta/models",
-                       params={"key": os.getenv("GEMINI_API_KEY"), "pageSize": 1})
+                       params={"pageSize": 1}, headers={"x-goog-api-key": os.getenv("GEMINI_API_KEY") or ""})
     r.raise_for_status()
     return {"metrics": [_metric("Concurrent parse calls", None, int(os.getenv("PARSE_CONCURRENCY", "4")), "set by PARSE_CONCURRENCY")],
             "note": "Google doesn't expose remaining quota through the API — see Google AI Studio for exact limits."}
