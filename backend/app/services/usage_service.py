@@ -57,9 +57,14 @@ async def _firecrawl(http, key):
     d = r.json().get("data") or {}
     remaining = d.get("remainingCredits", d.get("remaining_credits"))
     plan = d.get("planCredits", d.get("plan_credits"))
-    used = plan - remaining if isinstance(plan, (int, float)) and isinstance(remaining, (int, float)) else None
-    return {"metrics": [_metric("Credits", used, plan, "this billing period",
-                                d.get("billingPeriodEnd") or d.get("billing_period_end"))],
+    resets = d.get("billingPeriodEnd") or d.get("billing_period_end")
+    num = lambda v: isinstance(v, (int, float))
+    if num(plan) and num(remaining) and remaining <= plan:
+        metric = _metric("Credits", plan - remaining, plan, "this billing period", resets)
+    else:
+        # Extra or rolled-over credits can exceed the plan; "used" would go negative
+        metric = _metric("Credits left", remaining if num(remaining) else None, None, "this billing period", resets)
+    return {"metrics": [metric],
             "note": "LinkedIn lookups cost 5 credits per profile found."}
 
 

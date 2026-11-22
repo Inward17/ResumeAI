@@ -234,3 +234,22 @@ class TestRemovedMember:
         assert await asyncio.create_task(run(AuthUser(uid="gone"))) == "server-groq_api_key"
         await mock_db.org_members.insert_one({"org_id": "o1", "uid": "gone", "role": "member"})
         assert await asyncio.create_task(run(AuthUser(uid="gone"))) == WS_KEY
+
+
+class TestFirecrawlCredits:
+    async def _metric(self, data):
+        from unittest.mock import MagicMock
+        from app.services import usage_service
+        resp = MagicMock()
+        resp.json.return_value = {"data": data}
+        http = MagicMock()
+        http.get = AsyncMock(return_value=resp)
+        return (await usage_service._firecrawl(http, "fc-test"))["metrics"][0]
+
+    async def test_extra_credits_show_as_credits_left_not_negative_used(self):
+        m = await self._metric({"remainingCredits": 1392, "planCredits": 1000})
+        assert m["label"] == "Credits left" and m["used"] == 1392 and m["limit"] is None
+
+    async def test_normal_period_shows_used_of_plan(self):
+        m = await self._metric({"remainingCredits": 400, "planCredits": 1000})
+        assert m["label"] == "Credits" and m["used"] == 600 and m["limit"] == 1000

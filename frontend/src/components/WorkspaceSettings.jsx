@@ -396,21 +396,21 @@ const FEATURES = [
 ];
 
 const SERIES = [
-  { id: 'aiCalls', label: 'AI calls' },
-  { id: 'uploads', label: 'Resume uploads' },
+  { id: 'aiCalls', label: 'AI calls', summary: 'AI calls' },
+  { id: 'uploads', label: 'Resume uploads', summary: 'resume uploads' },
 ];
 
 const dayLabel = (iso, opts = { month: 'short', day: 'numeric' }) => new Date(`${iso}T00:00:00`).toLocaleDateString([], opts);
 
 const HistoryChart = ({ history }) => {
   const [series, setSeries] = useState('aiCalls');
-  const label = SERIES.find((s) => s.id === series).label;
+  const { summary } = SERIES.find((s) => s.id === series);
   const max = Math.max(1, ...history.map((d) => d[series]));
   const total = history.reduce((n, d) => n + d[series], 0);
   const activeDays = history.filter((d) => d.aiCalls || d.uploads).length;
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="flex-wrap" title="Last 30 days" subtitle={`${total.toLocaleString()} ${label.toLowerCase()} in total`}
+      <CardHeader className="flex-wrap" title="Last 30 days" subtitle={`${total.toLocaleString()} ${summary} in total`}
         action={<Segmented items={SERIES} value={series} onChange={setSeries} label="Chart series" />} />
       <div className="p-5">
         <div className="flex h-32 items-end gap-[2px] sm:gap-1" aria-hidden="true">
@@ -659,12 +659,12 @@ export const IntegrationsSettings = () => {
                 {testing === p.id ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />} Test
               </Button>
               {canManage && keysEnabled && editing !== p.id && (
-                <Button size="sm" variant="ghost" onClick={() => setEditing(p.id)} aria-label={`${ws ? 'Replace' : 'Add'} ${p.name} key`}>
+                <Button size="sm" variant="ghost" onClick={() => setEditing(p.id)} aria-label={`${ws ? 'Replace' : 'Add'} key for ${p.name}`}>
                   <KeyRound aria-hidden="true" /> {ws ? 'Replace' : 'Add key'}
                 </Button>
               )}
               {canManage && ws && (
-                <Button size="sm" variant="ghost" onClick={() => setRemoving(p)} aria-label={`Remove ${p.name} key`}>
+                <Button size="sm" variant="ghost" onClick={() => setRemoving(p)} aria-label={`Remove key for ${p.name}`}>
                   <Trash2 aria-hidden="true" /> Remove
                 </Button>
               )}
