@@ -158,7 +158,7 @@ Code: `backend/app/org.py`, `backend/app/routes/org_routes.py`; UI under **Setti
 | `COMPOSIO_USER_ID` | Composio user whose Gmail account is connected (default `default`) |
 | `COMPOSIO_GMAIL_ACCOUNT_ID` | Optional: pin a specific connected Gmail account |
 
-To connect Gmail: create a Composio project, add the Gmail toolkit, and connect a Gmail account for the user id you put in `COMPOSIO_USER_ID`. **Settings → Plan & usage** shows whether an active Gmail connection was found.
+To connect Gmail: create a Composio project, add the Gmail toolkit, and connect a Gmail account for the user id you put in `COMPOSIO_USER_ID`. **Settings → Integrations** shows whether an active Gmail connection was found.
 
 ### Workspace API keys
 
@@ -174,7 +174,7 @@ Revoking a key stops it immediately. `last_used_at` is updated on every call.
 
 ## 5. External services and their limits
 
-**Settings → Plan & usage** checks every key the backend runs on and shows live limits where the provider exposes them (cached for one minute; **Refresh** re-checks).
+**Settings → AI** (Gemini, Groq) and **Settings → Integrations** (all providers) check every key the backend runs on and shows live limits where the provider exposes them (cached for one minute; **Refresh** re-checks).
 
 | Service | Used for | Variable | What the page shows |
 |---|---|---|---|

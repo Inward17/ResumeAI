@@ -13,6 +13,7 @@ from typing import List, Optional
 import httpx
 
 from app.utils.text_utils import UNTRUSTED_NOTE, as_data
+from app.services.provider_keys import key_for
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ def validate(data) -> dict:
 async def review_project(project: dict, pages: List[dict], screenshot_b64: Optional[str], candidate: dict,
                          job: dict, client: Optional[httpx.AsyncClient] = None) -> dict:
     """Validated review. Raises AIUnavailable when Gemini is down, missing or answers off-rubric."""
-    key = os.getenv("GEMINI_API_KEY")
+    key = key_for("gemini")
     if not key:
         raise AIUnavailable("GEMINI_API_KEY not set")
     skills = ", ".join([*(job.get("required_skills") or []), *(job.get("preferred_skills") or [])][:20]) or "not listed"

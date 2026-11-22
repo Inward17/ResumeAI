@@ -25,6 +25,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 
 from app.database import db
+from app.services.provider_keys import key_for
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,6 @@ ROLES = ("owner", "admin", "member")
 MANAGER_ROLES = ("owner", "admin")
 API_KEY_PREFIX = "rai_"
 
-COMPOSIO_API_KEY = os.getenv("COMPOSIO_API_KEY")
 COMPOSIO_API_URL = os.getenv("COMPOSIO_API_URL", "https://backend.composio.dev/api/v3")
 # Composio user whose Gmail account is connected (and optionally which connected account)
 COMPOSIO_USER_ID = os.getenv("COMPOSIO_USER_ID", "default")
@@ -118,12 +118,13 @@ async def user_for_api_key(raw: str):
 
 
 def email_delivery_configured() -> bool:
-    return bool(COMPOSIO_API_KEY)
+    return bool(key_for("composio"))
 
 
 async def send_invite_email(to: str, org_name: str, inviter: str, url: str) -> Optional[str]:
     """Send the invite through Composio's Gmail tool. Returns an error message, or None on success."""
-    if not COMPOSIO_API_KEY:
+    api_key = key_for("composio")
+    if not api_key:
         return "Email sending is not configured (set COMPOSIO_API_KEY)"
     # Workspace and inviter names are user-controlled: no markup in the body, no header breaks in the subject
     subject = " ".join(f"{inviter} invited you to {org_name} on ResumeAI".splitlines())
@@ -147,7 +148,7 @@ async def send_invite_email(to: str, org_name: str, inviter: str, url: str) -> O
     try:
         async with httpx.AsyncClient(timeout=30) as http:
             resp = await http.post(f"{COMPOSIO_API_URL}/tools/execute/GMAIL_SEND_EMAIL", json=body,
-                                   headers={"x-api-key": COMPOSIO_API_KEY})
+                                   headers={"x-api-key": api_key})
         data = resp.json() if resp.content else {}
         if resp.status_code >= 400 or data.get("successful") is False:
             err = data.get("error") or data.get("message") or f"HTTP {resp.status_code}"

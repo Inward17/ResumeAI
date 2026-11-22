@@ -48,6 +48,7 @@ Each deploy copies these to the Space's secrets. You can also set them directly 
 | `GH_VERIFICATION_TOKEN` | GitHub verification. Becomes `GITHUB_TOKEN` in the Space; GitHub reserves the `GITHUB_` prefix for its own secrets. |
 | `FIRECRAWL_API_KEY`, `APIFY_TOKEN` | LinkedIn verification |
 | `COMPOSIO_API_KEY` | Invitation emails (also set `COMPOSIO_USER_ID` in the Space if it isn't `default`) |
+| `PROVIDER_KEYS_SECRET` | Optional. Lets workspaces add their own provider keys in Settings → Integrations (see the README for generating it). The deploy doesn't copy it: set it directly in the Space's secrets, and keep it stable, since changing it makes stored workspace keys unreadable. |
 
 The deploy also sets these Space variables: `CORS_ORIGINS` (your Pages origin), `APP_URL` (Pages URL, used in invitation links) and `FIREBASE_PROJECT_ID`.
 

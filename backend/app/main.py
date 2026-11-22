@@ -16,7 +16,8 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
-from app.auth import AUTH_DISABLED, get_current_user
+from app.auth import AUTH_DISABLED, AuthUser, get_current_user
+from app.services import provider_keys
 from app.database import client, ensure_indexes, ping_database
 from app.services.task_queue import RESUME_WORKERS, task_queue
 from app.routes import resume, unified_verification_routes, job_routes, interview_questions_routes, evaluation_routes, fact_checker_routes, auth_routes, org_routes, cover_letter_routes, project_review_routes
@@ -81,8 +82,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def workspace_provider_keys(user: AuthUser = Depends(get_current_user)):
+    """Provider calls made for this request use the caller's workspace keys (app.services.provider_keys)."""
+    await provider_keys.use_user(user)
+
+
 # Every API route requires a valid OAuth 2.0 bearer token
-authenticated = [Depends(get_current_user)]
+authenticated = [Depends(get_current_user), Depends(workspace_provider_keys)]
 
 # Include routers
 app.include_router(auth_routes.router, prefix="/api", dependencies=authenticated)

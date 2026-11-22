@@ -243,4 +243,3 @@ TRIVIAL_EXCLUSION_COMPOUNDS: list = [
 # ═══════════════════════════════════════════════════════════════════
 
 GITHUB_API_BASE_URL: str = "https://api.github.com"
-GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")

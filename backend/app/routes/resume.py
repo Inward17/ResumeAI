@@ -20,6 +20,7 @@ from app.org import ensure_org
 from app.services.skill_matching.pipeline import run_unified_skill_scoring
 from app.services.task_queue import task_queue, TERMINAL_STATUSES
 from app.services import cover_letter_service
+from app.services import provider_keys
 
 # Gemini concurrency, retries and rate-limit backoff are handled in
 # app.services.parser; the number of resumes processed at once is set by
@@ -769,6 +770,13 @@ async def process_resume_task(task: dict):
     Cover letters in the upload are recognised first: they never become candidates,
     and are paired with a resume of the same job instead.
     """
+    # AI and verification calls for this task use its workspace's provider keys
+    if provider_keys.enabled():
+        try:
+            job = await db.jobs.find_one({"_id": ObjectId(task["job_id"])}, {"org_id": 1})
+        except Exception:
+            job = None
+        await provider_keys.use_org((job or {}).get("org_id"))
     resolved = task.get("resolved_candidate_id")
     if resolved:
         # A retried task was already classified and parsed, and its file is gone.
@@ -819,7 +827,7 @@ async def upload_resumes(
         if not content_matches_type(ext, content):
             raise HTTPException(400, f"{file.filename} is not a valid .{ext} file")
 
-    await use_quota(await ensure_org(user), "resume_upload", len(files))
+    await use_quota(await ensure_org(user), "resume_upload", len(files), feature="resume_parsing")
 
     saved = []
     tasks = []
