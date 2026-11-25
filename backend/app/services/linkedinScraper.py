@@ -17,29 +17,34 @@ from datetime import datetime
 
 import httpx
 
+from app.services.provider_keys import key_for
+
 logger = logging.getLogger(__name__)
 
-FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
 FIRECRAWL_API_URL = os.getenv("FIRECRAWL_API_URL", "https://api.firecrawl.dev")
 FIRECRAWL_TIMEOUT = float(os.getenv("FIRECRAWL_TIMEOUT_SECONDS", "60"))
 
-APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 APIFY_ACTOR_ID = os.getenv("APIFY_ACTOR_ID", "yZnhB5JewWf9xSmoM")
 
-_apify = None
-if APIFY_TOKEN:
+
+def _apify_client():
+    """Apify client for the workspace's (or server's) token, or None."""
+    token = key_for("apify")
+    if not token:
+        return None
     from apify_client import ApifyClient
-    _apify = ApifyClient(APIFY_TOKEN)
+    return ApifyClient(token)
 
 
 async def scrape_linkedin_profiles(urls: list) -> dict:
     """Look up LinkedIn profiles; Firecrawl first, Apify for any it couldn't resolve."""
-    if not FIRECRAWL_API_KEY and not _apify:
+    fc_key, apify = key_for("firecrawl"), _apify_client()
+    if not fc_key and not apify:
         raise Exception("LinkedIn lookup not configured (set FIRECRAWL_API_KEY or APIFY_TOKEN)")
 
     results, missing = [], list(urls)
-    if FIRECRAWL_API_KEY:
-        found = await asyncio.gather(*(_firecrawl_lookup(u) for u in urls), return_exceptions=True)
+    if fc_key:
+        found = await asyncio.gather(*(_firecrawl_lookup(u, fc_key) for u in urls), return_exceptions=True)
         missing = []
         for url, item in zip(urls, found):
             if isinstance(item, dict):
@@ -49,9 +54,9 @@ async def scrape_linkedin_profiles(urls: list) -> dict:
                     logger.warning("Firecrawl LinkedIn lookup failed for %s: %s", url, item)
                 missing.append(url)
 
-    if missing and _apify:
+    if missing and apify:
         try:
-            results.extend(await asyncio.to_thread(_run_apify, missing))
+            results.extend(await asyncio.to_thread(_run_apify, apify, missing))
         except Exception as e:
             if not results:
                 raise Exception(f"Scraping failed: {e}")
@@ -60,11 +65,11 @@ async def scrape_linkedin_profiles(urls: list) -> dict:
     return {"status": "success", "data": results}
 
 
-async def _firecrawl_lookup(url: str) -> dict | None:
+async def _firecrawl_lookup(url: str, key: str) -> dict | None:
     body = {"alexandria": {"provider": "fullenrich", "capability": "people/match", "options": {"linkedin_url": _canonical(url)}}}
     async with httpx.AsyncClient(timeout=FIRECRAWL_TIMEOUT) as http:
         resp = await http.post(f"{FIRECRAWL_API_URL}/v2/scrape", json=body,
-                               headers={"Authorization": f"Bearer {FIRECRAWL_API_KEY}"})
+                               headers={"Authorization": f"Bearer {key}"})
     resp.raise_for_status()
     payload = resp.json()
     calls = (payload.get("data") or {}).get("alexandria") or []
@@ -129,13 +134,13 @@ def _to_apify_shape(p: dict, url: str) -> dict:
     }
 
 
-def _run_apify(urls: list) -> list:
-    run = _apify.actor(APIFY_ACTOR_ID).call(run_input={
+def _run_apify(apify, urls: list) -> list:
+    run = apify.actor(APIFY_ACTOR_ID).call(run_input={
         "urls": [{"url": u} for u in urls],
         "scrapeCompany": False,
         "findContacts": False,
     })
-    return list(_apify.dataset(run["defaultDatasetId"]).iterate_items())
+    return list(apify.dataset(run["defaultDatasetId"]).iterate_items())
 
 
 if __name__ == "__main__":

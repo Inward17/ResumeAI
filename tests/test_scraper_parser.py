@@ -27,21 +27,21 @@ def _apify(items=None, error=None):
 class TestScraper:
     async def test_apify_used_when_firecrawl_not_configured(self):
         client = _apify([{"firstName": "Jane", "positions": [{"title": "SWE", "companyName": "Google"}]}])
-        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", None), patch(f"{SCRAPER}._apify", client):
+        with patch.dict("os.environ", {"FIRECRAWL_API_KEY": ""}), patch(f"{SCRAPER}._apify_client", return_value=client):
             from app.services.linkedinScraper import scrape_linkedin_profiles
             result = await scrape_linkedin_profiles(["https://linkedin.com/in/janedoe"])
         assert result["status"] == "success"
         assert result["data"][0]["firstName"] == "Jane"
 
     async def test_raises_when_nothing_configured(self):
-        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", None), patch(f"{SCRAPER}._apify", None):
+        with patch.dict("os.environ", {"FIRECRAWL_API_KEY": ""}), patch(f"{SCRAPER}._apify_client", return_value=None):
             from app.services.linkedinScraper import scrape_linkedin_profiles
             with pytest.raises(Exception, match="not configured"):
                 await scrape_linkedin_profiles(["https://linkedin.com/in/test"])
 
     async def test_apify_error_propagates_when_it_is_the_only_source(self):
-        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", None), \
-                patch(f"{SCRAPER}._apify", _apify(error=Exception("Apify rate limit exceeded"))):
+        with patch.dict("os.environ", {"FIRECRAWL_API_KEY": ""}), \
+                patch(f"{SCRAPER}._apify_client", return_value=_apify(error=Exception("Apify rate limit exceeded"))):
             from app.services.linkedinScraper import scrape_linkedin_profiles
             with pytest.raises(Exception, match="Scraping failed"):
                 await scrape_linkedin_profiles(["https://linkedin.com/in/test"])
@@ -49,7 +49,7 @@ class TestScraper:
     async def test_firecrawl_result_skips_apify(self):
         client = _apify([{"firstName": "Should not be used"}])
         lookup = AsyncMock(return_value={"firstName": "Jane", "source": "firecrawl"})
-        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", "fc-test"), patch(f"{SCRAPER}._apify", client), \
+        with patch.dict("os.environ", {"FIRECRAWL_API_KEY": "fc-test"}), patch(f"{SCRAPER}._apify_client", return_value=client), \
                 patch(f"{SCRAPER}._firecrawl_lookup", lookup):
             from app.services.linkedinScraper import scrape_linkedin_profiles
             result = await scrape_linkedin_profiles(["https://linkedin.com/in/janedoe"])
@@ -61,7 +61,7 @@ class TestScraper:
         # First profile found by Firecrawl, second not found, third errors
         lookup = AsyncMock(side_effect=[{"firstName": "Jane"}, None, Exception("HTTP 500")])
         urls = ["https://linkedin.com/in/jane", "https://linkedin.com/in/john", "https://linkedin.com/in/err"]
-        with patch(f"{SCRAPER}.FIRECRAWL_API_KEY", "fc-test"), patch(f"{SCRAPER}._apify", client), \
+        with patch.dict("os.environ", {"FIRECRAWL_API_KEY": "fc-test"}), patch(f"{SCRAPER}._apify_client", return_value=client), \
                 patch(f"{SCRAPER}._firecrawl_lookup", lookup):
             from app.services.linkedinScraper import scrape_linkedin_profiles
             result = await scrape_linkedin_profiles(urls)

@@ -14,7 +14,7 @@ AI resume screening for hiring teams. ResumeAI parses every resume with Gemini, 
 - **Interview kit.** AI-generated questions tailored to the job and resume, a checklist scorer, and a fact checker you can ask about any claim.
 - **Teams.** Shared workspaces with owner, admin and member roles, email invitations (via Composio Gmail) or copyable invite links.
 - **Workspace API keys** for calling the API from your own tools.
-- **Plan & usage.** Live limits of every external key the backend runs on (GitHub, Firecrawl, Apify, Gemini, Groq, Composio).
+- **AI and Integrations settings.** Today's AI calls and uploads against the daily limits, usage by feature and over 30 days, and live limits of every external key the backend runs on (GitHub, Firecrawl, Apify, Gemini, Groq, Composio). Owners and admins can give a workspace its own key for any of them.
 - Light and dark themes, phone layouts, keyboard and screen-reader support.
 
 ## Stack
@@ -71,6 +71,7 @@ All backend settings live in `backend/.env`; [`backend/.env.example`](backend/.e
 | `FIRECRAWL_API_KEY`, `PORTFOLIO_CHECKS_ENABLED` | Behance, Dribbble, Kaggle and portfolio-website checks (one Firecrawl scrape per source per verification; without a key they show "not checked"; `false` switches them off) |
 | `PROJECT_REVIEW_MAX_PROJECTS`, `PROJECT_REVIEW_MAX_PAGES` | Project reviews: projects per review (default 3) and pages per project (default 3). Needs `FIRECRAWL_API_KEY` and `GEMINI_API_KEY`; about 3 Firecrawl credits and 1 Gemini call per project |
 | `COMPOSIO_API_KEY`, `APP_URL` | Invitation emails and their links |
+| `PROVIDER_KEYS_SECRET` | Workspace keys in Settings → Integrations: a Fernet key (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) that encrypts them. Without it, every workspace uses the server keys above |
 
 The frontend needs `VITE_API_URL` and the `VITE_FIREBASE_*` values ([`frontend/.env.example`](frontend/.env.example)).
 

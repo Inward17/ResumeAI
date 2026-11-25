@@ -66,7 +66,7 @@ async def get_interview_questions(job_id: str, candidate_id: str, regenerate: bo
 
     # ── 3. Generate questions via Groq ───────────────────────────────────
     # Only uncached requests reach Groq, so only they count against the daily quota
-    await use_quota(await ensure_org(user), "ai_call")
+    await use_quota(await ensure_org(user), "ai_call", feature="interview_questions")
     print(f"[InterviewQ] Generating questions for candidate={candidate_id}, job={job_id}...")
     questions = await generate_interview_questions(
         job=dict(job),

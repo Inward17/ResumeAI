@@ -20,24 +20,39 @@ QUOTAS = {
 }
 
 
-async def use_quota(org_id: str, kind: str, amount: int = 1):
-    """Count ``amount`` against the workspace's limit for today (UTC); 429 if it would go over."""
-    env, default, label = QUOTAS[kind]
-    limit = int(os.getenv(env, str(default)))
+# Retention of the daily counters (TTL index in app.database), for the 30-day history in Settings
+HISTORY_DAYS = 35
+
+
+def quota_limit(kind: str) -> int:
+    env, default, _ = QUOTAS[kind]
+    return int(os.getenv(env, str(default)))
+
+
+async def use_quota(org_id: str, kind: str, amount: int = 1, feature: str = None):
+    """Count ``amount`` against the workspace's limit for today (UTC); 429 if it would go over.
+
+    ``feature`` (e.g. "fact_checker") is also counted in the same daily doc, for usage by feature.
+    """
+    label = QUOTAS[kind][2]
+    limit = quota_limit(kind)
     now = datetime.now(timezone.utc)
     resets_at = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     key = {"_id": f"{org_id}:{kind}:{now.date().isoformat()}"}
+    inc = {"count": amount}
+    if feature:
+        inc[f"features.{feature}"] = amount
     # Atomic $inc, then give the units back if that took us over the limit
     doc = await db.usage_quotas.find_one_and_update(
         key,
-        {"$inc": {"count": amount},
+        {"$inc": inc,
          "$setOnInsert": {"org_id": org_id, "kind": kind,
                           # TTL index (app.database) removes old days
-                          "expires_at": (resets_at + timedelta(days=1)).replace(tzinfo=None)}},
+                          "expires_at": (resets_at + timedelta(days=HISTORY_DAYS)).replace(tzinfo=None)}},
         upsert=True, return_document=ReturnDocument.AFTER,
     )
     if doc["count"] > limit:
-        await db.usage_quotas.update_one(key, {"$inc": {"count": -amount}})
+        await db.usage_quotas.update_one(key, {"$inc": {k: -v for k, v in inc.items()}})
         used = doc["count"] - amount
         raise HTTPException(429, (
             f"Daily limit reached: your workspace can make {limit} {label} per day "

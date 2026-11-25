@@ -3,6 +3,7 @@ import random
 import asyncio
 import langextract as lx
 from app.utils.prompts import PARSER_PROMPT, EXAMPLES
+from app.services.provider_keys import key_for
 import os
 
 # Max resumes sent to Gemini at the same time (per backend process).
@@ -80,7 +81,7 @@ def parse_projects(extractions):
 
 async def _extract_with_retries(text: str):
     """Call langextract with bounded concurrency, retrying rate limits / transient errors."""
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_API_KEY = key_for("gemini")
     timeouts = 0
     for attempt in range(PARSE_MAX_RETRIES + 1):
         try:

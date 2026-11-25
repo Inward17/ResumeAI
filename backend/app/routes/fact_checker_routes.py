@@ -32,7 +32,7 @@ async def check_fact(candidate_id: str, body: FactCheckRequest, user: AuthUser =
       4. verify_authenticity — Project ownership / originality check.
     """
     rate_limit(user.uid, "ai")
-    await use_quota(await ensure_org(user), "ai_call")
+    await use_quota(await ensure_org(user), "ai_call", feature="fact_checker")
     if not body.message.strip():
         raise HTTPException(400, "Message cannot be empty")
 

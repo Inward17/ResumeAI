@@ -1,4 +1,4 @@
-/** Organization, team invites, workspace API keys and usage (backend: app/routes/org_routes.py) */
+/** Organization, team invites, workspace API keys, AI usage, integrations and usage (backend: app/routes/org_routes.py) */
 import { apiFetch } from './api';
 
 const call = async (path, options = {}) => {
@@ -31,3 +31,16 @@ export const createApiKey = (name) => call('/api/org/api-keys', send('POST', { n
 export const revokeApiKey = (id) => call(`/api/org/api-keys/${id}`, send('DELETE'));
 
 export const getUsage = (refresh = false) => call(`/api/org/usage${refresh ? '?refresh=true' : ''}`);
+
+// AI usage and integrations return camelCase (feature names too: interviewQuestions, factChecker, ...)
+const camelize = (v) => {
+    if (Array.isArray(v)) return v.map(camelize);
+    if (!v || typeof v !== 'object') return v;
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()), camelize(x)]));
+};
+
+export const getAiUsage = async (refresh = false) => camelize(await call(`/api/org/ai-usage${refresh ? '?refresh=true' : ''}`));
+export const getIntegrations = async (refresh = false) => camelize(await call(`/api/org/integrations${refresh ? '?refresh=true' : ''}`));
+export const testIntegration = async (id) => camelize(await call(`/api/org/integrations/${id}/test`, send('POST')));
+export const saveProviderKey = async (id, key) => camelize(await call(`/api/org/integrations/${id}`, send('PUT', { key })));
+export const removeProviderKey = (id) => call(`/api/org/integrations/${id}`, send('DELETE'));
