@@ -233,7 +233,9 @@ async def delete_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     await db.evaluations.delete_many({"job_id": job_id})
     # Leftover resume files; a task still being parsed deletes its own when done
     await delete_task_files({"job_id": job_id, "status": {"$ne": "processing"}})
-    # Cover letters waiting for a resume hold the letter text, so they go too
-    await db.tasks.delete_many({"job_id": job_id, "status": {"$in": ["queued", "cover_letter_pending"]}})
+    # Every task of the job goes, including ones a worker is running: their status
+    # updates then find nothing, and _create_application won't save to a deleted job.
+    # Waiting cover letters hold the letter text, so they go too.
+    await db.tasks.delete_many({"job_id": job_id})
 
     return {"message": "Job deleted successfully"}
