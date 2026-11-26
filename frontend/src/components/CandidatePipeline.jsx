@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import CandidateModal from './CandidateModal';
+import { ScorecardTemplateCard } from './Scorecards';
+import { getScorecardCounts } from '../services/scorecardService';
 import {
   getJob, getJobCandidates, getJobTasks, uploadResumes, updateCandidateStatus,
 } from '../services/jobService';
@@ -69,6 +71,7 @@ const CandidatePipeline = () => {
   const [job, setJob] = useState(null);
   const [jobError, setJobError] = useState(null);
   const [candidates, setCandidates] = useState([]);
+  const [scorecardCounts, setScorecardCounts] = useState({}); // { [candidateId]: { submitted, total } }
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // {processed, total} files sent
@@ -103,6 +106,8 @@ const CandidatePipeline = () => {
     try {
       if (!silent) setLoading(true);
       setCandidates(await getJobCandidates(jobId));
+      // Only an indicator: the list still works if this fails
+      getScorecardCounts(jobId).then(setScorecardCounts).catch(() => {});
     } catch (err) {
       if (!silent) toast({ title: 'Could not load candidates', description: err.message, variant: 'destructive' });
     } finally {
@@ -310,6 +315,7 @@ const CandidatePipeline = () => {
         )}
 
         {showBigDropzone ? (
+          <>
           <Card className="border-dashed border-line-strong">
             <div className="flex flex-col items-center px-6 py-14 text-center">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-line bg-canvas">
@@ -322,6 +328,8 @@ const CandidatePipeline = () => {
               <Button onClick={chooseFiles} className="mt-5"><Upload aria-hidden="true" /> Choose files</Button>
             </div>
           </Card>
+          <div className="mt-6 max-w-md"><ScorecardTemplateCard jobId={jobId} /></div>
+          </>
         ) : (
           <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
             {/* Candidates */}
@@ -366,7 +374,10 @@ const CandidatePipeline = () => {
                                   className="block max-w-full truncate rounded text-left font-medium text-ink hover:text-primary-text">
                                   {c.name}
                                 </button>
-                                <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}{c.hasCoverLetter && ' · Cover letter'}</p>
+                                <p className="truncate text-xs text-ink-3">
+                                  {c.email || 'No email on resume'}{c.hasCoverLetter && ' · Cover letter'}
+                                  {scorecardCounts[c.id] && ` · Scorecards ${scorecardCounts[c.id].submitted}/${scorecardCounts[c.id].total}`}
+                                </p>
                               </div>
                             </div>
                           </td>
@@ -389,7 +400,10 @@ const CandidatePipeline = () => {
                             <Initials name={c.name} />
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-ink">{c.name}</p>
-                              <p className="truncate text-xs text-ink-3">{c.email || 'No email on resume'}{c.hasCoverLetter && ' · Cover letter'}</p>
+                              <p className="truncate text-xs text-ink-3">
+                                {c.email || 'No email on resume'}{c.hasCoverLetter && ' · Cover letter'}
+                                {scorecardCounts[c.id] && ` · Scorecards ${scorecardCounts[c.id].submitted}/${scorecardCounts[c.id].total}`}
+                              </p>
                             </div>
                           </button>
                           <StatusSelect candidate={c} onChange={handleStatusUpdate} />
@@ -452,6 +466,8 @@ const CandidatePipeline = () => {
                   ) : <div className="space-y-2"><Skeleton className="h-4" /><Skeleton className="h-4 w-4/5" /><Skeleton className="h-4 w-3/5" /></div>}
                 </div>
               </Card>
+
+              <ScorecardTemplateCard jobId={jobId} />
             </div>
           </div>
         )}

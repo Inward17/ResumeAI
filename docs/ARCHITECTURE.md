@@ -61,6 +61,7 @@ Interview questions (`GET /api/jobs/{job}/candidates/{candidate}/interview-quest
 | `applications` | Candidate × job | `status`, `score_details` (`jd_match_score` 0–10, `overall_score`, `skill_matches`), `interview_questions` |
 | `verification_data` | Candidate | `verificationStatus` (github / linkedin / webCheck), source details, discrepancies |
 | `evaluations` | Submitted interview | per-question covered points, total score |
+| `scorecards` | Job × candidate × interviewer | `status` (requested/draft/submitted), `ratings` (1–4 + evidence per competency), `recommendation`, `history`; the template is `jobs.scorecard` |
 | `users` | Person who signed in | `uid`, `email`, `org_id` (active workspace) |
 | `orgs`, `org_members` | Workspace, membership | `name`; `org_id` + `uid` + `role` |
 | `invites` | Invitation | `email`, `role`, `token`, `status`, `expires_at`, `email_sent` |
@@ -79,6 +80,7 @@ Indexes for every hot query are created at startup (`database.ensure_indexes`).
 | `app/routes/resume.py` | Upload, task progress, candidate list, status changes, the parse → verify → score pipeline |
 | `app/routes/org_routes.py` | Workspace, members, invitations, API keys, plan & usage |
 | `app/routes/interview_questions_routes.py`, `evaluation_routes.py`, `fact_checker_routes.py` | Interview kit |
+| `app/routes/scorecard_routes.py`, `app/services/scorecards.py` | Interview scorecards: template, submissions, independent review, evidence summary |
 | `app/services/task_queue.py` | Durable MongoDB queue |
 | `app/services/parser.py` | Gemini / langextract resume parsing |
 | `app/services/unified_verification.py` | Runs and merges GitHub, LinkedIn and web verification |

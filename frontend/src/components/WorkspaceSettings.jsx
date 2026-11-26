@@ -392,6 +392,7 @@ const FEATURES = [
   { id: 'factChecker', label: 'Fact checker' },
   { id: 'coverLetters', label: 'Cover letters', hint: 'attach and re-analyse' },
   { id: 'projectReviews', label: 'Project reviews', hint: 'one call per project' },
+  { id: 'scorecards', label: 'Scorecards', hint: 'suggested template and evidence brief' },
   { id: 'resumeParsing', label: 'Resume parsing', hint: 'counted as resume uploads' },
 ];
 
