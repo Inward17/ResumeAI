@@ -254,6 +254,11 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
     return result
 
 
+def _read_bytes(path: str) -> bytes:
+    with open(path, "rb") as f:
+        return f.read()
+
+
 async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None, org_id: str | None = None,
                            text: str | None = None) -> str:
     """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID.
@@ -265,9 +270,8 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
     try:
         filepath = os.path.join(RESUMES_DIR, filename)
         
-        # Read file in thread to avoid blocking event loop
-        with open(filepath, "rb") as f:
-            content = await asyncio.to_thread(f.read)
+        # Open and read in a thread to avoid blocking the event loop
+        content = await asyncio.to_thread(_read_bytes, filepath)
         
         if text is None:
             # ponytail: on timeout the extraction thread can't be killed and runs on
