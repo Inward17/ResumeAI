@@ -159,7 +159,7 @@ export const TeamSettings = () => {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
+      <Card>
         <CardHeader title="Members" subtitle={`${org.members.length} ${org.members.length === 1 ? 'person' : 'people'}`} />
         <ul className="divide-y divide-line">
           {org.members.map((m) => {
