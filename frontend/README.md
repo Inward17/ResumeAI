@@ -28,9 +28,10 @@ The backend only accepts browser requests from origins in its `CORS_ORIGINS`, so
 | Path | Page |
 |---|---|
 | `/dashboard` | Overview: headline numbers, recent jobs |
-| `/jobs`, `/jobs/:jobId` | Jobs, and a job's ranked candidate pipeline (`?candidate=<id>` opens a dossier) |
+| `/jobs`, `/jobs/:jobId` | Jobs, and a job's ranked candidate pipeline (`?candidate=<id>` opens a dossier, `?status=<stage>` filters by stage) |
 | `/jobs/:jobId/candidates/:candidateId/interview` | Interview kit and fact checker |
 | `/interviews` | Shortlisted and interview-stage candidates across jobs |
+| `/reports` | Hiring pain points: funnel, time in stage, stuck candidates, overdue feedback, job health, CSV export |
 | `/settings` | `?tab=` `team`, `api-keys`, `usage`; default is appearance and scoring |
 | `/profile` | Account and sign-in settings |
 | `/join/:token` | Accept a workspace invitation |

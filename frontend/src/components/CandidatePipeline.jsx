@@ -77,7 +77,8 @@ const CandidatePipeline = () => {
   const [pollKey, setPollKey] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  // Reports link here with ?status=Shortlisted to open the pipeline on that stage
+  const [statusFilter, setStatusFilter] = useState(() => (CANDIDATE_STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : 'All'));
   const [sort, setSort] = useState('match');
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [dismissedFailures, setDismissedFailures] = useState(() => readDismissed(jobId));

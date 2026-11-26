@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Briefcase, CalendarCheck, Settings, LogOut, Sun, Moon, Monitor } from 'lucide-react';
+import { LayoutDashboard, Briefcase, CalendarCheck, BarChart3, Settings, LogOut, Sun, Moon, Monitor } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../lib/theme';
 import { getOrg } from '../services/orgService';
@@ -13,6 +13,7 @@ export const NAV_ITEMS = [
   { to: '/dashboard', label: 'Overview', Icon: LayoutDashboard },
   { to: '/jobs', label: 'Jobs', Icon: Briefcase },
   { to: '/interviews', label: 'Interviews', Icon: CalendarCheck },
+  { to: '/reports', label: 'Reports', Icon: BarChart3 },
   { to: '/settings', label: 'Settings', Icon: Settings },
 ];
 

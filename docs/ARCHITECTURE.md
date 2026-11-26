@@ -58,7 +58,7 @@ Interview questions (`GET /api/jobs/{job}/candidates/{candidate}/interview-quest
 | `jobs` | Job posting | `org_id`, `owner_uid`, `status` (Active/Draft/Closed), `required_skills`, `jd_embedding` |
 | `tasks` | Uploaded file | `job_id`, `status` (queued/processing/done/failed), `attempts`, heartbeat |
 | `candidates` | Parsed resume | `candidate_id`, `parsed.personal_info`, `parsed.skills/education/experience`, `github_username`, `linkedin_url` |
-| `applications` | Candidate × job | `status`, `score_details` (`jd_match_score` 0–10, `overall_score`, `skill_matches`), `interview_questions` |
+| `applications` | Candidate × job | `status`, `status_history` (every change, newest 50), `score_details` (`jd_match_score` 0–10, `overall_score`, `skill_matches`), `interview_questions` |
 | `verification_data` | Candidate | `verificationStatus` (github / linkedin / webCheck), source details, discrepancies |
 | `evaluations` | Submitted interview | per-question covered points, total score |
 | `users` | Person who signed in | `uid`, `email`, `org_id` (active workspace) |
@@ -78,6 +78,7 @@ Indexes for every hot query are created at startup (`database.ensure_indexes`).
 | `app/routes/job_routes.py` | Job CRUD with candidate counts |
 | `app/routes/resume.py` | Upload, task progress, candidate list, status changes, the parse → verify → score pipeline |
 | `app/routes/org_routes.py` | Workspace, members, invitations, API keys, plan & usage |
+| `app/routes/reports.py` | Hiring reports: funnel, time in stage, stuck candidates, job health, pain points, CSV export |
 | `app/routes/interview_questions_routes.py`, `evaluation_routes.py`, `fact_checker_routes.py` | Interview kit |
 | `app/services/task_queue.py` | Durable MongoDB queue |
 | `app/services/parser.py` | Gemini / langextract resume parsing |
