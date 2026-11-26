@@ -5,6 +5,7 @@ import {
 import { cn } from '../lib/utils';
 import { Button, Tag } from './common';
 import { getProjectReviews, startProjectReviews } from '../services/jobService';
+import { usePermissions } from '../lib/permissions';
 
 const STEP = { queued: 'Queued', visiting: 'Visiting the site…', reviewing: 'AI is reviewing…', done: 'Done', failed: 'Failed' };
 const SITE = {
@@ -141,7 +142,7 @@ const Result = ({ p, onRetry, busy }) => {
           <span>{p.reviewStatus === 'ai_unavailable' ? p.reviewNote : (p.siteNote || p.reviewNote)}</span>
         </p>
       )}
-      {p.reviewStatus === 'ai_unavailable' && (
+      {p.reviewStatus === 'ai_unavailable' && onRetry && (
         <Button size="sm" variant="secondary" onClick={onRetry} disabled={busy}><RefreshCw aria-hidden="true" />Retry AI review</Button>
       )}
 
@@ -175,6 +176,7 @@ const Result = ({ p, onRetry, busy }) => {
 const ProjectReviews = ({ jobId, candidateId, state }) => {
   const { data, error, setError, load } = state;
   const [busy, setBusy] = useState(false);
+  const { can } = usePermissions();
   if (!data) {
     return (
       <section>
@@ -188,6 +190,7 @@ const ProjectReviews = ({ jobId, candidateId, state }) => {
   const reviewedIds = new Set((review?.projects || []).map((p) => p.id));
   const others = data.projects.filter((p) => !reviewedIds.has(p.id));
   const canRun = data.firecrawlConfigured && data.projects.some((p) => p.reviewable);
+  const allowed = can('ai.run');
 
   const start = async (retry = false) => {
     setBusy(true);
@@ -205,7 +208,7 @@ const ProjectReviews = ({ jobId, candidateId, state }) => {
     <section aria-labelledby="projects-heading">
       <div className="mb-2.5 flex items-center justify-between gap-3">
         <h3 id="projects-heading" className="text-sm font-semibold text-ink">Projects</h3>
-        {data.projects.length > 0 && (
+        {data.projects.length > 0 && allowed && (
           <Button size="sm" variant="secondary" onClick={() => start(false)} disabled={!canRun || running || busy}>
             {running ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Rocket aria-hidden="true" />}
             {running ? 'Reviewing…' : review ? 'Review again' : 'Review projects'}
@@ -237,7 +240,7 @@ const ProjectReviews = ({ jobId, candidateId, state }) => {
             {review.otherJob && ' · reviewed for another job, so job relevance isn’t shown'}
           </p>
           <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface">
-            {review.projects.map((p) => <Result key={p.id} p={p} busy={busy || running} onRetry={() => start(true)} />)}
+            {review.projects.map((p) => <Result key={p.id} p={p} busy={busy || running} onRetry={allowed ? () => start(true) : undefined} />)}
           </ul>
         </div>
       )}

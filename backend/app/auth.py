@@ -33,7 +33,7 @@ from google.auth import exceptions as google_auth_exceptions
 from google.auth import jwt as google_jwt
 
 from app.database import db
-from app.org import API_KEY_PREFIX, ensure_org, user_for_api_key
+from app.org import API_KEY_PREFIX, access, job_filter, require_action, user_for_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -194,21 +194,36 @@ async def require_allowed_email(user: AuthUser) -> None:
     )
 
 
-async def require_job_owner(job_id: str, user: AuthUser = Depends(get_current_user)) -> dict:
-    """Dependency for /jobs/{job_id}/... routes: the job must belong to the caller."""
+async def visible_job(job_id: str, user: AuthUser) -> tuple:
+    """(job, access) for a job the caller may see; 404 otherwise (other workspaces, or not assigned to a restricted role)."""
     try:
         obj_id = ObjectId(job_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid job ID format")
-    job = await db.jobs.find_one({"_id": obj_id, "org_id": await ensure_org(user)})
+    acc = await access(user)
+    job = await db.jobs.find_one({"_id": obj_id, **job_filter(acc)})
     if not job:
         # 404 rather than 403 so job ids of other organizations aren't revealed
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return job, acc
+
+
+async def require_job_owner(job_id: str, user: AuthUser = Depends(get_current_user)) -> dict:
+    """Dependency for /jobs/{job_id}/... routes: the caller may see the job (candidate.view)."""
+    return (await visible_job(job_id, user))[0]
+
+
+def require_job_action(action: str):
+    """Dependency factory: the caller may see the job and their role allows ``action`` (app.org.PERMISSIONS)."""
+    async def dependency(job_id: str, user: AuthUser = Depends(get_current_user)) -> dict:
+        job, acc = await visible_job(job_id, user)
+        require_action(acc, action)
+        return job
+    return dependency
 
 
 async def require_candidate_access(candidate_id: str, user: AuthUser = Depends(get_current_user)) -> None:
-    """Dependency for candidate routes: the candidate must have applied to one of the organization's jobs."""
+    """Dependency for candidate routes: the candidate applied to a job the caller may see."""
     job_ids = await db.applications.distinct("job_id", {"candidate_id": candidate_id})
     owned = []
     for job_id in job_ids:
@@ -216,7 +231,7 @@ async def require_candidate_access(candidate_id: str, user: AuthUser = Depends(g
             owned.append(ObjectId(job_id))
         except Exception:
             continue
-    if not owned or not await db.jobs.find_one({"_id": {"$in": owned}, "org_id": await ensure_org(user)}):
+    if not owned or not await db.jobs.find_one({"_id": {"$in": owned}, **job_filter(await access(user))}):
         raise HTTPException(status_code=404, detail="Candidate not found")
 
 

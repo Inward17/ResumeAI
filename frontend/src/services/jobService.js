@@ -30,6 +30,7 @@ const transformJobFromAPI = (job) => ({
     screened: job.screened || 0,
     shortlisted: job.shortlisted || 0,
     postedAt: job.posted_at,
+    teamUids: job.team_uids || [],
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -108,6 +109,20 @@ export const deleteJob = async (jobId) => {
     });
     if (!response.ok) throw new Error('Failed to delete job');
     return response.json();
+};
+
+/** Set the job's hiring team (PUT /api/jobs/:id/team) */
+export const setJobTeam = async (jobId, teamUids) => {
+    const response = await apiFetch(`/api/jobs/${jobId}/team`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team_uids: teamUids }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to update the hiring team');
+    }
+    return transformJobFromAPI(await response.json());
 };
 
 /* ─────────────────────────────────────────────────────────────
