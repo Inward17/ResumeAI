@@ -1,12 +1,14 @@
-import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { ArrowRight, CalendarPlus } from 'lucide-react';
 import Modal from './Modal';
 import { CANDIDATE_STATUSES } from '../lib/statuses';
 import { DEFAULT_PREFERENCES } from '../lib/preferences';
 import { Button, Select } from './common';
 import CandidateDossier from './CandidateDossier';
+import { ScheduleDialog } from './Scheduling';
 
-const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onClose, onStatusUpdate, onTakeInterview }) => {
+const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onClose, onStatusUpdate, onTakeInterview, onScheduled }) => {
+  const [scheduling, setScheduling] = useState(false);
   if (!candidate) return null;
 
   return (
@@ -25,6 +27,12 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
               {CANDIDATE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </Select>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {job && (
+              <Button variant="secondary" onClick={() => setScheduling(true)}>
+                <CalendarPlus aria-hidden="true" /> Schedule interview
+              </Button>
+            )}
           {onTakeInterview && (
             <div className="flex items-center gap-3">
               {candidate.interviewScore != null && (
@@ -37,11 +45,16 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
               </Button>
             </div>
           )}
+          </div>
         </div>
       )}
     >
       {/* Radix unmounts the content while closed, so the dossier only fetches while open */}
       <CandidateDossier candidate={candidate} job={job} prefs={prefs} />
+      {job && (
+        <ScheduleDialog open={scheduling} onOpenChange={setScheduling} job={job} candidate={candidate}
+          onDone={(r) => { if (r.candidateStatus) onStatusUpdate?.(candidate.id, r.candidateStatus); onScheduled?.(); }} />
+      )}
     </Modal>
   );
 };

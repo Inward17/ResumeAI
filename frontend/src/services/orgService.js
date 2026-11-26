@@ -1,7 +1,7 @@
 /** Organization, team invites, workspace API keys, AI usage, integrations and usage (backend: app/routes/org_routes.py) */
 import { apiFetch } from './api';
 
-const call = async (path, options = {}) => {
+export const call = async (path, options = {}) => {
     const response = await apiFetch(path, {
         ...options,
         headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
@@ -14,7 +14,7 @@ const call = async (path, options = {}) => {
     return data;
 };
 
-const send = (method, body) => ({ method, body: body ? JSON.stringify(body) : undefined });
+export const send = (method, body) => ({ method, body: body ? JSON.stringify(body) : undefined });
 
 export const getOrg = () => call('/api/org');
 export const renameOrg = (name) => call('/api/org', send('PATCH', { name }));
@@ -33,7 +33,7 @@ export const revokeApiKey = (id) => call(`/api/org/api-keys/${id}`, send('DELETE
 export const getUsage = (refresh = false) => call(`/api/org/usage${refresh ? '?refresh=true' : ''}`);
 
 // AI usage and integrations return camelCase (feature names too: interviewQuestions, factChecker, ...)
-const camelize = (v) => {
+export const camelize = (v) => {
     if (Array.isArray(v)) return v.map(camelize);
     if (!v || typeof v !== 'object') return v;
     return Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase()), camelize(x)]));

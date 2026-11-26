@@ -20,6 +20,7 @@ const Settings = lazy(() => import("./components/Settings"));
 const Interviews = lazy(() => import("./components/Interviews"));
 const QAPage = lazy(() => import("./components/QAPage"));
 const JoinOrg = lazy(() => import("./components/JoinOrg"));
+const PublicSchedule = lazy(() => import("./components/PublicSchedule"));
 
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center p-10" role="status">
@@ -67,6 +68,9 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
           </Route>
+
+          {/* Candidate's interview scheduling link: no sign-in */}
+          <Route path="/schedule/:token" element={<Suspense fallback={<PageLoader />}><PublicSchedule /></Suspense>} />
 
           {/* Signed-in routes */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

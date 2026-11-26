@@ -14,6 +14,7 @@ import {
   getAiUsage, getIntegrations, testIntegration, saveProviderKey, removeProviderKey,
 } from '../services/orgService';
 import { ConfirmDialog } from './Modal';
+import CalendarSettings from './CalendarSettings';
 import { API_BASE_URL } from '../services/api';
 import {
   Card, CardHeader, Button, IconButton, Field, Input, Select, Initials, EmptyState, Skeleton, Menu, StatStrip, RelativeDate, formatDate, Segmented,
@@ -613,6 +614,8 @@ export const IntegrationsSettings = () => {
   const { canManage, keysEnabled } = data;
   return (
     <div className="space-y-4">
+      <CalendarSettings />
+      <h2 className="pt-4 text-sm font-semibold text-ink">Service keys</h2>
       <p className="text-sm text-ink-3">
         ResumeAI runs on the server's keys. A workspace can use its own key for any provider instead; it applies to this
         workspace only, and the daily AI limits still apply.
