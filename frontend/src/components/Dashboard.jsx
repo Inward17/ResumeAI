@@ -6,6 +6,7 @@ import { useToast } from '../hooks/use-toast';
 import {
   Card, CardHeader, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, StatStrip, Skeleton, RelativeDate,
 } from './common';
+import { usePermissions } from '../lib/permissions';
 
 const GETTING_STARTED = [
   { Icon: Briefcase, title: 'Create a job', body: 'Paste the description and the skills that matter.' },
@@ -18,6 +19,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { can, restricted } = usePermissions();
 
   useEffect(() => {
     getJobs()
@@ -35,7 +37,7 @@ const Dashboard = () => {
   const maxVolume = Math.max(1, ...byVolume.map((j) => j.totalCandidates));
   const shortlistRate = totalCandidates ? Math.round((totalShortlisted / totalCandidates) * 100) : null;
 
-  const createJob = (
+  const createJob = can('job.create') && (
     <Button onClick={() => navigate('/jobs?new=1')}>
       <Plus aria-hidden="true" /> New job
     </Button>
@@ -51,7 +53,12 @@ const Dashboard = () => {
         action={!firstRun && createJob}
       />
 
-      {firstRun ? (
+      {firstRun && restricted ? (
+        <Card>
+          <EmptyState icon={Briefcase} title="No jobs assigned to you yet"
+            description="A recruiter or admin adds you to a job's hiring team. Its candidates then appear here." />
+        </Card>
+      ) : firstRun ? (
         <Card className="overflow-hidden">
           <div className="border-b border-line px-6 py-8 text-center md:py-10">
             <h2 className="font-serif text-3xl text-ink md:text-4xl">Screen your first candidates</h2>

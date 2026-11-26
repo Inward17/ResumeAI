@@ -406,6 +406,20 @@ class TestEndpoints:
         assert "project_review" not in await mock_db.candidates.find_one({"candidate_id": CID})
         assert no_run.call_count == 0
 
+    async def test_refused_runs_do_not_use_ai_quota(self, client, mock_db, owned_job_id, firecrawl, no_run):
+        async def used():
+            return sum([d["count"] async for d in mock_db.usage_quotas.find({"kind": "ai_call"})])
+        await _setup(mock_db, owned_job_id)
+        assert (await client.post(_url(owned_job_id))).status_code == 202
+        assert await used() == 2  # two projects selected
+        assert (await client.post(_url(owned_job_id))).status_code == 409  # already running
+        await mock_db.candidates.update_one({"candidate_id": CID}, {"$set": {"project_review.status": "done"}})
+        assert (await client.post(_url(owned_job_id))).status_code == 429  # cooldown
+        assert (await client.post(_url(owned_job_id) + "?retry=true")).status_code == 400  # nothing to retry
+        assert await used() == 2
+        doc = await mock_db.usage_quotas.find_one({"kind": "ai_call"})
+        assert doc["features"]["project_reviews"] == 2
+
     async def test_stale_run_can_restart(self, client, mock_db, owned_job_id, firecrawl, no_run):
         old = datetime.utcnow() - timedelta(minutes=20)
         await _setup(mock_db, owned_job_id, {"status": "running", "requested_at": old, "started_at": old, "projects": []})

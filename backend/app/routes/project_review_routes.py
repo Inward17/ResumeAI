@@ -14,10 +14,10 @@ from datetime import datetime, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action, require_job_owner
 from app.database import db
 from app.org import ensure_org
-from app.services.quota import rate_limit, use_quota
+from app.services.quota import rate_limit, refund_quota, use_quota
 from app.services.project_reviews import discovery, review, visit
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ async def get_project_reviews(job_id: str, candidate_id: str, job: dict = Depend
 
 @router.post("/{job_id}/candidates/{candidate_id}/project-reviews", status_code=202)
 async def start_project_reviews(job_id: str, candidate_id: str, retry: bool = False,
-                                job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+                                job: dict = Depends(require_job_action("ai.run")), user: AuthUser = Depends(get_current_user)):
     """Start a review. retry=true re-runs only the AI step for projects whose review failed because the
     AI was down, reusing the stored visit (no Firecrawl credits, no cooldown)."""
     rate_limit(user.uid, "ai")
@@ -123,14 +123,16 @@ async def start_project_reviews(job_id: str, candidate_id: str, retry: bool = Fa
             {"project_review.status": {"$ne": "running"}, "project_review.requested_at": {"$lt": now - COOLDOWN}},
             not_running[1]]}
 
-    # One AI call per project reviewed.
-    # ponytail: charged before the claim, so a refused run (already running, cooldown)
-    # still uses its units; refund them if that ever matters.
-    reviewed = (len([p for p in (candidate.get("project_review") or {}).get("projects") or []
-                     if p.get("review_status") == "ai_unavailable"]) if retry else len(selected))
-    await use_quota(await ensure_org(user), "ai_call", max(1, reviewed), feature="project_reviews")
+    # One AI call per project reviewed. Charged before the claim (so an over-quota request never
+    # claims), and given back if the claim is refused (already running, cooldown, nothing to retry).
+    reviewed = max(1, len([p for p in (candidate.get("project_review") or {}).get("projects") or []
+                           if p.get("review_status") == "ai_unavailable"])
+                   if retry else len(selected))
+    org_id = await ensure_org(user)
+    await use_quota(org_id, "ai_call", reviewed, feature="project_reviews")
 
     if not await db.candidates.find_one_and_update(claim, {"$set": update}):
+        await refund_quota(org_id, "ai_call", reviewed, feature="project_reviews")
         state = (await db.candidates.find_one({"candidate_id": candidate_id}, {"project_review": 1}) or {}).get("project_review") or {}
         if state.get("status") == "running" and not _is_stale(state):
             raise HTTPException(409, "A project review is already running for this candidate.")

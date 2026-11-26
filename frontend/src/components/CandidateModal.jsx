@@ -20,7 +20,7 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <label htmlFor="candidate-status" className="text-sm text-ink-3">Status</label>
-            <Select id="candidate-status" value={candidate.status} className="w-40"
+            <Select id="candidate-status" value={candidate.status} className="w-40" disabled={!onStatusUpdate}
               onChange={(e) => onStatusUpdate?.(candidate.id, e.target.value)}>
               {CANDIDATE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </Select>

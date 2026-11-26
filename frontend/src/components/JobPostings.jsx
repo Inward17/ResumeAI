@@ -10,6 +10,7 @@ import { useToast } from '../hooks/use-toast';
 import {
   Card, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, IconButton, Menu, Segmented, SearchInput, Tag, Skeleton, RelativeDate,
 } from './common';
+import { usePermissions } from '../lib/permissions';
 
 const FILTERS = [
   { id: 'All', label: 'All' },
@@ -20,6 +21,7 @@ const FILTERS = [
 
 const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const isClosed = job.status === 'Closed';
   return (
     <Card className="group relative flex flex-col p-5 transition-colors hover:border-line-strong">
@@ -40,10 +42,14 @@ const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
             trigger={<IconButton label={`Actions for ${job.title}`}><MoreHorizontal aria-hidden="true" /></IconButton>}
             items={[
               { label: 'View candidates', Icon: Eye, onSelect: () => navigate(`/jobs/${job.id}`) },
-              { label: 'Edit job', Icon: Pencil, onSelect: () => onEdit(job) },
-              { label: isClosed ? 'Reopen job' : 'Close job', Icon: isClosed ? RotateCcw : Archive, onSelect: () => onToggleClosed(job) },
-              { separator: true },
-              { label: 'Delete job', Icon: Trash2, danger: true, onSelect: () => onDelete(job) },
+              ...(can('job.edit') ? [
+                { label: 'Edit job', Icon: Pencil, onSelect: () => onEdit(job) },
+                { label: isClosed ? 'Reopen job' : 'Close job', Icon: isClosed ? RotateCcw : Archive, onSelect: () => onToggleClosed(job) },
+              ] : []),
+              ...(can('job.delete') ? [
+                { separator: true },
+                { label: 'Delete job', Icon: Trash2, danger: true, onSelect: () => onDelete(job) },
+              ] : []),
             ]}
           />
         </div>
@@ -149,13 +155,15 @@ const JobPostings = () => {
   };
 
   const openCreate = () => { setEditingJob(null); setIsModalOpen(true); };
+  const { can, restricted } = usePermissions();
+  const canCreate = can('job.create');
 
   return (
     <PageContainer>
       <PageHeader
         title="Jobs"
         description="Create roles, upload resumes to them and review AI-ranked candidates."
-        action={<Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>}
+        action={canCreate && <Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>}
       />
 
       {jobs.length > 0 && (
@@ -173,9 +181,14 @@ const JobPostings = () => {
       ) : filteredJobs.length === 0 ? (
         <Card>
           {jobs.length === 0 ? (
-            <EmptyState icon={Briefcase} title="No jobs yet"
-              description="Create your first job to start screening candidates."
-              action={<Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>} />
+            restricted ? (
+              <EmptyState icon={Briefcase} title="No jobs assigned to you yet"
+                description="A recruiter or admin adds you to a job's hiring team. Its candidates then appear here." />
+            ) : (
+              <EmptyState icon={Briefcase} title="No jobs yet"
+                description="Create your first job to start screening candidates."
+                action={canCreate && <Button onClick={openCreate}><Plus aria-hidden="true" /> New job</Button>} />
+            )
           ) : (
             <EmptyState icon={Search} title="No jobs match"
               description="Try another filter or search term."

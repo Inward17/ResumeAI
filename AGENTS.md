@@ -29,7 +29,7 @@ Both run in CI on every pull request. Pushes to `main` deploy the frontend to Gi
 - Candidate statuses are defined in `frontend/src/lib/statuses.js` and must match the backend's list in `backend/app/routes/resume.py`.
 - Scores reach the UI as 0–100, and `null` means "not available", never 0. Skill and role-match scores are 0–10 in the database.
 - When the AI service fails, tell the user that it is down and which feature can't work. Never substitute made-up or generic results.
-- Any module that does `from app.database import db` must be listed in `_patch_db` in `tests/conftest.py`. Otherwise its tests write to the real database.
+- `_patch_db` in `tests/conftest.py` finds every module with a top-level `from app.database import db` by scanning `backend/app`, and gives it the test database. Keep the name `db` (no `import db as ...`); `tests/test_db_patch_targets.py` fails if a module escapes the patch.
 - Bug fixes come with a regression test when the logic is on the backend.
 - Commits and pull requests carry no AI co-author or "generated with" lines.
 

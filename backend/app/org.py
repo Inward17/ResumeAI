@@ -7,7 +7,8 @@ Organizations: every user works inside one active organization.
 - Members join through email invites (link always; email via Composio Gmail
   when COMPOSIO_API_KEY is set).
 - Workspace API keys ("rai_...") act as the member who created them, inside
-  that key's organization.
+  that key's organization, always with Recruiter ("member") rights.
+- Roles and what they may do: PERMISSIONS below.
 
 ponytail: one active org per user (users.org_id); add an org switcher if
 people need to belong to several at once.
@@ -29,8 +30,23 @@ from app.services.provider_keys import key_for
 
 logger = logging.getLogger(__name__)
 
-ROLES = ("owner", "admin", "member")
+ROLES = ("owner", "admin", "member", "hiring_manager", "interviewer")
 MANAGER_ROLES = ("owner", "admin")
+# Restricted roles see only jobs whose team_uids include them
+RESTRICTED_ROLES = ("hiring_manager", "interviewer")
+
+# What each role may do with jobs and candidates (workspace management is require_manager).
+# "member" is shown as "Recruiter". Restricted roles act only on jobs they are assigned to.
+_VIEW = {"candidate.view", "interview.questions", "evaluation.write", "fact_check"}
+_RECRUITER = _VIEW | {"job.create", "job.edit", "job.delete", "job.assign_team", "candidate.upload",
+                      "candidate.delete", "candidate.status", "candidate.verify", "ai.run"}
+PERMISSIONS = {
+    "owner": _RECRUITER,
+    "admin": _RECRUITER,
+    "member": _RECRUITER,
+    "hiring_manager": _VIEW | {"candidate.status", "ai.run"},
+    "interviewer": _VIEW,
+}
 API_KEY_PREFIX = "rai_"
 
 COMPOSIO_API_URL = os.getenv("COMPOSIO_API_URL", "https://backend.composio.dev/api/v3")
@@ -86,6 +102,34 @@ async def membership(user) -> dict:
         org_id = await ensure_org(user)
         member = await db.org_members.find_one({"org_id": org_id, "uid": user.uid})
     return {"org_id": org_id, "role": member["role"] if member else "member"}
+
+
+def can(role: str, action: str) -> bool:
+    return action in PERMISSIONS.get(role, ())
+
+
+async def access(user) -> dict:
+    """{org_id, uid, role} for job and candidate routes. Workspace API keys always act as a member (Recruiter)."""
+    if getattr(user, "provider", None) == "api_key":
+        return {"org_id": user.org_id, "uid": user.uid, "role": "member"}
+    return {**await membership(user), "uid": user.uid}
+
+
+def job_filter(acc: dict) -> dict:
+    """Mongo filter for the jobs the caller may see: the workspace's, and only assigned ones for restricted roles."""
+    f = {"org_id": acc["org_id"]}
+    if acc["role"] in RESTRICTED_ROLES:
+        f["team_uids"] = acc["uid"]
+    return f
+
+
+def require_action(acc: dict, action: str) -> None:
+    if not can(acc["role"], action):
+        raise HTTPException(status_code=403, detail=f"Your role ({role_label(acc['role'])}) can't do this")
+
+
+def role_label(role: str) -> str:
+    return {"member": "Recruiter", "hiring_manager": "Hiring manager"}.get(role, role.capitalize())
 
 
 def reject_api_key(user) -> None:
@@ -170,4 +214,6 @@ if __name__ == "__main__":
     k = new_api_key()
     assert k.startswith("rai_") and len(k) > 40 and hash_secret(k) == hash_secret(k) and hash_secret(k) != hash_secret(k + "x")
     assert join_url("abc").endswith("/join/abc")
+    assert can("member", "job.create") and not can("interviewer", "candidate.status") and can("hiring_manager", "ai.run")
+    assert job_filter({"org_id": "o", "uid": "u", "role": "interviewer"}) == {"org_id": "o", "team_uids": "u"}
     print("org self-check OK")

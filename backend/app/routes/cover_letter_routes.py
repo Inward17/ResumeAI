@@ -1,11 +1,12 @@
 """Cover letter attached to one application (job + candidate) from the candidate dossier."""
 import asyncio
+import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.datastructures import UploadFile
 
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action, require_job_owner
 from app.database import db
 from app.org import ensure_org
 from app.services import cover_letter_service as cl
@@ -13,6 +14,7 @@ from app.services.quota import rate_limit, use_quota
 from app.utils.file_utils import read_file
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+MAX_JSON_BYTES = 1024 * 1024  # pasted letters are cut to MAX_LETTER_CHARS anyway
 
 router = APIRouter(prefix="/jobs", tags=["cover-letter"])
 PATH = "/{job_id}/candidates/{candidate_id}/cover-letter"
@@ -48,8 +50,13 @@ async def _letter_from_request(request: Request) -> dict:
             raise HTTPException(400, f"{name} took too long to read")
         source, filename = "uploaded", name
     else:
+        raw = bytearray()
+        async for chunk in request.stream():  # bounded read: never buffer more than the cap
+            raw += chunk
+            if len(raw) > MAX_JSON_BYTES:
+                raise HTTPException(413, f"Pasted text is larger than {MAX_JSON_BYTES // 1024} KB")
         try:
-            body = await request.json()
+            body = json.loads(raw)
         except Exception:
             raise HTTPException(400, "Send a file (multipart) or JSON {\"text\": \"...\"}")
         text = body.get("text") if isinstance(body, dict) else None
@@ -67,7 +74,7 @@ async def get_cover_letter(job_id: str, candidate_id: str):
     return {"cover_letter": app.get("cover_letter")}
 
 
-@router.post(PATH, dependencies=[Depends(require_job_owner)])
+@router.post(PATH, dependencies=[Depends(require_job_action("candidate.verify"))])
 async def attach_cover_letter(job_id: str, candidate_id: str, request: Request,
                               user: AuthUser = Depends(get_current_user)):
     """Attach (or replace) the letter from a file upload or pasted text, then analyse it."""
@@ -79,7 +86,7 @@ async def attach_cover_letter(job_id: str, candidate_id: str, request: Request,
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 
-@router.post(PATH + "/analysis", dependencies=[Depends(require_job_owner)])
+@router.post(PATH + "/analysis", dependencies=[Depends(require_job_action("ai.run"))])
 async def retry_cover_letter_analysis(job_id: str, candidate_id: str, user: AuthUser = Depends(get_current_user)):
     rate_limit(user.uid, "ai")
     app = await _require_application(job_id, candidate_id)
@@ -89,7 +96,7 @@ async def retry_cover_letter_analysis(job_id: str, candidate_id: str, user: Auth
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 
-@router.delete(PATH, dependencies=[Depends(require_job_owner)])
+@router.delete(PATH, dependencies=[Depends(require_job_action("candidate.verify"))])
 async def delete_cover_letter(job_id: str, candidate_id: str):
     await _require_application(job_id, candidate_id)
     await db.applications.update_one({"job_id": job_id, "candidate_id": candidate_id},

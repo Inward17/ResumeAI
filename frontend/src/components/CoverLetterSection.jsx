@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, FileText, Loader2, RefreshCw, Upload, ClipboardPaste, Trash2 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { attachCoverLetter, deleteCoverLetter, getCoverLetter, retryCoverLetterAnalysis } from '../services/jobService';
+import { usePermissions } from '../lib/permissions';
 import { cn } from '../lib/utils';
 import { Button, Skeleton, Tag, Textarea } from './common';
 
@@ -103,6 +104,8 @@ const CoverLetterSection = ({ jobId, candidateId }) => {
   const [loadError, setLoadError] = useState(null);
   const [busy, setBusy] = useState(null); // 'saving' | 'analysing' | 'removing'
   const [replacing, setReplacing] = useState(false);
+  const { can } = usePermissions();
+  const canAttach = can('candidate.verify');
 
   useEffect(() => {
     let cancelled = false;
@@ -132,7 +135,7 @@ const CoverLetterSection = ({ jobId, candidateId }) => {
     <section aria-labelledby="cover-letter-heading" aria-busy={!!busy}>
       <div className="mb-2.5 flex items-center justify-between gap-3">
         <h3 id="cover-letter-heading" className="text-sm font-semibold text-ink">Cover letter</h3>
-        {letter && !replacing && (
+        {letter && !replacing && canAttach && (
           <div className="flex gap-1">
             <Button size="sm" variant="ghost" disabled={!!busy} onClick={() => setReplacing(true)}>Replace</Button>
             <Button size="sm" variant="ghost" disabled={!!busy} onClick={remove}><Trash2 aria-hidden="true" /> Remove</Button>
@@ -151,7 +154,7 @@ const CoverLetterSection = ({ jobId, candidateId }) => {
       ) : !letter || replacing ? (
         <div className="space-y-2">
           {!letter && <p className="text-sm text-ink-3">No cover letter for this job. It's shown as evidence and doesn't change any score.</p>}
-          <AttachForm busy={!!busy} onSubmit={attach} onCancel={replacing ? () => setReplacing(false) : undefined} />
+          {canAttach && <AttachForm busy={!!busy} onSubmit={attach} onCancel={replacing ? () => setReplacing(false) : undefined} />}
         </div>
       ) : (
         <div className="space-y-4">
@@ -177,9 +180,11 @@ const CoverLetterSection = ({ jobId, candidateId }) => {
             <div className="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning ring-1 ring-inset ring-warning/25" role="status">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <p className="flex-1">{busy === 'analysing' ? 'Analysing…' : (letter.analysisError || 'Analysis unavailable.')}</p>
-              <Button size="sm" variant="secondary" disabled={!!busy} onClick={retry}>
-                {busy === 'analysing' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />} Retry
-              </Button>
+              {can('ai.run') && (
+                <Button size="sm" variant="secondary" disabled={!!busy} onClick={retry}>
+                  {busy === 'analysing' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />} Retry
+                </Button>
+              )}
             </div>
           )}
         </div>

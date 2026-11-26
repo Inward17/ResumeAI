@@ -4,6 +4,8 @@ All external APIs are mocked — no real calls to GitHub, Gemini, Apify, or Duck
 """
 import sys
 import os
+import re
+from pathlib import Path
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,6 +43,30 @@ def mock_db():
     client = AsyncMongoMockClient()
     db = client["test_resume_validator"]
     return db
+
+
+_APP_DIR = Path(__file__).parent.parent / "backend" / "app"
+# A module-level `from app.database import db` copies the real handle into the
+# module; imports inside functions read app.database.db, which is patched anyway.
+_DB_IMPORT = re.compile(r"^from app\.database import [^\n]*\bdb\b", re.M)
+
+
+def _db_targets():
+    """app.database.db plus <module>.db for every app module that imports db directly.
+
+    Found by scanning the source, so a new module is covered without editing this file.
+    """
+    targets = ["app.database.db"]
+    for path in sorted(_APP_DIR.rglob("*.py")):
+        if _DB_IMPORT.search(path.read_text(encoding="utf-8")):
+            parts = path.relative_to(_APP_DIR.parent).with_suffix("").parts
+            if parts[-1] == "__init__":
+                parts = parts[:-1]
+            targets.append(".".join(parts) + ".db")
+    return targets
+
+
+DB_TARGETS = _db_targets()
 
 
 @pytest.fixture(autouse=True)

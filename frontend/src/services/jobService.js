@@ -30,6 +30,7 @@ const transformJobFromAPI = (job) => ({
     screened: job.screened || 0,
     shortlisted: job.shortlisted || 0,
     postedAt: job.posted_at,
+    teamUids: job.team_uids || [],
 });
 
 /* ─────────────────────────────────────────────────────────────
@@ -108,6 +109,20 @@ export const deleteJob = async (jobId) => {
     });
     if (!response.ok) throw new Error('Failed to delete job');
     return response.json();
+};
+
+/** Set the job's hiring team (PUT /api/jobs/:id/team) */
+export const setJobTeam = async (jobId, teamUids) => {
+    const response = await apiFetch(`/api/jobs/${jobId}/team`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team_uids: teamUids }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to update the hiring team');
+    }
+    return transformJobFromAPI(await response.json());
 };
 
 /* ─────────────────────────────────────────────────────────────
@@ -339,6 +354,36 @@ export const factCheck = async (candidateId, message, candidateName) => {
         throw new Error(err.detail || 'Something went wrong while checking that claim. Please try again.');
     }
     return response.json();
+};
+
+/** Write a job description with AI (POST /api/jobs/generate-description); nothing is saved */
+export const generateJobDescription = async ({ title, seniority, location, employmentType, notes, mustHaveSkills, tone }) => {
+    const response = await apiFetch('/api/jobs/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_title: title,
+            seniority: seniority || null,
+            location: location || null,
+            employment_type: employmentType || null,
+            notes: notes || null,
+            must_have_skills: mustHaveSkills || [],
+            tone: tone || 'neutral',
+        }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        // 422 detail is a list of field errors
+        const detail = Array.isArray(err.detail) ? `Check the inputs: ${err.detail[0]?.msg || 'invalid value'}` : err.detail;
+        throw new Error(detail || 'Could not write the job description. Please try again.');
+    }
+    const d = await response.json();
+    return {
+        description: d.job_description,
+        requiredSkills: d.required_skills || [],
+        preferredSkills: d.preferred_skills || [],
+        inclusiveLanguageNotes: d.inclusive_language_notes || [],
+    };
 };
 
 /* ─────────────────────────────────────────────────────────────

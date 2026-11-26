@@ -396,6 +396,10 @@ def validate_analysis(data) -> dict | None:
     if not isinstance(data, dict) or not _s(data.get("summary")):
         return None
     fit = data.get("fit") if isinstance(data.get("fit"), dict) else {}
+    # Missing or null lists are empty; any other non-list shape makes the answer unusable
+    if any(v is not None and not isinstance(v, list) for v in
+           (data.get("contradictions"), data.get("probe_points"), fit.get("requirements_addressed"))):
+        return None
     specificity = fit.get("specificity") if fit.get("specificity") in ("specific", "generic", "mixed") else None
     contradictions = []
     for c in data.get("contradictions") or []:
