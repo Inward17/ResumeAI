@@ -85,6 +85,7 @@ _INDEXES = [
     ("api_keys", [("key_hash", ASCENDING)], {"unique": True}),
     ("api_keys", [("org_id", ASCENDING)], {}),
     ("usage_quotas", [("expires_at", ASCENDING)], {"expireAfterSeconds": 0}),
+    ("scorecards", [("job_id", ASCENDING), ("candidate_id", ASCENDING), ("author_uid", ASCENDING)], {"unique": True}),
 ]
 
 
