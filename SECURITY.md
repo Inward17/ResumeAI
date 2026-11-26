@@ -15,6 +15,7 @@ Flag any change that breaks these rules. Severity guidance is in [AGENTS.md](AGE
 ### Authentication
 
 - Every API route requires `get_current_user`, applied to the routers in `backend/app/main.py`. A new router must be included the same way.
+- The only exceptions are the `public_router`s in `main.py`: the OAuth callback (`/api/integrations/oauth/callback/…`, authenticated by its HMAC-signed, expiring, single-use `state`) and the candidate's scheduling page (`/api/public/schedule/{token}`, by a random token stored only as a hash, expiring and single-use). Both are rate-limited per IP, and the scheduling page returns only the job title, workspace name, interviewer names and slot times. Anything added to a public router needs the same justification.
 - ID tokens must keep being verified for signature, issuer, audience and expiry (`backend/app/auth.py`).
 - `AUTH_DISABLED` is for local development only. `VITE_AUTH_DISABLED` must stay gated on `import.meta.env.DEV`, so production bundles never contain the bypass.
 
@@ -36,6 +37,7 @@ Flag any change that breaks these rules. Severity guidance is in [AGENTS.md](AGE
 - Never commit `.env` files, keys or real connection strings. `.env.example` holds placeholders only.
 - Anything with a `VITE_` prefix ends up in the browser bundle, so it must never hold a secret. Firebase web config is the exception: it's public by design.
 - Workspace API keys are stored only as hashes and shown once, at creation.
+- Calendar, email and Slack tokens (and Slack webhook URLs) are Fernet-encrypted with `PROVIDER_KEYS_SECRET` and never returned by the API. OAuth scopes stay minimal, and after sign-in the browser is redirected only to `APP_URL`. Slack webhooks must be `https://hooks.slack.com/services/…`.
 - Keys must not appear in logs, error messages, API responses or URLs. Send them in headers where the provider allows it.
 - Deploy secrets stay in GitHub Actions and Hugging Face settings. Workflows must not print them, or expose them to pull requests from forks.
 

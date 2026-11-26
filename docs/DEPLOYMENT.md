@@ -50,6 +50,8 @@ Each deploy copies these to the Space's secrets. You can also set them directly 
 | `COMPOSIO_API_KEY` | Invitation emails (also set `COMPOSIO_USER_ID` in the Space if it isn't `default`) |
 | `PROVIDER_KEYS_SECRET` | Optional. Lets workspaces add their own provider keys in Settings → Integrations (see the README for generating it). The deploy doesn't copy it: set it directly in the Space's secrets, and keep it stable, since changing it makes stored workspace keys unreadable. |
 
+| `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`, `MICROSOFT_OAUTH_CLIENT_ID`/`_SECRET`, `SLACK_CLIENT_ID`/`_SECRET` | Optional. Calendar, email and Slack connections for interview scheduling. The deploy doesn't copy them: set them directly in the Space with `OAUTH_REDIRECT_BASE_URL` (the Space URL) and `PROVIDER_KEYS_SECRET`, and register `<Space URL>/api/integrations/oauth/callback/google` (and `/microsoft`, `/slack`) as redirect URIs with each provider. |
+
 The deploy also sets these Space variables: `CORS_ORIGINS` (your Pages origin), `APP_URL` (Pages URL, used in invitation links) and `FIREBASE_PROJECT_ID`.
 
 ### 5. Firebase and MongoDB

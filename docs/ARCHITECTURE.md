@@ -65,6 +65,10 @@ Interview questions (`GET /api/jobs/{job}/candidates/{candidate}/interview-quest
 | `orgs`, `org_members` | Workspace, membership | `name`; `org_id` + `uid` + `role` |
 | `invites` | Invitation | `email`, `role`, `token`, `status`, `expires_at`, `email_sent` |
 | `api_keys` | Workspace key | `key_hash`, `prefix`, `created_by`, `last_used_at`, `revoked_at` |
+| `user_connections` | Person × workspace × provider (Google, Microsoft) | `email`, `scopes`, encrypted `access_token`/`refresh_token`, `expires_at`, `status` (active/expired) |
+| `slack_connections` | Workspace | encrypted `bot_token` or `webhook`, `team`, `channel_id` |
+| `oauth_states` | Pending OAuth sign-in | PKCE `verifier`, `uid`, `org_id`, `provider`, `expires_at` (TTL) |
+| `interviews` | Scheduled or proposed interview | `org_id`, `job_id`, `candidate_id`, `interviewer_uids`, `organizer_uid`, `provider`, `start`/`end` (UTC), `status` (proposed/booking/scheduled/cancelled), `provider_event_id`, `join_url`, `token_hash` + `offered_slots` + `token_expires_at`, `history` |
 
 Indexes for every hot query are created at startup (`database.ensure_indexes`).
 
@@ -78,6 +82,8 @@ Indexes for every hot query are created at startup (`database.ensure_indexes`).
 | `app/routes/job_routes.py` | Job CRUD with candidate counts |
 | `app/routes/resume.py` | Upload, task progress, candidate list, status changes, the parse → verify → score pipeline |
 | `app/routes/org_routes.py` | Workspace, members, invitations, API keys, plan & usage |
+| `app/routes/integration_routes.py`, `app/services/integrations.py` | Per-user Google/Microsoft OAuth connections (signed state, PKCE, encrypted tokens, refresh) and the workspace Slack app or webhook |
+| `app/routes/scheduling_routes.py`, `app/services/scheduling.py` | Free/busy, common free slots, booking, self-scheduling links (public page), reschedule, cancel |
 | `app/routes/interview_questions_routes.py`, `evaluation_routes.py`, `fact_checker_routes.py` | Interview kit |
 | `app/services/task_queue.py` | Durable MongoDB queue |
 | `app/services/parser.py` | Gemini / langextract resume parsing |
