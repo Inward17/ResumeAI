@@ -9,6 +9,7 @@ import CandidateModal from './CandidateModal';
 import {
   Card, PageContainer, PageHeader, Initials, EmptyState, Button, StatStrip, ScoreBar, Segmented, SearchInput, StatusSelect, Skeleton,
 } from './common';
+import { usePermissions } from '../lib/permissions';
 
 const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
   <Card className="flex flex-col p-4 transition-colors hover:border-line-strong">
@@ -22,7 +23,7 @@ const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
           </p>
         </div>
       </button>
-      <StatusSelect candidate={candidate} onChange={(_, status) => onMove(status)} />
+      <StatusSelect candidate={candidate} onChange={(_, status) => onMove(status)} disabled={!onMove} />
     </div>
 
     <dl className="mt-4 grid grid-cols-2 gap-4 text-xs">
@@ -60,6 +61,8 @@ const Interviews = () => {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [selected, setSelected] = useState(null); // {candidateId, jobId}
+  const { can } = usePermissions();
+  const canMove = can('candidate.status');
 
   useEffect(() => {
     const load = async () => {
@@ -164,7 +167,7 @@ const Interviews = () => {
               prefs={prefs}
               onView={() => setSelected({ candidateId: candidate.id, jobId: job.id })}
               onStart={() => startInterview(job.id, candidate.id)}
-              onMove={(status) => handleMove(candidate.id, job.id, status)}
+              onMove={canMove ? (status) => handleMove(candidate.id, job.id, status) : undefined}
             />
           ))}
         </div>
@@ -176,7 +179,7 @@ const Interviews = () => {
         job={selectedEntry?.job}
         prefs={prefs}
         onClose={() => setSelected(null)}
-        onStatusUpdate={(candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status)}
+        onStatusUpdate={canMove ? (candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status) : undefined}
         onTakeInterview={(c) => startInterview(selectedEntry.job.id, c.id)}
       />
     </PageContainer>

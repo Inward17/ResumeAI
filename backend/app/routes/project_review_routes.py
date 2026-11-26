@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action, require_job_owner
 from app.database import db
 from app.org import ensure_org
 from app.services.quota import rate_limit, use_quota
@@ -96,7 +96,7 @@ async def get_project_reviews(job_id: str, candidate_id: str, job: dict = Depend
 
 @router.post("/{job_id}/candidates/{candidate_id}/project-reviews", status_code=202)
 async def start_project_reviews(job_id: str, candidate_id: str, retry: bool = False,
-                                job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+                                job: dict = Depends(require_job_action("ai.run")), user: AuthUser = Depends(get_current_user)):
     """Start a review. retry=true re-runs only the AI step for projects whose review failed because the
     AI was down, reusing the stored visit (no Firecrawl credits, no cooldown)."""
     rate_limit(user.uid, "ai")

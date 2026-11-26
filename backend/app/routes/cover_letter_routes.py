@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.datastructures import UploadFile
 
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action, require_job_owner
 from app.database import db
 from app.org import ensure_org
 from app.services import cover_letter_service as cl
@@ -67,7 +67,7 @@ async def get_cover_letter(job_id: str, candidate_id: str):
     return {"cover_letter": app.get("cover_letter")}
 
 
-@router.post(PATH, dependencies=[Depends(require_job_owner)])
+@router.post(PATH, dependencies=[Depends(require_job_action("candidate.verify"))])
 async def attach_cover_letter(job_id: str, candidate_id: str, request: Request,
                               user: AuthUser = Depends(get_current_user)):
     """Attach (or replace) the letter from a file upload or pasted text, then analyse it."""
@@ -79,7 +79,7 @@ async def attach_cover_letter(job_id: str, candidate_id: str, request: Request,
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 
-@router.post(PATH + "/analysis", dependencies=[Depends(require_job_owner)])
+@router.post(PATH + "/analysis", dependencies=[Depends(require_job_action("ai.run"))])
 async def retry_cover_letter_analysis(job_id: str, candidate_id: str, user: AuthUser = Depends(get_current_user)):
     rate_limit(user.uid, "ai")
     app = await _require_application(job_id, candidate_id)
@@ -89,7 +89,7 @@ async def retry_cover_letter_analysis(job_id: str, candidate_id: str, user: Auth
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 
-@router.delete(PATH, dependencies=[Depends(require_job_owner)])
+@router.delete(PATH, dependencies=[Depends(require_job_action("candidate.verify"))])
 async def delete_cover_letter(job_id: str, candidate_id: str):
     await _require_application(job_id, candidate_id)
     await db.applications.update_one({"job_id": job_id, "candidate_id": candidate_id},
