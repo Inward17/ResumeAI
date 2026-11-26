@@ -85,6 +85,12 @@ _INDEXES = [
     ("api_keys", [("key_hash", ASCENDING)], {"unique": True}),
     ("api_keys", [("org_id", ASCENDING)], {}),
     ("usage_quotas", [("expires_at", ASCENDING)], {"expireAfterSeconds": 0}),
+    ("oauth_states", [("expires_at", ASCENDING)], {"expireAfterSeconds": 0}),
+    ("user_connections", [("uid", ASCENDING), ("org_id", ASCENDING), ("provider", ASCENDING)], {"unique": True}),
+    ("user_connections", [("org_id", ASCENDING)], {}),
+    ("slack_connections", [("org_id", ASCENDING)], {"unique": True}),
+    ("interviews", [("org_id", ASCENDING), ("start", ASCENDING)], {}),
+    ("interviews", [("token_hash", ASCENDING)], {"unique": True, "sparse": True}),
 ]
 
 

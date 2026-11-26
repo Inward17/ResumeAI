@@ -123,24 +123,32 @@ def email_delivery_configured() -> bool:
 
 async def send_invite_email(to: str, org_name: str, inviter: str, url: str) -> Optional[str]:
     """Send the invite through Composio's Gmail tool. Returns an error message, or None on success."""
+    # Workspace and inviter names are user-controlled: no markup in the body
+    subject = f"{inviter} invited you to {org_name} on ResumeAI"
+    org_name, inviter, to_html = html.escape(org_name), html.escape(inviter), html.escape(to)
+    return await send_email(to, subject, (
+        f"<p>{inviter} invited you to join <b>{org_name}</b> on ResumeAI, "
+        f"where your team screens and verifies candidates together.</p>"
+        f'<p><a href="{html.escape(url)}">Accept the invitation</a></p>'
+        f"<p style=\"color:#756e63;font-size:12px\">Sign in with {to_html} to accept. The link expires in 14 days.</p>"
+    ))
+
+
+async def send_email(to: str, subject: str, body_html: str) -> Optional[str]:
+    """Send an HTML email through Composio's Gmail tool. Returns an error message, or None on success.
+
+    ``body_html`` must already be escaped by the caller; the subject is forced onto one line.
+    """
     api_key = key_for("composio")
     if not api_key:
         return "Email sending is not configured (set COMPOSIO_API_KEY)"
-    # Workspace and inviter names are user-controlled: no markup in the body, no header breaks in the subject
-    subject = " ".join(f"{inviter} invited you to {org_name} on ResumeAI".splitlines())
-    org_name, inviter, to_html = html.escape(org_name), html.escape(inviter), html.escape(to)
     body = {
         "user_id": COMPOSIO_USER_ID,
         "arguments": {
             "recipient_email": to,
-            "subject": subject,
+            "subject": " ".join(subject.splitlines()),
             "is_html": True,
-            "body": (
-                f"<p>{inviter} invited you to join <b>{org_name}</b> on ResumeAI, "
-                f"where your team screens and verifies candidates together.</p>"
-                f'<p><a href="{html.escape(url)}">Accept the invitation</a></p>'
-                f"<p style=\"color:#756e63;font-size:12px\">Sign in with {to_html} to accept. The link expires in 14 days.</p>"
-            ),
+            "body": body_html,
         },
     }
     if COMPOSIO_GMAIL_ACCOUNT_ID:
@@ -155,7 +163,7 @@ async def send_invite_email(to: str, org_name: str, inviter: str, url: str) -> O
             return err if isinstance(err, str) else str(err)
         return None
     except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("Composio invite email failed: %s", exc)
+        logger.warning("Composio email failed: %s", exc)
         return "Could not reach the email service"
 
 
