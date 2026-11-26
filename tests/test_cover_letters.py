@@ -130,6 +130,18 @@ class TestEndpoints:
         letter = resp.json()["cover_letter"]
         assert len(letter["text"]) == cl.MAX_LETTER_CHARS and letter["truncated"] is True
 
+    async def test_oversized_json_body_is_refused(self, client, mock_db, owned_job_id):
+        from app.routes import cover_letter_routes
+        await _apply(mock_db, owned_job_id)
+        body = json.dumps({"text": "a" * cover_letter_routes.MAX_JSON_BYTES})
+        with patch(CL, groq_returns(GOOD_ANALYSIS)) as groq:
+            resp = await client.post(PATH.format(job=owned_job_id, cand="c1"), content=body,
+                                     headers={"content-type": "application/json"})
+        assert resp.status_code == 413
+        groq.assert_not_called()
+        assert "cover_letter" not in await mock_db.applications.find_one({"candidate_id": "c1"})
+        assert await mock_db.usage_quotas.count_documents({}) == 0
+
     async def test_scores_do_not_change(self, client, mock_db, owned_job_id):
         await _apply(mock_db, owned_job_id)
         before = (await mock_db.applications.find_one({"candidate_id": "c1"}))["score_details"]
