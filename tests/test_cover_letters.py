@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from app.services import cover_letter_service as cl
 from app.services.fact_checker_service import AIServiceUnavailable
 from tests.conftest import create_owned_job
@@ -160,6 +162,39 @@ class TestAnalysis:
         with patch(CL, AsyncMock(return_value="sorry, no JSON")):
             letter = (await client.post(PATH.format(job=owned_job_id, cand="c1"), json={"text": LETTER})).json()["cover_letter"]
         assert letter["analysis"] is None and letter["analysis_status"] == "unavailable"
+
+    @pytest.mark.parametrize("bad", [
+        {"contradictions": 3}, {"contradictions": "x"}, {"contradictions": {"topic": "dates"}},
+        {"fit": {"requirements_addressed": 3}}, {"fit": {"requirements_addressed": "Python"}},
+        {"probe_points": True}, {"probe_points": 0},
+    ])
+    async def test_non_list_fields_are_a_bad_answer(self, client, mock_db, owned_job_id, bad):
+        answer = {**GOOD_ANALYSIS, **bad}
+        with patch(CL, groq_returns(answer)):
+            assert await cl.analyze_letter("Fictional letter", {}, {}) == (None, cl.AI_BAD_ANSWER)
+
+        # Attach keeps the letter with a retryable unavailable analysis; retry with a good answer works
+        await _apply(mock_db, owned_job_id)
+        url = PATH.format(job=owned_job_id, cand="c1")
+        with patch(CL, groq_returns(answer)):
+            resp = await client.post(url, json={"text": LETTER})
+        letter = resp.json()["cover_letter"]
+        assert resp.status_code == 200 and letter["text"] and letter["analysis"] is None
+        assert letter["analysis_status"] == "unavailable" and letter["analysis_error"] == cl.AI_BAD_ANSWER
+        with patch(CL, groq_returns(GOOD_ANALYSIS)):
+            letter = (await client.post(url + "/analysis")).json()["cover_letter"]
+        assert letter["analysis_status"] == "done"
+
+        # Bulk auto-attach doesn't leave the letter pending
+        await _apply(mock_db, owned_job_id, cid="c2")
+        with patch(CL, groq_returns(answer)):
+            assert await cl._attach_auto(owned_job_id, "c2", LETTER, "letter.txt")
+        stored = (await mock_db.applications.find_one({"candidate_id": "c2"}))["cover_letter"]
+        assert stored["analysis_status"] == "unavailable" and stored["analysis_error"] == cl.AI_BAD_ANSWER
+
+    def test_null_lists_are_empty(self):
+        out = cl.validate_analysis({"summary": "ok", "contradictions": None, "probe_points": None, "fit": {"requirements_addressed": None}})
+        assert out["contradictions"] == [] and out["probe_points"] == [] and out["fit"]["requirements_addressed"] == []
 
     def test_validation_cleans_shape(self):
         out = cl.validate_analysis({
