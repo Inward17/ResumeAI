@@ -106,3 +106,13 @@ BE Project Report Format Guidelines.docx
 
 # Temporary git worktrees used by Claude Code agents
 .claude/worktrees/
+
+# Local analysis documents and notes
+architecture.md
+huggingface_models_analysis.md
+system_analysis_report.md
+
+# Package lockfile (repo uses yarn)
+package-lock.json
+*/package-lock.json
+
