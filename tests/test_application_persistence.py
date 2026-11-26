@@ -5,6 +5,7 @@ application is saved to the job's pipeline.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from bson import ObjectId
 
 from app.routes import resume
 
@@ -38,6 +39,8 @@ def _scoring():
 
 async def _candidate(mock_db, **fields):
     """Without fields the candidate has no verification sources."""
+    # Applications are only saved to a job that exists (issue #25)
+    await mock_db.jobs.insert_one({"_id": ObjectId(JOB_ID), "job_title": "Dev"})
     await mock_db.candidates.insert_one({"candidate_id": "c1", "parsed": {}, **fields})
     await mock_db.tasks.insert_one({"task_id": "c1", "status": "parsed"})
 

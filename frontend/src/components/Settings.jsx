@@ -7,7 +7,7 @@ import { useTheme } from '../lib/theme';
 import { cn } from '../lib/utils';
 import { DEFAULT_PREFERENCES, loadPreferences, savePreferences } from '../lib/preferences';
 import { Card, CardHeader, PageContainer, PageHeader, Button } from './common';
-import { TeamSettings, ApiKeysSettings, UsageSettings } from './WorkspaceSettings';
+import { TeamSettings, AiSettings, IntegrationsSettings, ApiKeysSettings, UsageSettings } from './WorkspaceSettings';
 
 const THRESHOLDS = [
   {
@@ -113,8 +113,10 @@ const GeneralSettings = () => {
 const SECTIONS = [
   { id: 'general', label: 'General', description: 'Appearance and scoring, saved in this browser.', Component: GeneralSettings },
   { id: 'team', label: 'Team', description: 'Members of this workspace and invitations.', Component: TeamSettings },
+  { id: 'ai', label: 'AI', description: 'AI usage against the daily limits, by feature and over 30 days, and AI provider status.', Component: AiSettings },
+  { id: 'integrations', label: 'Integrations', description: 'The services ResumeAI runs on, their live limits, and this workspace’s own keys.', Component: IntegrationsSettings },
   { id: 'api-keys', label: 'API keys', description: 'Keys for calling the ResumeAI API.', Component: ApiKeysSettings },
-  { id: 'usage', label: 'Plan & usage', description: 'Workspace usage and the live limits of the services ResumeAI runs on.', Component: UsageSettings },
+  { id: 'usage', label: 'Plan & usage', description: 'Plan and workspace counts.', Component: UsageSettings },
 ];
 
 const Settings = () => {

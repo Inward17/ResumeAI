@@ -20,6 +20,7 @@ from app.org import ensure_org
 from app.services.skill_matching.pipeline import run_unified_skill_scoring
 from app.services.task_queue import task_queue, TERMINAL_STATUSES
 from app.services import cover_letter_service
+from app.services import provider_keys
 
 # Gemini concurrency, retries and rate-limit backoff are handled in
 # app.services.parser; the number of resumes processed at once is set by
@@ -610,6 +611,10 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
     # The task only reports success once the candidate is saved to the job's pipeline.
     try:
         await _create_application(candidate_id, job_id, verification_data=verification_dict)
+    except JobDeleted:
+        # The job was deleted while this resume was screened (its tasks went with it)
+        print(f"[APP] Job {job_id} was deleted; {candidate_id} not added to it")
+        return
     except Exception as e:
         print(f"[APP] FAILED to save application for {candidate_id}: {e}")
         traceback.print_exc()
@@ -634,9 +639,15 @@ async def _run_unified_verification(candidate_id: str, job_id: str, task_id: str
         )
 
 
+class JobDeleted(Exception):
+    """The job was deleted while its resume was being screened."""
+
+
 async def _create_application(candidate_id: str, job_id: str, verification_data: dict = None):
     """Create application record linking candidate to job with scores.
-    
+
+    Raises JobDeleted, and leaves no application behind, when the job no longer exists.
+
     Args:
         candidate_id: The candidate's unique ID
         job_id: The job's ObjectId string
@@ -692,8 +703,10 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
     candidate_doc = await db.candidates.find_one({"candidate_id": candidate_id})
     parsed_resume = candidate_doc.get("parsed", {}) if candidate_doc else {}
     job_doc = await db.jobs.find_one({"_id": ObjectId(job_id)})
-    required_skills = job_doc.get("required_skills", []) if job_doc else []
-    preferred_skills = job_doc.get("preferred_skills", []) if job_doc else []
+    if not job_doc:
+        raise JobDeleted(job_id)
+    required_skills = job_doc.get("required_skills", [])
+    preferred_skills = job_doc.get("preferred_skills", [])
 
     # ── Step 4: Unified skill evidence scoring ────────────────────────
     scoring_result = await run_unified_skill_scoring(
@@ -733,6 +746,11 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
         },
         upsert=True,
     )
+    # The job may have been deleted while scoring ran, after its applications were
+    # cleared: don't leave one pointing at it (it would 404 for good)
+    if not await db.jobs.find_one({"_id": ObjectId(job_id)}, {"_id": 1}):
+        await db.applications.delete_one({"candidate_id": candidate_id, "job_id": job_id})
+        raise JobDeleted(job_id)
     print(
         f"[APP] {'CREATED' if result.upserted_id else 'UPDATED'} application {candidate_id} → job {job_id} "
         f"| overall={overall_credibility} | github={github_verification_score}% "
@@ -769,6 +787,13 @@ async def process_resume_task(task: dict):
     Cover letters in the upload are recognised first: they never become candidates,
     and are paired with a resume of the same job instead.
     """
+    # AI and verification calls for this task use its workspace's provider keys
+    if provider_keys.enabled():
+        try:
+            job = await db.jobs.find_one({"_id": ObjectId(task["job_id"])}, {"org_id": 1})
+        except Exception:
+            job = None
+        await provider_keys.use_org((job or {}).get("org_id"))
     resolved = task.get("resolved_candidate_id")
     if resolved:
         # A retried task was already classified and parsed, and its file is gone.
@@ -819,7 +844,7 @@ async def upload_resumes(
         if not content_matches_type(ext, content):
             raise HTTPException(400, f"{file.filename} is not a valid .{ext} file")
 
-    await use_quota(await ensure_org(user), "resume_upload", len(files))
+    await use_quota(await ensure_org(user), "resume_upload", len(files), feature="resume_parsing")
 
     saved = []
     tasks = []

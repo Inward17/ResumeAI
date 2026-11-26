@@ -22,6 +22,7 @@ import os
 from typing import Any, Dict, Optional
 
 from app.utils.text_utils import as_data
+from app.services.provider_keys import key_for
 from ..config import (
     CODE_SIMILARITY_SUSPICIOUS,
     CODE_SIMILARITY_COPIED,
@@ -120,14 +121,14 @@ async def _call_llm(user_message: str) -> Optional[Dict[str, Any]]:
     """Try Gemini first, then Groq.  Return parsed JSON dict or None."""
 
     # ── Try Gemini ──
-    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    gemini_key = key_for("gemini")
     if gemini_key:
         result = await _call_gemini(gemini_key, user_message)
         if result is not None:
             return result
 
     # ── Fallback: Groq ──
-    groq_key = os.getenv("GROQ_API_KEY", "")
+    groq_key = key_for("groq")
     if groq_key:
         result = await _call_groq(groq_key, user_message)
         if result is not None:

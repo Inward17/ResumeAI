@@ -8,9 +8,9 @@ import httpx
 
 from app.services.project_reviews import interview_context as project_review_context
 from app.utils.text_utils import UNTRUSTED_NOTE, as_data
+from app.services.provider_keys import key_for
 
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 # Groq retires models; override with GROQ_MODEL when this one goes
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -133,7 +133,7 @@ async def generate_interview_questions(
 ) -> list[dict] | None:
     """Call Groq API to generate interview questions. Returns list of dicts or None on failure."""
 
-    api_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+    api_key = key_for("groq")
     if not api_key:
         print("[InterviewQ] No GROQ_API_KEY configured")
         return None

@@ -107,7 +107,7 @@ frontend/src/
 │   ├── CandidatePipeline.jsx     # Ranked, sortable candidate table with inline status changes.
 │   ├── CandidateModal.jsx        # Candidate dossier: scores, verification, skill matches.
 │   ├── QAPage.jsx                # Interview kit + fact checker.
-│   ├── Settings.jsx              # General, Team, API keys, Plan & usage sections.
+│   ├── Settings.jsx              # General, Team, AI, Integrations, API keys, Plan & usage sections.
 │   └── ui/                       # Radix UI primitives.
 ├── services/
 │   ├── api.js                    # fetch wrapper that attaches the Firebase ID token.
@@ -802,7 +802,7 @@ Screens are composed from one kit in `src/components/common.jsx` (`Button`, `Fie
 Components only use names such as `bg-surface`, `text-ink-3` or `bg-primary`, so switching the theme is a single class on `<html>`. Score colours are derived from the user's thresholds (Settings → General): at or above the "strong match" threshold is green, below 50% is amber.
 
 ### 10.3 Settings as Routed Sections
-`Settings.jsx` renders one of four sections chosen by the `?tab=` query parameter (General, Team, API keys, Plan & usage), so each section has a shareable URL and the browser's back button works.
+`Settings.jsx` renders one of six sections chosen by the `?tab=` query parameter (General, Team, AI, Integrations, API keys, Plan & usage), so each section has a shareable URL and the browser's back button works.
 
 ---
 

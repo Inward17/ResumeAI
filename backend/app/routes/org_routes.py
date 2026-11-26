@@ -1,8 +1,9 @@
 """
-Organization routes: members, email invites, workspace API keys, usage & limits.
+Organization routes: members, email invites, workspace API keys, AI usage,
+provider integrations (workspace keys) and plan & usage.
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,7 +16,9 @@ from app.org import (
     email_delivery_configured, hash_secret, join_url, membership, new_api_key, oid, reject_api_key, require_manager,
     send_invite_email,
 )
-from app.services.usage_service import provider_usage
+from app.services import provider_keys
+from app.services.quota import QUOTAS, quota_limit, rate_limit
+from app.services.usage_service import AI_PROVIDERS, INTEGRATION_PROVIDERS, PROVIDERS, check, provider_status
 
 router = APIRouter(tags=["organization"])
 
@@ -37,6 +40,11 @@ class RoleUpdate(BaseModel):
 
 class ApiKeyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+
+
+class ProviderKeyIn(BaseModel):
+    # No whitespace or newlines anywhere: a key goes straight into a request header
+    key: str = Field(min_length=8, max_length=512, pattern=r"^[!-~]+$")
 
 
 def _invite_out(inv: dict, include_link: bool) -> dict:
@@ -237,4 +245,94 @@ async def get_usage(refresh: bool = False, user: AuthUser = Depends(get_current_
         "api_keys": await db.api_keys.count_documents({"org_id": m["org_id"], "revoked_at": None}),
         "month_start": month_start,
     }
-    return {"plan": "Self-hosted", "workspace": workspace, **await provider_usage(refresh)}
+    return {"plan": "Self-hosted", "workspace": workspace}
+
+
+# ── AI usage ────────────────────────────────────────────────────────────
+
+HISTORY_DAYS = 30
+
+
+@router.get("/org/ai-usage")
+async def get_ai_usage(refresh: bool = False, user: AuthUser = Depends(get_current_user)):
+    """Today's AI calls and uploads against the daily limits, by feature, the last 30 days, and Gemini/Groq status."""
+    m = await membership(user)
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    days = [(today - timedelta(days=i)).isoformat() for i in range(HISTORY_DAYS - 1, -1, -1)]
+    counts = {}  # (kind, date) -> doc
+    async for d in db.usage_quotas.find({"org_id": m["org_id"]}):
+        kind, date = d["_id"].rsplit(":", 2)[1:]
+        counts[(kind, date)] = d
+    used = lambda kind, date: (counts.get((kind, date)) or {}).get("count", 0)
+    features = {**(counts.get(("ai_call", days[-1])) or {}).get("features", {}),
+                **(counts.get(("resume_upload", days[-1])) or {}).get("features", {})}
+    return {
+        "today": {kind: {"used": used(kind, days[-1]), "limit": quota_limit(kind), "label": QUOTAS[kind][2]} for kind in QUOTAS},
+        "features": features,
+        "resets_at": datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc).isoformat(),
+        "history": [{"date": d, "ai_calls": used("ai_call", d), "uploads": used("resume_upload", d)} for d in days],
+        "providers": await provider_status(AI_PROVIDERS, refresh),
+    }
+
+
+# ── Integrations (workspace provider keys) ──────────────────────────────
+
+def _provider(pid: str) -> str:
+    if pid not in PROVIDERS:
+        raise HTTPException(404, "Unknown provider")
+    return pid
+
+
+@router.get("/org/integrations")
+async def list_integrations(refresh: bool = False, user: AuthUser = Depends(get_current_user)):
+    """Every provider with where its key comes from and its live status. Stored keys never leave the server."""
+    reject_api_key(user)
+    m = await membership(user)
+    saved = {k["provider"]: k async for k in db.provider_keys.find({"org_id": m["org_id"]})}
+    rows = await provider_status(AI_PROVIDERS + INTEGRATION_PROVIDERS, refresh)
+    for row in rows:
+        k = saved.get(row["id"])
+        row["workspace_key"] = {"last4": k["last4"], "added_by": k.get("added_by_name"), "added_at": k["added_at"]} if k else None
+    return {"providers": rows, "can_manage": m["role"] in ("owner", "admin"), "keys_enabled": provider_keys.enabled()}
+
+
+@router.post("/org/integrations/{pid}/test")
+async def test_integration(pid: str, user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
+    await membership(user)
+    rate_limit(user.uid, "provider_test")
+    row = await check(_provider(pid), refresh=True)
+    return {**row, "source": provider_keys.source(pid)}
+
+
+@router.put("/org/integrations/{pid}")
+async def save_provider_key(pid: str, body: ProviderKeyIn, user: AuthUser = Depends(get_current_user)):
+    """Store the workspace's own key, only after the provider accepts it."""
+    m = await require_manager(user)
+    rate_limit(user.uid, "provider_keys")
+    _provider(pid)
+    if not provider_keys.enabled():
+        raise HTTPException(400, "Set PROVIDER_KEYS_SECRET on the server to allow workspace keys")
+    row = await check(pid, key=body.key, refresh=True)
+    if row["status"] != "ok":
+        raise HTTPException(400, f"{row['name']} didn't accept this key: {row.get('error') or 'check failed'}. Nothing was saved.")
+    await db.provider_keys.update_one(
+        {"org_id": m["org_id"], "provider": pid},
+        {"$set": {"ciphertext": provider_keys.encrypt(body.key), "last4": body.key[-4:], "added_by": user.uid,
+                  "added_by_name": user.name or user.email, "added_at": datetime.utcnow()}},
+        upsert=True,
+    )
+    provider_keys.forget(m["org_id"])
+    return {"provider": pid, "source": "workspace", "last4": body.key[-4:]}
+
+
+@router.delete("/org/integrations/{pid}")
+async def remove_provider_key(pid: str, user: AuthUser = Depends(get_current_user)):
+    m = await require_manager(user)
+    rate_limit(user.uid, "provider_keys")
+    res = await db.provider_keys.delete_one({"org_id": m["org_id"], "provider": _provider(pid)})
+    if not res.deleted_count:
+        raise HTTPException(404, "This workspace has no key for that provider")
+    provider_keys.forget(m["org_id"])
+    return {"removed": pid}

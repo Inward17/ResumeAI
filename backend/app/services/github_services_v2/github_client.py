@@ -19,9 +19,10 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from app.services.provider_keys import key_for
+
 from .config import (
     GITHUB_API_BASE_URL,
-    GITHUB_TOKEN,
     MAX_CONCURRENT_GITHUB_CALLS,
     REQUEST_TIMEOUT_SECONDS,
     RETRY_ATTEMPTS,
@@ -57,7 +58,7 @@ class GitHubClient:
 
     def __init__(self, token: Optional[str] = None) -> None:
         # Re-read from env at instantiation — more robust than config import-time value
-        self._token = token or os.getenv("GITHUB_TOKEN", "") or GITHUB_TOKEN
+        self._token = token or key_for("github")
         headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "ResumeAI-Verifier/2.0",

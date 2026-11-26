@@ -64,6 +64,7 @@ def _patch_db(mock_db):
         "app.routes.cover_letter_routes.db",
         "app.routes.project_review_routes.db",
         "app.services.quota.db",
+        "app.services.provider_keys.db",
     ]
 
     # Pre-import every module so patch() can resolve the attribute
@@ -93,8 +94,10 @@ def _isolate_resume_storage(tmp_path):
 @pytest.fixture(autouse=True)
 def _fresh_rate_limits():
     """Per-user rate limits are in-memory: start every test with none used."""
-    from app.services import quota
+    from app.services import quota, provider_keys, usage_service
     quota._hits.clear()
+    provider_keys._cache.clear()
+    usage_service._cache.clear()
     yield
     quota._hits.clear()
 
