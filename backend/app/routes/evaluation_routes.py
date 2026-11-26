@@ -3,7 +3,8 @@ Evaluation Routes — Store interview evaluation scores in the evaluations colle
 """
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from app.auth import require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_owner
+from app.services.status_history import set_status
 from pydantic import BaseModel
 from typing import List, Dict
 
@@ -39,7 +40,8 @@ class EvaluationSubmission(BaseModel):
 
 
 @router.post("/{job_id}/candidates/{candidate_id}/evaluation", dependencies=[Depends(require_job_owner)])
-async def submit_evaluation(job_id: str, candidate_id: str, evaluation: EvaluationSubmission):
+async def submit_evaluation(job_id: str, candidate_id: str, evaluation: EvaluationSubmission,
+                            user: AuthUser = Depends(get_current_user)):
     """
     Store the interviewer's evaluation of a candidate.
     Saves per-question keyword scores and the aggregate score.
@@ -65,10 +67,7 @@ async def submit_evaluation(job_id: str, candidate_id: str, evaluation: Evaluati
     )
 
     # An interviewed candidate is at the Interview stage; later stages are left alone
-    moved = await db.applications.update_one(
-        {"job_id": job_id, "candidate_id": candidate_id, "status": {"$in": EARLY_STATUSES}},
-        {"$set": {"status": "Interview", "updated_at": datetime.utcnow()}},
-    )
+    _, moved = await set_status(job_id, candidate_id, "Interview", user.uid, only_from=EARLY_STATUSES)
 
     print(f"[Evaluation] ✅ Stored evaluation for {candidate_id} → job {job_id}: {evaluation.total_score:.1f}%")
 
@@ -76,7 +75,7 @@ async def submit_evaluation(job_id: str, candidate_id: str, evaluation: Evaluati
         "status": "success",
         "message": "Evaluation submitted",
         "total_score": evaluation.total_score,
-        "candidate_status": "Interview" if moved.modified_count else None,
+        "candidate_status": "Interview" if moved else None,
     }
 
 

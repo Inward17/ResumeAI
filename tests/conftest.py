@@ -65,6 +65,8 @@ def _patch_db(mock_db):
         "app.routes.project_review_routes.db",
         "app.services.quota.db",
         "app.services.provider_keys.db",
+        "app.services.status_history.db",
+        "app.routes.reports.db",
     ]
 
     # Pre-import every module so patch() can resolve the attribute
