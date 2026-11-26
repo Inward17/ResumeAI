@@ -341,6 +341,36 @@ export const factCheck = async (candidateId, message, candidateName) => {
     return response.json();
 };
 
+/** Write a job description with AI (POST /api/jobs/generate-description); nothing is saved */
+export const generateJobDescription = async ({ title, seniority, location, employmentType, notes, mustHaveSkills, tone }) => {
+    const response = await apiFetch('/api/jobs/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_title: title,
+            seniority: seniority || null,
+            location: location || null,
+            employment_type: employmentType || null,
+            notes: notes || null,
+            must_have_skills: mustHaveSkills || [],
+            tone: tone || 'neutral',
+        }),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        // 422 detail is a list of field errors
+        const detail = Array.isArray(err.detail) ? `Check the inputs: ${err.detail[0]?.msg || 'invalid value'}` : err.detail;
+        throw new Error(detail || 'Could not write the job description. Please try again.');
+    }
+    const d = await response.json();
+    return {
+        description: d.job_description,
+        requiredSkills: d.required_skills || [],
+        preferredSkills: d.preferred_skills || [],
+        inclusiveLanguageNotes: d.inclusive_language_notes || [],
+    };
+};
+
 /* ─────────────────────────────────────────────────────────────
  *  Cover letter of one application (/api/v1/jobs/:jobId/candidates/:candidateId/cover-letter)
  * ───────────────────────────────────────────────────────────── */
