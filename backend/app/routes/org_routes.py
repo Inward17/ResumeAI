@@ -233,6 +233,7 @@ async def revoke_api_key(key_id: str, user: AuthUser = Depends(get_current_user)
 
 @router.get("/org/usage")
 async def get_usage(refresh: bool = False, user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     m = await membership(user)
     month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     job_ids = [str(j["_id"]) async for j in db.jobs.find({"org_id": m["org_id"]}, {"_id": 1})]
@@ -256,6 +257,7 @@ HISTORY_DAYS = 30
 @router.get("/org/ai-usage")
 async def get_ai_usage(refresh: bool = False, user: AuthUser = Depends(get_current_user)):
     """Today's AI calls and uploads against the daily limits, by feature, the last 30 days, and Gemini/Groq status."""
+    reject_api_key(user)
     m = await membership(user)
     now = datetime.now(timezone.utc)
     today = now.date()
