@@ -1,5 +1,6 @@
 """Cover letter attached to one application (job + candidate) from the candidate dossier."""
 import asyncio
+import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -13,6 +14,7 @@ from app.services.quota import rate_limit, use_quota
 from app.utils.file_utils import read_file
 
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "10"))
+MAX_JSON_BYTES = 1024 * 1024  # pasted letters are cut to MAX_LETTER_CHARS anyway
 
 router = APIRouter(prefix="/jobs", tags=["cover-letter"])
 PATH = "/{job_id}/candidates/{candidate_id}/cover-letter"
@@ -48,8 +50,13 @@ async def _letter_from_request(request: Request) -> dict:
             raise HTTPException(400, f"{name} took too long to read")
         source, filename = "uploaded", name
     else:
+        raw = bytearray()
+        async for chunk in request.stream():  # bounded read: never buffer more than the cap
+            raw += chunk
+            if len(raw) > MAX_JSON_BYTES:
+                raise HTTPException(413, f"Pasted text is larger than {MAX_JSON_BYTES // 1024} KB")
         try:
-            body = await request.json()
+            body = json.loads(raw)
         except Exception:
             raise HTTPException(400, "Send a file (multipart) or JSON {\"text\": \"...\"}")
         text = body.get("text") if isinstance(body, dict) else None
