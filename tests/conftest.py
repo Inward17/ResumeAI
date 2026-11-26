@@ -4,6 +4,8 @@ All external APIs are mocked — no real calls to GitHub, Gemini, Apify, or Duck
 """
 import sys
 import os
+import re
+from pathlib import Path
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -43,29 +45,37 @@ def mock_db():
     return db
 
 
+_APP_DIR = Path(__file__).parent.parent / "backend" / "app"
+# A module-level `from app.database import db` copies the real handle into the
+# module; imports inside functions read app.database.db, which is patched anyway.
+_DB_IMPORT = re.compile(r"^from app\.database import [^\n]*\bdb\b", re.M)
+
+
+def _db_targets():
+    """app.database.db plus <module>.db for every app module that imports db directly.
+
+    Found by scanning the source, so a new module is covered without editing this file.
+    """
+    targets = ["app.database.db"]
+    for path in sorted(_APP_DIR.rglob("*.py")):
+        if _DB_IMPORT.search(path.read_text(encoding="utf-8")):
+            parts = path.relative_to(_APP_DIR.parent).with_suffix("").parts
+            if parts[-1] == "__init__":
+                parts = parts[:-1]
+            targets.append(".".join(parts) + ".db")
+    return targets
+
+
+DB_TARGETS = _db_targets()
+
+
 @pytest.fixture(autouse=True)
 def _patch_db(mock_db):
     """Auto-patch app.database.db and every module that imports db directly."""
     import importlib
     from contextlib import ExitStack
 
-    targets = [
-        "app.database.db",
-        "app.routes.job_routes.db",
-        "app.routes.resume.db",
-        "app.auth.db",
-        "app.org.db",
-        "app.routes.org_routes.db",
-        "app.services.task_queue.db",
-        "app.routes.evaluation_routes.db",
-        "app.routes.interview_questions_routes.db",
-        "app.services.fact_checker_service.db",
-        "app.services.cover_letter_service.db",
-        "app.routes.cover_letter_routes.db",
-        "app.routes.project_review_routes.db",
-        "app.services.quota.db",
-        "app.services.provider_keys.db",
-    ]
+    targets = DB_TARGETS
 
     # Pre-import every module so patch() can resolve the attribute
     for target in targets:
