@@ -240,8 +240,13 @@ def check_brief(data, labels: Dict[str, str]) -> Optional[dict]:
         cited = [labels[c] for c in (p.get("cited") or []) if isinstance(c, str) and c in labels]
         if not cited:  # an uncited point isn't backed by any note
             continue
-        points.append({"competency": str(p.get("competency") or "")[:80], "text": p["text"].strip()[:600], "cited": cited})
-    return {"summary": data["summary"].strip()[:1200], "points": points[:12]}
+        points.append({"competency": str(p.get("competency") or "")[:80], "text": _named(p["text"].strip(), labels)[:600], "cited": cited})
+    return {"summary": _named(data["summary"].strip(), labels)[:1200], "points": points[:12]}
+
+
+def _named(text: str, labels: Dict[str, str]) -> str:
+    """Put names back where the model wrote a label ("Interviewer I1" or "I1") in prose."""
+    return re.sub(r"\b(?:[Ii]nterviewer\s+)?(I\d+)\b", lambda m: labels.get(m.group(1), m.group(0)), text)
 
 
 if __name__ == "__main__":

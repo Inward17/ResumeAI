@@ -334,3 +334,11 @@ class TestCountsAndApiKeys:
             assert (await anon_client.get(url, headers=headers)).status_code == 200
             assert (await anon_client.get(f"/api/jobs/{other}/scorecard", headers=headers)).status_code == 404
             assert (await anon_client.get(url)).status_code == 401
+
+
+def test_brief_prose_uses_names_not_labels():
+    from app.services.scorecards import check_brief
+    r = check_brief({"summary": "Interviewer I1 recommends hiring; I2 disagrees.",
+                     "points": [{"text": "I1 saw strong SQL", "cited": ["I1"]}]}, {"I1": "Asha", "I2": "Ben"})
+    assert r["summary"] == "Asha recommends hiring; Ben disagrees."
+    assert r["points"][0]["text"] == "Asha saw strong SQL"
