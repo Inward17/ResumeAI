@@ -71,6 +71,11 @@ def _skills(values, limit: int, exclude=()) -> List[str]:
     return out[:limit]
 
 
+def _unquote(text: str) -> str:
+    """The UI adds its own quotes, so drop any the model put around a phrase."""
+    return text.strip().strip("\"'“”‘’").strip()
+
+
 def validate_result(raw, must_have: List[str]) -> dict | None:
     """The model's answer in the response shape, or None if it isn't usable."""
     if not isinstance(raw, str):
@@ -93,7 +98,7 @@ def validate_result(raw, must_have: List[str]) -> dict | None:
     for n in data.get("inclusive_language_notes") or []:
         if isinstance(n, dict) and isinstance(n.get("phrase"), str) and n["phrase"].strip():
             suggestion = n.get("suggestion") if isinstance(n.get("suggestion"), str) else ""
-            notes.append({"phrase": n["phrase"].strip()[:120], "suggestion": suggestion.strip()[:200]})
+            notes.append({"phrase": _unquote(n["phrase"])[:120], "suggestion": _unquote(suggestion)[:200]})
     return {
         "job_description": desc.strip()[:8000],
         "required_skills": required,

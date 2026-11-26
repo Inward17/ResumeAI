@@ -9,7 +9,7 @@ ANSWER = json.dumps({
     "job_description": "About the role\nBuild APIs.\n\nWhat you'll need\n- Python",
     "required_skills": ["Python", "python", "FastAPI", ""],
     "preferred_skills": ["FastAPI", "Docker", "Docker"],
-    "inclusive_language_notes": [{"phrase": "rockstar", "suggestion": "skilled engineer"}, {"phrase": ""}],
+    "inclusive_language_notes": [{"phrase": "\"rockstar\"", "suggestion": "“skilled engineer”"}, {"phrase": ""}],
 })
 
 
