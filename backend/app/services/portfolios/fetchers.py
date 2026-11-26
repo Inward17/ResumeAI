@@ -27,6 +27,7 @@ import httpx
 
 from app.services.coding_profiles.fetchers import HEADERS
 from app.services.portfolios.links import PLATFORMS, profile_url, public_url
+from app.services.provider_keys import key_for
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def _firecrawl_settings() -> tuple:
     """(api key, api url, timeout seconds); read per call so the switch takes effect without a restart."""
     if os.getenv("PORTFOLIO_CHECKS_ENABLED", "true").strip().lower() in ("0", "false", "no", "off"):
         raise NotConfigured("Portfolio checks are switched off (PORTFOLIO_CHECKS_ENABLED)")
-    key = os.getenv("FIRECRAWL_API_KEY")
+    key = key_for("firecrawl")
     if not key:
         raise NotConfigured("Firecrawl not configured")
     return key, os.getenv("FIRECRAWL_API_URL", "https://api.firecrawl.dev"), float(os.getenv("FIRECRAWL_TIMEOUT_SECONDS", "60"))

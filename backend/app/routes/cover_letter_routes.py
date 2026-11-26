@@ -74,7 +74,7 @@ async def attach_cover_letter(job_id: str, candidate_id: str, request: Request,
     rate_limit(user.uid, "ai")
     await _require_application(job_id, candidate_id)
     letter = await _letter_from_request(request)
-    await use_quota(await ensure_org(user), "ai_call")
+    await use_quota(await ensure_org(user), "ai_call", feature="cover_letters")
     await cl.attach(job_id, candidate_id, letter)
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
@@ -85,7 +85,7 @@ async def retry_cover_letter_analysis(job_id: str, candidate_id: str, user: Auth
     app = await _require_application(job_id, candidate_id)
     if not app.get("cover_letter"):
         raise HTTPException(404, "No cover letter attached")
-    await use_quota(await ensure_org(user), "ai_call")
+    await use_quota(await ensure_org(user), "ai_call", feature="cover_letters")
     return {"cover_letter": await cl.analyze_and_store(job_id, candidate_id)}
 
 

@@ -58,9 +58,9 @@ def _fuzzy_match(query: str, target: str) -> bool:
     return False
 
 logger = logging.getLogger(__name__)
+from app.services.provider_keys import key_for
 
 # ── Groq config ─────────────────────────────────────────────────────
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 # Groq retires models; override with GROQ_MODEL when this one goes
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -100,7 +100,7 @@ class AIServiceUnavailable(Exception):
 
 async def _call_groq(system: str, user: str, temperature: float = 0.3) -> Optional[str]:
     """Make a single Groq chat completion call. Returns the assistant text; raises AIServiceUnavailable."""
-    api_key = GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
+    api_key = key_for("groq")
     if not api_key:
         logger.error("[FactChecker] No GROQ_API_KEY configured")
         raise AIServiceUnavailable("GROQ_API_KEY is not configured")

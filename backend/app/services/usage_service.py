@@ -1,21 +1,28 @@
 """
-Live usage and limits of the external API keys the backend runs on.
+Live status and limits of the external API keys the backend runs on.
 
 Each provider is asked directly where it exposes quota (GitHub rate limits,
 Firecrawl credits, Apify monthly spend, Composio connections). Gemini and
-Groq have no quota endpoint, so for them the key is validated and the app's
-own counts are shown instead.
+Groq have no quota endpoint, so for them the key and model are validated.
+
+Checks use the effective key (app.services.provider_keys.key_for): the
+workspace's own key when it has one, else the server's. Keys always travel
+in headers, never in URLs.
 """
 import asyncio
+import hashlib
 import os
 import time
 from datetime import datetime, timezone
 
 import httpx
 
+from app.services.provider_keys import key_for, source
+
 TIMEOUT = 8
 CACHE_SECONDS = 60
-_cache = {"at": 0.0, "data": None}
+GEMINI_MODEL = "gemini-2.5-flash"
+_cache: dict = {}  # (provider, key fingerprint) -> (time, row)
 
 
 def _metric(label, used=None, limit=None, unit="", resets_at=None):
@@ -30,11 +37,10 @@ def _iso(ts):
     return str(ts)
 
 
-async def _github(http):
-    token = os.getenv("GITHUB_TOKEN")
-    if not token:
+async def _github(http, key):
+    if not key:
         return {"metrics": [], "note": "Without a token GitHub allows only 60 requests an hour."}
-    r = await http.get("https://api.github.com/rate_limit", headers={"Authorization": f"Bearer {token}"})
+    r = await http.get("https://api.github.com/rate_limit", headers={"Authorization": f"Bearer {key}"})
     r.raise_for_status()
     res = r.json()["resources"]
     core, search = res["core"], res.get("search", {})
@@ -44,22 +50,26 @@ async def _github(http):
     ]}
 
 
-async def _firecrawl(http):
-    key = os.getenv("FIRECRAWL_API_KEY")
+async def _firecrawl(http, key):
     base = os.getenv("FIRECRAWL_API_URL", "https://api.firecrawl.dev")
     r = await http.get(f"{base}/v2/team/credit-usage", headers={"Authorization": f"Bearer {key}"})
     r.raise_for_status()
     d = r.json().get("data") or {}
     remaining = d.get("remainingCredits", d.get("remaining_credits"))
     plan = d.get("planCredits", d.get("plan_credits"))
-    used = plan - remaining if isinstance(plan, (int, float)) and isinstance(remaining, (int, float)) else None
-    return {"metrics": [_metric("Credits", used, plan, "this billing period",
-                                d.get("billingPeriodEnd") or d.get("billing_period_end"))],
+    resets = d.get("billingPeriodEnd") or d.get("billing_period_end")
+    num = lambda v: isinstance(v, (int, float))
+    if num(plan) and num(remaining) and remaining <= plan:
+        metric = _metric("Credits", plan - remaining, plan, "this billing period", resets)
+    else:
+        # Extra or rolled-over credits can exceed the plan; "used" would go negative
+        metric = _metric("Credits left", remaining if num(remaining) else None, None, "this billing period", resets)
+    return {"metrics": [metric],
             "note": "LinkedIn lookups cost 5 credits per profile found."}
 
 
-async def _apify(http):
-    r = await http.get("https://api.apify.com/v2/users/me/limits", params={"token": os.getenv("APIFY_TOKEN")})
+async def _apify(http, key):
+    r = await http.get("https://api.apify.com/v2/users/me/limits", headers={"Authorization": f"Bearer {key}"})
     r.raise_for_status()
     d = r.json().get("data") or {}
     return {"metrics": [_metric("Monthly spend", (d.get("current") or {}).get("monthlyUsageUsd"),
@@ -68,16 +78,19 @@ async def _apify(http):
             "note": "Fallback for LinkedIn lookups when Firecrawl finds nothing."}
 
 
-async def _gemini(http):
-    r = await http.get("https://generativelanguage.googleapis.com/v1beta/models",
-                       params={"key": os.getenv("GEMINI_API_KEY"), "pageSize": 1})
+async def _gemini(http, key):
+    r = await http.get(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}",
+                       headers={"x-goog-api-key": key})
+    # Google retires models too, and then every parse fails
+    if r.status_code == 404:
+        return {"metrics": [], "status": "error", "error": f"Model {GEMINI_MODEL} is no longer available."}
     r.raise_for_status()
     return {"metrics": [_metric("Concurrent parse calls", None, int(os.getenv("PARSE_CONCURRENCY", "4")), "set by PARSE_CONCURRENCY")],
-            "note": "Google doesn't expose remaining quota through the API — see Google AI Studio for exact limits."}
+            "note": f"Key is valid and {GEMINI_MODEL} is available. Google doesn't expose remaining quota through the API; see Google AI Studio."}
 
 
-async def _groq(http):
-    r = await http.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}"})
+async def _groq(http, key):
+    r = await http.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {key}"})
     r.raise_for_status()
     # A valid key isn't enough: Groq retires models, and then every AI call fails
     from app.services.interview_questions_service import GROQ_MODEL
@@ -87,65 +100,73 @@ async def _groq(http):
     return {"metrics": [], "note": f"Key is valid and {GROQ_MODEL} is available. Groq reports rate limits per model on each request, not through an API."}
 
 
-async def _composio(http):
+async def _composio(http, key):
     params = {"toolkit_slugs": "gmail"}
     if os.getenv("COMPOSIO_USER_ID"):
         params["user_ids"] = os.getenv("COMPOSIO_USER_ID")
     r = await http.get(f"{os.getenv('COMPOSIO_API_URL', 'https://backend.composio.dev/api/v3')}/connected_accounts",
-                       params=params, headers={"x-api-key": os.getenv("COMPOSIO_API_KEY")})
+                       params=params, headers={"x-api-key": key})
     r.raise_for_status()
     items = r.json().get("items") or []
     active = [i for i in items if str(i.get("status", "")).upper() == "ACTIVE"]
     return {"metrics": [_metric("Connected Gmail accounts", len(active))],
-            "note": "Sends team invitation emails." if active else "No active Gmail connection — invites fall back to copyable links."}
+            "note": "Sends team invitation emails." if active else "No active Gmail connection: invites fall back to copyable links."}
 
 
-PROVIDERS = [
-    # id, name, purpose, env var that enables it, check
-    ("gemini", "Google Gemini", "Resume parsing", "GEMINI_API_KEY", _gemini),
-    ("github", "GitHub", "Repository verification", "GITHUB_TOKEN", _github),
-    ("firecrawl", "Firecrawl", "LinkedIn lookups", "FIRECRAWL_API_KEY", _firecrawl),
-    ("apify", "Apify", "LinkedIn fallback", "APIFY_TOKEN", _apify),
-    ("groq", "Groq", "Fact checker & interview questions", "GROQ_API_KEY", _groq),
-    ("composio", "Composio", "Invite emails via Gmail", "COMPOSIO_API_KEY", _composio),
-]
+# id: (name, what ResumeAI uses it for, check)
+PROVIDERS = {
+    "gemini": ("Google Gemini", "Resume parsing, project reviews and GitHub analysis", _gemini),
+    "groq": ("Groq", "Interview questions and the fact checker", _groq),
+    "firecrawl": ("Firecrawl", "LinkedIn lookups, portfolio and project pages", _firecrawl),
+    "github": ("GitHub", "Repository verification", _github),
+    "apify": ("Apify", "LinkedIn fallback when Firecrawl finds nothing", _apify),
+    "composio": ("Composio", "Team invite emails via Gmail", _composio),
+}
+AI_PROVIDERS = ("gemini", "groq")
+INTEGRATION_PROVIDERS = ("firecrawl", "github", "apify", "composio")
 
 
-async def _check(http, pid, name, purpose, env, fn):
-    row = {"id": pid, "name": name, "purpose": purpose, "env": env, "metrics": [], "note": None, "error": None}
+async def check(pid: str, key: str = None, refresh: bool = False) -> dict:
+    """Status row for one provider with ``key`` (default: the effective key); cached a minute per key."""
+    name, purpose, fn = PROVIDERS[pid]
+    key = key_for(pid) if key is None else key
+    ck = (pid, hashlib.sha256(key.encode()).hexdigest())
+    hit = _cache.get(ck)
+    if hit and not refresh and time.time() - hit[0] < CACHE_SECONDS:
+        return hit[1]
+    row = {"id": pid, "name": name, "purpose": purpose, "metrics": [], "note": None, "error": None,
+           "checked_at": datetime.now(timezone.utc).isoformat()}
     # GitHub works (rate-limited) without a token; everything else needs its key
-    if not os.getenv(env) and pid != "github":
+    if not key and pid != "github":
         return {**row, "status": "not_configured"}
     try:
-        result = await fn(http)
-        status = "ok" if os.getenv(env) else "limited"
-        return {**row, "status": status, **result}
+        async with httpx.AsyncClient(timeout=TIMEOUT) as http:
+            result = await fn(http, key)
+        row = {**row, "status": "ok" if key else "limited", **result}
     except httpx.HTTPStatusError as exc:
         code = exc.response.status_code
-        return {**row, "status": "error", "error": "Key rejected" if code in (401, 403) else f"HTTP {code}"}
+        row = {**row, "status": "error", "error": "Key rejected" if code in (400, 401, 403) else f"HTTP {code}"}
     except (httpx.HTTPError, ValueError, KeyError) as exc:
-        return {**row, "status": "error", "error": f"Unreachable: {type(exc).__name__}"}
+        row = {**row, "status": "error", "error": f"Unreachable: {type(exc).__name__}"}
+    _cache[ck] = (time.time(), row)
+    return row
 
 
-async def provider_usage(refresh: bool = False) -> dict:
-    """All providers, checked concurrently; cached for a minute."""
-    if not refresh and _cache["data"] and time.time() - _cache["at"] < CACHE_SECONDS:
-        return _cache["data"]
-    async with httpx.AsyncClient(timeout=TIMEOUT) as http:
-        rows = await asyncio.gather(*(_check(http, *p) for p in PROVIDERS))
-    data = {"providers": list(rows), "checked_at": datetime.now(timezone.utc).isoformat()}
-    _cache.update(at=time.time(), data=data)
-    return data
+async def provider_status(pids, refresh: bool = False) -> list:
+    """Rows for ``pids``, checked concurrently, each with where its key comes from."""
+    rows = await asyncio.gather(*(check(p, refresh=refresh) for p in pids))
+    return [{**r, "source": source(r["id"])} for r in rows]
 
 
 if __name__ == "__main__":
     async def demo():
-        async def boom(_):
+        async def boom(_http, _key):
             raise httpx.ConnectError("x")
-        os.environ["X_TEST_KEY"] = "1"
-        async with httpx.AsyncClient() as http:
-            off = await _check(http, "t", "T", "", "X_MISSING", boom)
-            err = await _check(http, "t", "T", "", "X_TEST_KEY", boom)
+        PROVIDERS["t"] = ("T", "", boom)
+        from app.services.provider_keys import ENV
+        ENV["t"] = "X_MISSING"
+        off = await check("t")
+        err = await check("t", key="k")
         assert off["status"] == "not_configured" and err["status"] == "error" and err["error"].startswith("Unreachable")
         print("usage self-check OK")
     asyncio.run(demo())

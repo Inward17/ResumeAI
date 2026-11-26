@@ -82,9 +82,8 @@ class VerificationCache:
 class UnifiedVerificationService:
     """Service orchestrating concurrent verification from all sources"""
     
-    def __init__(self, db_client=None, github_token: Optional[str] = None):
+    def __init__(self, db_client=None):
         self._db = db_client
-        self.github_token = github_token or os.getenv("GITHUB_TOKEN")
         self.cache = VerificationCache()
 
     @property

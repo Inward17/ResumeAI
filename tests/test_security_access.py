@@ -116,7 +116,7 @@ class TestInviteEmail:
         http.__aenter__ = AsyncMock(return_value=http)
         http.__aexit__ = AsyncMock(return_value=False)
         http.post = AsyncMock(return_value=resp)
-        with patch.object(org, "COMPOSIO_API_KEY", "test"), patch.object(org.httpx, "AsyncClient", return_value=http):
+        with patch.dict("os.environ", {"COMPOSIO_API_KEY": "test"}), patch.object(org.httpx, "AsyncClient", return_value=http):
             err = await org.send_invite_email("a@example.com", '<a href="//evil">Reset</a>', "Eve\r\nBcc: x@example.com",
                                               "http://localhost:3000/join/t")
         assert err is None

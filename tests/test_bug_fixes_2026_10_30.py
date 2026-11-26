@@ -110,7 +110,7 @@ class TestAIServiceDown:
 
     async def test_groq_failure_raises_instead_of_answering(self):
         from app.services import fact_checker_service as fc
-        with patch.object(fc, "GROQ_API_KEY", ""), patch.dict("os.environ", {"GROQ_API_KEY": ""}):
+        with patch.dict("os.environ", {"GROQ_API_KEY": ""}):
             with pytest.raises(fc.AIServiceUnavailable):
                 await fc._call_groq("system", "user")
 
@@ -121,7 +121,7 @@ class TestAIServiceDown:
         resp.json.return_value = {"data": [{"id": "some-other-model"}]}
         http = MagicMock()
         http.get = AsyncMock(return_value=resp)
-        result = await usage_service._groq(http)
+        result = await usage_service._groq(http, "gsk-test")
         assert result["status"] == "error"
         assert "no longer available" in result["error"]
 

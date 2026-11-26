@@ -128,7 +128,7 @@ async def start_project_reviews(job_id: str, candidate_id: str, retry: bool = Fa
     # still uses its units; refund them if that ever matters.
     reviewed = (len([p for p in (candidate.get("project_review") or {}).get("projects") or []
                      if p.get("review_status") == "ai_unavailable"]) if retry else len(selected))
-    await use_quota(await ensure_org(user), "ai_call", max(1, reviewed))
+    await use_quota(await ensure_org(user), "ai_call", max(1, reviewed), feature="project_reviews")
 
     if not await db.candidates.find_one_and_update(claim, {"$set": update}):
         state = (await db.candidates.find_one({"candidate_id": candidate_id}, {"project_review": 1}) or {}).get("project_review") or {}
