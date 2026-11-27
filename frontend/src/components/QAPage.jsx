@@ -14,6 +14,7 @@ import { ConfirmDialog } from './Modal';
 import {
   Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, IconButton, Skeleton, formatDate,
 } from './common';
+import { usePermissions } from '../lib/permissions';
 
 const TopicTag = ({ label, selected, onClick }) => (
   <button
@@ -98,6 +99,7 @@ const QAPage = () => {
   const [selectedKeywords, setSelectedKeywords] = useState({}); // { [questionId]: ["tag", ...] }
   const [lastSubmitted, setLastSubmitted] = useState(null);
   const [confirmReject, setConfirmReject] = useState(false);
+  const { can } = usePermissions();
 
   useEffect(() => {
     Promise.all([getJob(jobId), getJobCandidate(jobId, candidateId)])
@@ -381,9 +383,11 @@ const QAPage = () => {
             ) : questionError ? 'Scoring unavailable without questions' : 'Generating questions…'}
           </p>
           <div className="flex w-full gap-2 sm:w-auto">
-            <Button variant="danger-outline" onClick={() => setConfirmReject(true)} disabled={!candidate} className="flex-1 sm:flex-none">
-              <XCircle aria-hidden="true" /> Reject
-            </Button>
+            {can('candidate.status') && (
+              <Button variant="danger-outline" onClick={() => setConfirmReject(true)} disabled={!candidate} className="flex-1 sm:flex-none">
+                <XCircle aria-hidden="true" /> Reject
+              </Button>
+            )}
             <Button onClick={handleSubmit} disabled={!canSubmit} className="flex-[2] sm:flex-none">
               {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}
               {submitting ? 'Submitting…' : `Submit evaluation${hasScore ? ` · ${aggregatePercent}%` : ''}`}

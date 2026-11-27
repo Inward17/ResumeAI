@@ -12,6 +12,7 @@ import {
 import Modal from './Modal';
 import { useToast } from '../hooks/use-toast';
 import { cn } from '../lib/utils';
+import { usePermissions } from '../lib/permissions';
 import { getEvaluation } from '../services/jobService';
 import { getOrg } from '../services/orgService';
 import {
@@ -118,6 +119,7 @@ const TemplateEditor = ({ open, onOpenChange, jobId, initial, onSaved }) => {
 };
 
 export const ScorecardTemplateCard = ({ jobId }) => {
+  const { can } = usePermissions();
   const [template, setTemplate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -137,7 +139,7 @@ export const ScorecardTemplateCard = ({ jobId }) => {
   return (
     <Card>
       <CardHeader title="Interview scorecard" subtitle={comps.length ? `${comps.length} competencies` : 'Not set up'}
-        action={!loading && !error && (
+        action={!loading && !error && can('job.edit') && (
           <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>{comps.length ? 'Edit' : 'Set up'}</Button>
         )} />
       <div className="p-4 text-sm">
@@ -437,6 +439,7 @@ const ResumeEvidence = ({ candidate }) => {
 };
 
 export const InterviewScorecards = ({ jobId, candidate, compact = false }) => {
+  const { can } = usePermissions();
   const { toast } = useToast();
   const [data, setData] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -507,7 +510,7 @@ export const InterviewScorecards = ({ jobId, candidate, compact = false }) => {
             </ul>
           )}
 
-          {members.length > 0 && (
+          {can('job.edit') && members.length > 0 && (
             <div className="flex gap-2">
               <label htmlFor={`ask-${candidate.id}`} className="sr-only">Ask a teammate for a scorecard</label>
               <Select id={`ask-${candidate.id}`} value={pick} onChange={(e) => setPick(e.target.value)} className="h-8 flex-1 text-xs">
@@ -526,7 +529,7 @@ export const InterviewScorecards = ({ jobId, candidate, compact = false }) => {
           ) : summary && summary.submitted > 0 ? (
             <>
               <Summary summary={summary} />
-              <Brief jobId={jobId} candidateId={candidate.id} />
+              {can('ai.run') && <Brief jobId={jobId} candidateId={candidate.id} />}
             </>
           ) : (
             <p className="text-sm text-ink-3">No submitted scorecards yet.</p>

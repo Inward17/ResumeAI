@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import CandidateModal from './CandidateModal';
+import HiringTeam from './HiringTeam';
+import { usePermissions } from '../lib/permissions';
 import { ScorecardTemplateCard } from './Scorecards';
 import { getScorecardCounts } from '../services/scorecardService';
 import {
@@ -67,6 +69,9 @@ const CandidatePipeline = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const prefs = useMemo(loadPreferences, []);
+  const { can } = usePermissions();
+  const canUpload = can('candidate.upload');
+  const canMove = can('candidate.status');
 
   const [job, setJob] = useState(null);
   const [jobError, setJobError] = useState(null);
@@ -235,10 +240,10 @@ const CandidatePipeline = () => {
   }
 
   const chooseFiles = () => fileInputRef.current?.click();
-  const showBigDropzone = !loading && candidates.length === 0 && activeTasks === 0 && !uploading;
+  const showBigDropzone = canUpload && !loading && candidates.length === 0 && activeTasks === 0 && !uploading;
 
   return (
-    <div className="relative min-h-full" {...dragProps}>
+    <div className="relative min-h-full" {...(canUpload ? dragProps : {})}>
       <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_TYPES} className="sr-only" tabIndex={-1}
         aria-hidden="true" onChange={(e) => uploadFiles(e.target.files)} />
 
@@ -262,7 +267,7 @@ const CandidatePipeline = () => {
               <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" aria-hidden="true" />{candidates.length} candidate{candidates.length === 1 ? '' : 's'}</span>
             </>
           )}
-          action={!showBigDropzone && (
+          action={canUpload && !showBigDropzone && (
             <Button onClick={chooseFiles} disabled={uploading}>
               {uploading ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Upload aria-hidden="true" />}
               {uploading ? 'Uploading…' : 'Upload resumes'}
@@ -328,6 +333,7 @@ const CandidatePipeline = () => {
               <Button onClick={chooseFiles} className="mt-5"><Upload aria-hidden="true" /> Choose files</Button>
             </div>
           </Card>
+          {job && <div className="mt-6 max-w-sm"><HiringTeam job={job} onChange={setJob} /></div>}
           <div className="mt-6 max-w-md"><ScorecardTemplateCard jobId={jobId} /></div>
           </>
         ) : (
@@ -343,7 +349,8 @@ const CandidatePipeline = () => {
                 <div className="space-y-3 p-5">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10" />)}</div>
               ) : candidates.length === 0 ? (
                 <EmptyState icon={FileText} title="No candidates yet"
-                  description="Resumes are being screened — candidates appear here as each one finishes." />
+                  description={canUpload ? 'Resumes are being screened — candidates appear here as each one finishes.'
+                    : 'No resumes have been added to this job yet.'} />
               ) : visible.length === 0 ? (
                 <EmptyState icon={Search} title="No matching candidates" description="Try a different search or status."
                   action={<Button variant="secondary" onClick={() => { setQuery(''); setStatusFilter('All'); }}>Clear filters</Button>} />
@@ -383,7 +390,7 @@ const CandidatePipeline = () => {
                           </td>
                           <td className="px-3 py-3"><ScoreBar value={c.jdMatchScore} strong={prefs.matchThreshold} label="Role match" /></td>
                           <td className="px-3 py-3"><CredibilityCell candidate={c} prefs={prefs} /></td>
-                          <td className="px-3 py-3"><StatusSelect candidate={c} onChange={handleStatusUpdate} /></td>
+                          <td className="px-3 py-3"><StatusSelect candidate={c} onChange={handleStatusUpdate} disabled={!canMove} /></td>
                           <td className="pr-4"><ChevronRight className="h-4 w-4 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" /></td>
                         </tr>
                       ))}
@@ -406,7 +413,7 @@ const CandidatePipeline = () => {
                               </p>
                             </div>
                           </button>
-                          <StatusSelect candidate={c} onChange={handleStatusUpdate} />
+                          <StatusSelect candidate={c} onChange={handleStatusUpdate} disabled={!canMove} />
                         </div>
                         <div className="grid grid-cols-2 gap-4 text-xs text-ink-3">
                           <div><p className="mb-1">Role match</p><ScoreBar value={c.jdMatchScore} strong={prefs.matchThreshold} /></div>
@@ -441,6 +448,8 @@ const CandidatePipeline = () => {
                   </dl>
                 </Card>
               )}
+
+              {job && <HiringTeam job={job} onChange={setJob} />}
 
               <Card>
                 <CardHeader title="About this role" />
@@ -479,7 +488,7 @@ const CandidatePipeline = () => {
         job={job}
         prefs={prefs}
         onClose={closeCandidate}
-        onStatusUpdate={handleStatusUpdate}
+        onStatusUpdate={canMove ? handleStatusUpdate : undefined}
         onTakeInterview={(c) => navigate(`/jobs/${jobId}/candidates/${c.id}/interview`)}
       />
     </div>

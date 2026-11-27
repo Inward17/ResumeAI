@@ -74,3 +74,13 @@ class TestApiKeys:
             assert (await client.delete(f"/api/org/api-keys/{created['id']}")).status_code == 200
             app.dependency_overrides.pop(get_current_user)
             assert (await anon_client.get("/api/jobs", headers=headers)).status_code == 401
+
+    async def test_key_cannot_read_workspace_usage(self, client, anon_client, mock_db):
+        from app.main import app
+        from app.auth import get_current_user
+        created = (await client.post("/api/org/api-keys", json={"name": "ATS sync"})).json()
+        headers = {"Authorization": f"Bearer {created['key']}"}
+        with patch("app.auth.AUTH_DISABLED", False):
+            app.dependency_overrides.pop(get_current_user)
+            for path in ("/api/org/usage", "/api/org/ai-usage"):
+                assert (await anon_client.get(path, headers=headers)).status_code == 403, path

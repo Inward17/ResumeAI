@@ -3,7 +3,7 @@ Interview Questions Routes — API endpoint for generating AI-powered interview 
 Uses Groq API, caches results in the applications collection.
 """
 from fastapi import APIRouter, Depends, HTTPException
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action
 from app.org import ensure_org
 from app.services.quota import rate_limit, use_quota
 from bson import ObjectId
@@ -14,7 +14,7 @@ from app.services.interview_questions_service import generate_interview_question
 router = APIRouter(prefix="/jobs", tags=["interview-questions"])
 
 
-@router.get("/{job_id}/candidates/{candidate_id}/interview-questions", dependencies=[Depends(require_job_owner)])
+@router.get("/{job_id}/candidates/{candidate_id}/interview-questions", dependencies=[Depends(require_job_action("interview.questions"))])
 async def get_interview_questions(job_id: str, candidate_id: str, regenerate: bool = False,
                                   user: AuthUser = Depends(get_current_user)):
     """

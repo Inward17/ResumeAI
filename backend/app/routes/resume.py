@@ -7,7 +7,7 @@ from bson import ObjectId
 from typing import List, Dict, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action, require_job_owner
 from app.database import db
 from app.services.parser import parse_resume
 from app.services.unified_verification import unified_verification_service
@@ -254,6 +254,11 @@ def extract_pdf_hyperlinks(filepath: str) -> dict:
     return result
 
 
+def _read_bytes(path: str) -> bytes:
+    with open(path, "rb") as f:
+        return f.read()
+
+
 async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = None, org_id: str | None = None,
                            text: str | None = None) -> str:
     """Background task to parse resume and store in candidates collection. Returns the resolved candidate ID.
@@ -265,9 +270,8 @@ async def _parse_and_store(filename: str, task_id: str, owner_uid: str | None = 
     try:
         filepath = os.path.join(RESUMES_DIR, filename)
         
-        # Read file in thread to avoid blocking event loop
-        with open(filepath, "rb") as f:
-            content = await asyncio.to_thread(f.read)
+        # Open and read in a thread to avoid blocking the event loop
+        content = await asyncio.to_thread(_read_bytes, filepath)
         
         if text is None:
             # ponytail: on timeout the extraction thread can't be killed and runs on
@@ -816,7 +820,7 @@ def _write_file(path: str, content: bytes):
         f.write(content)
 
 
-@router.post("/{job_id}/upload", dependencies=[Depends(require_job_owner)])
+@router.post("/{job_id}/upload", dependencies=[Depends(require_job_action("candidate.upload"))])
 async def upload_resumes(
     job_id: str,
     files: List[UploadFile] = File(...),
@@ -922,7 +926,7 @@ async def get_job_tasks(job_id: str, limit: int = 200):
     }
 
 
-@router.put("/{job_id}/candidates/{candidate_id}/status", dependencies=[Depends(require_job_owner)])
+@router.put("/{job_id}/candidates/{candidate_id}/status", dependencies=[Depends(require_job_action("candidate.status"))])
 async def update_candidate_status(job_id: str, candidate_id: str, status_update: dict):
     """Update candidate application status"""
     new_status = normalize_status(status_update.get("status"))

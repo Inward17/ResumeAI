@@ -10,7 +10,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action, require_job_owner
 from app.database import db
 from app.org import ensure_org
 from app.routes.evaluation_routes import EARLY_STATUSES
@@ -59,7 +59,7 @@ async def get_template(job: dict = Depends(require_job_owner)):
 
 
 @router.put("/{job_id}/scorecard")
-async def save_template(body: sc.TemplateIn, job: dict = Depends(require_job_owner),
+async def save_template(body: sc.TemplateIn, job: dict = Depends(require_job_action("job.edit")),
                         user: AuthUser = Depends(get_current_user)):
     scorecard = {"competencies": [c.model_dump() for c in body.competencies],
                  "updated_at": datetime.utcnow(), "updated_by": user.name or user.email or user.uid}
@@ -68,7 +68,7 @@ async def save_template(body: sc.TemplateIn, job: dict = Depends(require_job_own
 
 
 @router.post("/{job_id}/scorecard/suggest")
-async def suggest_template(job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+async def suggest_template(job: dict = Depends(require_job_action("job.edit")), user: AuthUser = Depends(get_current_user)):
     """AI draft of competencies and anchors from the job description. Not saved: the recruiter edits it first."""
     rate_limit(user.uid, "ai")
     await use_quota(await ensure_org(user), "ai_call", feature="scorecards")
@@ -115,7 +115,7 @@ async def get_scorecards(job_id: str, candidate_id: str, job: dict = Depends(req
 
 @router.put(CARD + "/mine")
 async def save_my_scorecard(job_id: str, candidate_id: str, body: sc.ScorecardIn,
-                            job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+                            job: dict = Depends(require_job_action("evaluation.write")), user: AuthUser = Depends(get_current_user)):
     """Save a draft (autosave) or submit. Only the author edits their card; each re-submission keeps the previous version."""
     await _require_application(job_id, candidate_id)
     template = _template(job)
@@ -154,7 +154,7 @@ class RequestIn(BaseModel):
 
 @router.post(CARD + "/requests")
 async def request_scorecard(job_id: str, candidate_id: str, body: RequestIn,
-                            job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+                            job: dict = Depends(require_job_action("job.edit")), user: AuthUser = Depends(get_current_user)):
     """Ask a workspace member to interview: they then see only their own card until they submit."""
     await _require_application(job_id, candidate_id)
     member = await db.org_members.find_one({"org_id": job["org_id"], "uid": body.uid})
@@ -171,7 +171,7 @@ async def request_scorecard(job_id: str, candidate_id: str, body: RequestIn,
     return {"status": "requested"}
 
 
-@router.delete(CARD + "/requests/{uid}", dependencies=[Depends(require_job_owner)])
+@router.delete(CARD + "/requests/{uid}", dependencies=[Depends(require_job_action("job.edit"))])
 async def cancel_request(job_id: str, candidate_id: str, uid: str):
     """Withdraw a request nobody has started on; drafts and submitted cards stay."""
     await _require_application(job_id, candidate_id)
@@ -198,7 +198,7 @@ async def evidence_summary(job_id: str, candidate_id: str, job: dict = Depends(r
 
 
 @router.post(CARD + "/brief")
-async def evidence_brief(job_id: str, candidate_id: str, job: dict = Depends(require_job_owner),
+async def evidence_brief(job_id: str, candidate_id: str, job: dict = Depends(require_job_action("ai.run")),
                          user: AuthUser = Depends(get_current_user)):
     """AI summary of the submitted evidence notes only, citing the interviewer behind each point."""
     rate_limit(user.uid, "ai")

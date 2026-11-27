@@ -6,11 +6,10 @@ from datetime import datetime
 from typing import List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from bson import ObjectId
 
-from app.auth import AuthUser, get_current_user
+from app.auth import AuthUser, get_current_user, require_job_action, visible_job
 from app.database import db
-from app.org import ensure_org
+from app.org import access, job_filter, require_action
 from app.routes.resume import delete_task_files
 
 # Everyone who made it past screening, so hiring someone doesn't lower the shortlist rate
@@ -52,6 +51,10 @@ class JobUpdate(BaseModel):
     salary_max: Optional[int] = Field(default=None, ge=0)
 
 
+class TeamUpdate(BaseModel):
+    team_uids: List[str] = Field(max_length=200)
+
+
 class JobResponse(BaseModel):
     id: str
     job_title: str
@@ -70,6 +73,7 @@ class JobResponse(BaseModel):
     total_candidates: int = 0
     screened: int = 0
     shortlisted: int = 0
+    team_uids: List[str] = []
 
 
 def job_helper(job: dict) -> dict:
@@ -93,6 +97,7 @@ def job_helper(job: dict) -> dict:
         "total_candidates": job.get("total_candidates", 0),
         "screened": job.get("screened", 0),
         "shortlisted": job.get("shortlisted", 0),
+        "team_uids": job.get("team_uids") or [],
     }
 
 
@@ -128,20 +133,12 @@ def _sync_status(data: dict) -> dict:
     return data
 
 
-async def _owned_job_filter(job_id: str, user: AuthUser) -> dict:
-    """Jobs are shared by everyone in the caller's organization."""
-    try:
-        obj_id = ObjectId(job_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid job ID format")
-    return {"_id": obj_id, "org_id": await ensure_org(user)}
-
-
 @router.get("", response_model=List[JobResponse])
 async def get_jobs(user: AuthUser = Depends(get_current_user)):
     """Fetch the organization's jobs"""
     jobs = []
-    async for job in db.jobs.find({"org_id": await ensure_org(user)}, {"jd_embedding": 0}).sort("posted_at", -1):
+    # Hiring managers and interviewers see only the jobs they are on the hiring team of
+    async for job in db.jobs.find(job_filter(await access(user)), {"jd_embedding": 0}).sort("posted_at", -1):
         jobs.append(job_helper(job))
     return await _with_candidate_counts(jobs)
 
@@ -149,11 +146,7 @@ async def get_jobs(user: AuthUser = Depends(get_current_user)):
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str, user: AuthUser = Depends(get_current_user)):
     """Fetch a single job by ID"""
-    job = await db.jobs.find_one(await _owned_job_filter(job_id, user))
-    
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
+    job, _ = await visible_job(job_id, user)
     return (await _with_candidate_counts([job_helper(job)]))[0]
 
 
@@ -161,10 +154,13 @@ async def get_job(job_id: str, user: AuthUser = Depends(get_current_user)):
 async def create_job(job: JobCreate, user: AuthUser = Depends(get_current_user)):
     """Create a new job posting"""
     from app.services.embedding_service import generate_embedding
-    
+
+    acc = await access(user)
+    require_action(acc, "job.create")
     job_data = _sync_status(job.model_dump())
     job_data["owner_uid"] = user.uid
-    job_data["org_id"] = await ensure_org(user)
+    job_data["org_id"] = acc["org_id"]
+    job_data["team_uids"] = []
     job_data["posted_at"] = datetime.utcnow()
     job_data["total_candidates"] = 0
     job_data["screened"] = 0
@@ -183,16 +179,10 @@ async def create_job(job: JobCreate, user: AuthUser = Depends(get_current_user))
 
 
 @router.put("/{job_id}", response_model=JobResponse)
-async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_current_user)):
+async def update_job(job_id: str, job: JobUpdate, existing_job: dict = Depends(require_job_action("job.edit"))):
     """Update an existing job posting"""
-    owned = await _owned_job_filter(job_id, user)
-    obj_id = owned["_id"]
-    
-    # Get existing job
-    existing_job = await db.jobs.find_one(owned)
-    if not existing_job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
+    obj_id = existing_job["_id"]
+
     # Fields sent as null clear optional values (department, salary, ...);
     # required fields and the skill lists can't be cleared to null
     update_data = job.model_dump(exclude_unset=True)
@@ -219,10 +209,21 @@ async def update_job(job_id: str, job: JobUpdate, user: AuthUser = Depends(get_c
     return (await _with_candidate_counts([job_helper(updated_job)]))[0]
 
 
+@router.put("/{job_id}/team", response_model=JobResponse)
+async def set_job_team(job_id: str, body: TeamUpdate, job: dict = Depends(require_job_action("job.assign_team"))):
+    """Set the job's hiring team. Every uid must be a member of the job's workspace."""
+    uids = list(dict.fromkeys(body.team_uids))
+    found = set(await db.org_members.distinct("uid", {"org_id": job["org_id"], "uid": {"$in": uids}}))
+    if set(uids) - found:
+        raise HTTPException(status_code=400, detail="Everyone on the hiring team must be a member of this workspace")
+    await db.jobs.update_one({"_id": job["_id"]}, {"$set": {"team_uids": uids}})
+    return (await _with_candidate_counts([job_helper({**job, "team_uids": uids})]))[0]
+
+
 @router.delete("/{job_id}")
-async def delete_job(job_id: str, user: AuthUser = Depends(get_current_user)):
+async def delete_job(job_id: str, job: dict = Depends(require_job_action("job.delete"))):
     """Delete a job posting"""
-    result = await db.jobs.delete_one(await _owned_job_filter(job_id, user))
+    result = await db.jobs.delete_one({"_id": job["_id"]})
 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Job not found")

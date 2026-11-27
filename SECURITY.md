@@ -28,6 +28,17 @@ Flag any change that breaks these rules. Severity guidance is in [AGENTS.md](AGE
 ### Roles and invitations
 
 - Changing the workspace, members, invites or API keys requires an owner or admin (`require_manager`). The one exception: members may remove themselves.
+- What each role may do with jobs and candidates is one table, `PERMISSIONS` in `backend/app/org.py`:
+
+  | Role (stored value) | Sees | May also |
+  |---|---|---|
+  | Owner, Admin, Recruiter (`member`) | every job in the workspace | create, edit and delete jobs, set hiring teams, upload resumes, change status, re-verify, attach cover letters, run AI checks |
+  | Hiring manager (`hiring_manager`) | jobs whose `team_uids` include them | change status, run AI checks (project reviews, cover letter analysis) |
+  | Interviewer (`interviewer`) | jobs whose `team_uids` include them | nothing beyond viewing |
+
+  Every role can view candidates, generate interview questions, submit evaluations and use the fact checker on the jobs it sees.
+- Job queries for listings must use `job_filter(access(user))`, so hiring managers and interviewers never see unassigned jobs, in lists or aggregates. Routes that change something use `require_job_action("<action>")`; an unassigned job is a 404, a job the role may see but not change is a 403.
+- Workspace API keys always act with Recruiter (`member`) rights, whatever the creator's current role; they stop working when the creator leaves.
 - The workspace owner can't be removed or demoted.
 - Invites must stay random, expiring, single-use and bound to the invited email address: accepting needs a signed-in account with that address.
 

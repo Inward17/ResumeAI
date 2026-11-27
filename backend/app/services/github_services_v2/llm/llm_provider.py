@@ -158,7 +158,8 @@ async def _call_gemini(api_key: str, user_message: str) -> Optional[Dict[str, An
             resp = await client.post(
                 url,
                 json=payload,
-                params={"key": api_key},
+                # Key in a header, never in the URL (SECURITY.md)
+                headers={"x-goog-api-key": api_key},
             )
         if resp.status_code != 200:
             logger.warning("Gemini HTTP %d", resp.status_code)

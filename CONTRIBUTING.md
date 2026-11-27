@@ -22,7 +22,7 @@ Follow [Run locally](README.md#run-locally) in the README: Python 3.11+, Node 24
 - **Rules:** follow the conventions and review guidelines in [AGENTS.md](AGENTS.md) and the security rules in [SECURITY.md](SECURITY.md). They are what reviewers check against.
 
 Two rules that are easy to miss:
-- Any module that does `from app.database import db` must be added to `_patch_db` in `tests/conftest.py`, or its tests can reach a real database.
+- Tests patch every module that does a top-level `from app.database import db` automatically (`_patch_db` in `tests/conftest.py` scans `backend/app`). Keep the name `db` when you import it, or the module escapes the patch.
 - Use fictional data in tests and examples (`example.com` addresses). Never use real candidate data.
 
 ## Check it

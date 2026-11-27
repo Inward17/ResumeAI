@@ -342,3 +342,22 @@ def test_brief_prose_uses_names_not_labels():
                      "points": [{"text": "I1 saw strong SQL", "cited": ["I1"]}]}, {"I1": "Asha", "I2": "Ben"})
     assert r["summary"] == "Asha recommends hiring; Ben disagrees."
     assert r["points"][0]["text"] == "Asha saw strong SQL"
+
+
+async def test_interviewer_can_submit_but_not_manage(client, mock_db):
+    from tests.test_rbac import _sign_in_as, _user, _workspace
+    _, assigned, other = await _workspace(client, mock_db)
+    tpl = {"competencies": [{"name": n, "description": "", "anchors": ["a", "b", "c", "d"], "weight": 1}
+                            for n in ("SQL", "Python", "Communication")]}
+    assert (await client.put(f"/api/jobs/{assigned}/scorecard", json=tpl)).status_code == 200
+    comp = (await client.get(f"/api/jobs/{assigned}/scorecard")).json()
+    comp_id = (comp.get("scorecard") or comp)["competencies"][0]["id"]
+
+    _sign_in_as(_user("iv"))
+    assert (await client.put(f"/api/jobs/{assigned}/scorecard", json=tpl)).status_code == 403
+    assert (await client.post(f"/api/jobs/{assigned}/candidates/cand-a/scorecards/requests", json={"uid": "hm"})).status_code == 403
+    assert (await client.post(f"/api/jobs/{assigned}/candidates/cand-a/scorecards/brief")).status_code == 403
+    card = {"ratings": [{"competency_id": comp_id, "rating": 3, "evidence": "Explained the join and the index choice well."}],
+            "recommendation": "yes", "summary": "Good SQL.", "submit": True}
+    assert (await client.put(f"/api/jobs/{assigned}/candidates/cand-a/scorecards/mine", json=card)).status_code == 200
+    assert (await client.get(f"/api/jobs/{other}/candidates/cand-b/scorecards")).status_code == 404
