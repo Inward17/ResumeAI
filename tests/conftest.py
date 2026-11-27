@@ -92,6 +92,7 @@ def _patch_db(mock_db):
         "app.services.quota.db",
         "app.services.provider_keys.db",
         "app.services.jd_matching_service.db",
+        "app.mcp_server.db",
     ]
 
     # Pre-import every module so patch() can resolve the attribute
