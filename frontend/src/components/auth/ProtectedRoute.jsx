@@ -1,13 +1,16 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Loader2 } from 'lucide-react';
+import BrandMark from '../BrandMark';
 
 const FullPageLoader = () => (
-    <div className="flex min-h-screen items-center justify-center bg-canvas" role="status">
-        <div className="text-center">
-            <Loader2 className="mx-auto h-6 w-6 animate-spin text-ink-3" aria-hidden="true" />
-            <p className="mt-2 text-sm text-ink-3">Loading…</p>
+    <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-4" role="status">
+        <div className="flex flex-col items-center">
+            <BrandMark className="motion-safe:animate-pulse" />
+            <div className="mt-5 h-0.5 w-32 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
+                <div className="h-full w-1/3 rounded-full bg-primary motion-safe:animate-[loader-slide_1.2s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:opacity-40" />
+            </div>
+            <p className="mt-3 text-sm text-ink-3">Loading your workspace…</p>
         </div>
     </div>
 );

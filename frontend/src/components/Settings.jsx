@@ -147,7 +147,7 @@ const Settings = () => {
             );
           })}
         </nav>
-        <div className="max-w-3xl"><Component /></div>
+        <div key={current.id} className="max-w-3xl animate-fade-in"><Component /></div>
       </div>
     </PageContainer>
   );

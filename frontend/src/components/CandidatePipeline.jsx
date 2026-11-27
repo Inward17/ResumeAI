@@ -17,6 +17,7 @@ import {
   Card, CardHeader, PageContainer, PageHeader, ScoreBar, ScoreRing, Initials, EmptyState, JobStatusPill, Button,
   Segmented, SearchInput, Tag, Skeleton, StatusSelect,
 } from './common';
+import { SkeletonRegion, RowsSkeleton } from './ui/skeleton';
 
 const ACCEPTED_TYPES = '.pdf,.docx,.doc,.txt';
 
@@ -253,7 +254,7 @@ const CandidatePipeline = () => {
           back={{ to: '/jobs', label: 'Jobs' }}
           title={job ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{job.title}<JobStatusPill status={job.status} /></span>
-          ) : <Skeleton className="h-8 w-64" />}
+          ) : <SkeletonRegion label="Loading job"><Skeleton className="h-8 w-64" /></SkeletonRegion>}
           meta={job && (
             <>
               {job.department && <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5" aria-hidden="true" />{job.department}</span>}
@@ -340,7 +341,7 @@ const CandidatePipeline = () => {
               </div>
 
               {loading ? (
-                <div className="space-y-3 p-5">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10" />)}</div>
+                <SkeletonRegion label="Loading candidates"><RowsSkeleton rows={5} avatar /></SkeletonRegion>
               ) : candidates.length === 0 ? (
                 <EmptyState icon={FileText} title="No candidates yet"
                   description={canUpload ? 'Resumes are being screened — candidates appear here as each one finishes.'
@@ -351,7 +352,7 @@ const CandidatePipeline = () => {
               ) : (
                 <>
                   {/* Desktop table */}
-                  <div className="hidden overflow-x-auto md:block">
+                  <div className="hidden animate-fade-in overflow-x-auto md:block">
                   <table className="w-full min-w-[680px] text-sm">
                     <thead className="border-b border-line text-left text-[11px] uppercase tracking-[0.08em] text-ink-3">
                       <tr>
@@ -390,7 +391,7 @@ const CandidatePipeline = () => {
                   </div>
 
                   {/* Phone list */}
-                  <ul className="divide-y divide-line md:hidden">
+                  <ul className="animate-fade-in divide-y divide-line md:hidden">
                     {visible.map((c) => (
                       <li key={c.id} className="space-y-3 p-4">
                         <div className="flex items-start justify-between gap-3">
@@ -460,7 +461,7 @@ const CandidatePipeline = () => {
                         </div>
                       )}
                     </>
-                  ) : <div className="space-y-2"><Skeleton className="h-4" /><Skeleton className="h-4 w-4/5" /><Skeleton className="h-4 w-3/5" /></div>}
+                  ) : <SkeletonRegion label="Loading job details" className="space-y-2"><Skeleton className="h-4" /><Skeleton className="h-4 w-4/5" /><Skeleton className="h-4 w-3/5" /></SkeletonRegion>}
                 </div>
               </Card>
             </div>

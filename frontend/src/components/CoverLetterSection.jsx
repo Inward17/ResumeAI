@@ -5,6 +5,7 @@ import { attachCoverLetter, deleteCoverLetter, getCoverLetter, retryCoverLetterA
 import { usePermissions } from '../lib/permissions';
 import { cn } from '../lib/utils';
 import { Button, Skeleton, Tag, Textarea } from './common';
+import { SkeletonRegion } from './ui/skeleton';
 
 const ACCEPTED_TYPES = '.pdf,.docx,.doc,.txt';
 const SOURCE_LABEL = { uploaded: 'Uploaded', pasted: 'Pasted', auto_detected: 'Auto-detected in upload' };
@@ -144,7 +145,7 @@ const CoverLetterSection = ({ jobId, candidateId }) => {
       </div>
 
       {loading ? (
-        <div className="space-y-2"><Skeleton className="h-4" /><Skeleton className="h-4 w-3/5" /></div>
+        <SkeletonRegion label="Loading cover letter" className="space-y-2"><Skeleton className="h-4" /><Skeleton className="h-4 w-3/5" /></SkeletonRegion>
       ) : loadError ? (
         <p className="text-sm text-danger">{loadError}</p>
       ) : busy === 'saving' ? (

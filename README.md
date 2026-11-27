@@ -15,7 +15,7 @@ AI resume screening for hiring teams. ResumeAI parses every resume with Gemini, 
 - **Teams.** Shared workspaces with email invitations (via Composio Gmail) or copyable invite links, and five roles: owner, admin, recruiter, hiring manager and interviewer. Hiring managers and interviewers see only the jobs whose hiring team they are on.
 - **Workspace API keys** for calling the API from your own tools.
 - **AI and Integrations settings.** Today's AI calls and uploads against the daily limits, usage by feature and over 30 days, and live limits of every external key the backend runs on (GitHub, Firecrawl, Apify, Gemini, Groq, Composio). Owners and admins can give a workspace its own key for any of them.
-- Light and dark themes, phone layouts, keyboard and screen-reader support.
+- A public homepage at `/`, skeleton loading screens that match each page, light and dark themes, phone layouts, keyboard and screen-reader support.
 
 ## Stack
 

@@ -11,6 +11,7 @@ import {
   Card, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, IconButton, Menu, Segmented, SearchInput, Tag, Skeleton, RelativeDate,
 } from './common';
 import { usePermissions } from '../lib/permissions';
+import { SkeletonRegion, CardGridSkeleton } from './ui/skeleton';
 
 const FILTERS = [
   { id: 'All', label: 'All' },
@@ -24,7 +25,7 @@ const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
   const { can } = usePermissions();
   const isClosed = job.status === 'Closed';
   return (
-    <Card className="group relative flex flex-col p-5 transition-colors hover:border-line-strong">
+    <Card className="group relative flex flex-col p-5 transition duration-200 ease-out hover:border-line-strong hover:shadow-pop">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-serif text-[1.45rem] leading-tight text-ink">
@@ -175,9 +176,7 @@ const JobPostings = () => {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
-        </div>
+        <SkeletonRegion label="Loading jobs"><CardGridSkeleton count={3} /></SkeletonRegion>
       ) : filteredJobs.length === 0 ? (
         <Card>
           {jobs.length === 0 ? (
@@ -196,7 +195,7 @@ const JobPostings = () => {
           )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="animate-fade-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredJobs.map((job) => (
             <JobCard
               key={job.id}

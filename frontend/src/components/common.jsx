@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { Skeleton } from './ui/skeleton';
 import { CANDIDATE_STATUSES, STATUS_STYLES, JOB_STATUS_STYLES } from '../lib/statuses';
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
@@ -67,7 +68,7 @@ const BUTTON_SIZES = {
 };
 
 export const buttonClass = (variant = 'primary', size = 'md') => cn(
-  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors',
+  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition duration-150 ease-out motion-safe:active:translate-y-px',
   'disabled:pointer-events-none disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
   BUTTON_VARIANTS[variant], BUTTON_SIZES[size],
 );
@@ -303,7 +304,7 @@ export const Initials = ({ name, className }) => {
 
 /** Headline figures in one ruled strip. items: [{ label, value, sub }] */
 export const StatStrip = ({ items, loading }) => (
-  <Card className="grid grid-cols-2 gap-px overflow-hidden bg-line lg:grid-cols-4">
+  <Card className="grid grid-cols-2 gap-px overflow-hidden bg-line lg:grid-cols-4" aria-busy={loading || undefined}>
     {items.map(({ label, value, sub }) => (
       <div key={label} className="bg-surface px-5 py-4 md:py-5">
         <p className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">{label}</p>
@@ -316,9 +317,7 @@ export const StatStrip = ({ items, loading }) => (
   </Card>
 );
 
-export const Skeleton = ({ className }) => (
-  <span className={cn('block animate-pulse rounded-md bg-subtle', className)} aria-hidden="true" />
-);
+export { Skeleton };
 
 export const EmptyState = ({ icon: Icon, title, description, action, className }) => (
   <div className={cn('flex flex-col items-center px-6 py-12 text-center', className)}>
