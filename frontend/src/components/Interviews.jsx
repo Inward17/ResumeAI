@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarCheck, Briefcase, Mail, ArrowRight, Search } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, Briefcase, Mail, ArrowRight, Search } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { getJobs, getJobCandidates, updateCandidateStatus } from '../services/jobService';
 import { INTERVIEW_STATUSES } from '../lib/statuses';
 import { loadPreferences } from '../lib/preferences';
 import CandidateModal from './CandidateModal';
+import { ScheduleDialog, UpcomingInterviews } from './Scheduling';
 import {
   Card, PageContainer, PageHeader, Initials, EmptyState, Button, StatStrip, ScoreBar, Segmented, SearchInput, StatusSelect, Skeleton,
 } from './common';
 import { usePermissions } from '../lib/permissions';
 
-const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
+const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove, onSchedule }) => (
   <Card className="flex flex-col p-4 transition-colors hover:border-line-strong">
     <div className="flex items-start justify-between gap-3">
       <button type="button" onClick={onView} className="flex min-w-0 items-center gap-3 rounded-lg text-left">
@@ -44,7 +45,12 @@ const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
     )}
 
     <div className="mt-4 flex gap-2 border-t border-line pt-3">
-      <Button variant="secondary" size="sm" onClick={onView} className="flex-1">View dossier</Button>
+      <Button variant="secondary" size="sm" onClick={onView} className="flex-1">Dossier</Button>
+      {onSchedule && (
+        <Button variant="secondary" size="sm" onClick={onSchedule} className="flex-1" aria-label={`Schedule interview with ${candidate.name}`}>
+          <CalendarPlus aria-hidden="true" /> Schedule
+        </Button>
+      )}
       <Button size="sm" onClick={onStart} className="flex-1">
         {candidate.interviewScore != null ? 'Open interview' : 'Start interview'} <ArrowRight aria-hidden="true" />
       </Button>
@@ -61,6 +67,8 @@ const Interviews = () => {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
   const [selected, setSelected] = useState(null); // {candidateId, jobId}
+  const [scheduling, setScheduling] = useState(null); // {candidate, job}
+  const [refreshKey, setRefreshKey] = useState(0);
   const { can } = usePermissions();
   const canMove = can('candidate.status');
 
@@ -131,6 +139,8 @@ const Interviews = () => {
         ]} />
       </div>
 
+      <UpcomingInterviews refreshKey={refreshKey} />
+
       {total > 0 && (
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Segmented label="Filter by status" value={filterStatus} onChange={setFilterStatus}
@@ -168,6 +178,7 @@ const Interviews = () => {
               onView={() => setSelected({ candidateId: candidate.id, jobId: job.id })}
               onStart={() => startInterview(job.id, candidate.id)}
               onMove={canMove ? (status) => handleMove(candidate.id, job.id, status) : undefined}
+              onSchedule={canMove ? () => setScheduling({ candidate, job }) : undefined}
             />
           ))}
         </div>
@@ -181,7 +192,19 @@ const Interviews = () => {
         onClose={() => setSelected(null)}
         onStatusUpdate={canMove ? (candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status) : undefined}
         onTakeInterview={(c) => startInterview(selectedEntry.job.id, c.id)}
+        onScheduled={() => setRefreshKey((k) => k + 1)}
       />
+
+      <ScheduleDialog open={!!scheduling} onOpenChange={(o) => !o && setScheduling(null)}
+        job={scheduling?.job} candidate={scheduling?.candidate}
+        onDone={(r) => {
+          setRefreshKey((k) => k + 1);
+          if (r.candidateStatus) {
+            const { candidate, job } = scheduling;
+            setEntries((prev) => prev.map((e) => (e.candidate.id === candidate.id && e.job.id === job.id
+              ? { ...e, candidate: { ...e.candidate, status: r.candidateStatus } } : e)));
+          }
+        }} />
     </PageContainer>
   );
 };

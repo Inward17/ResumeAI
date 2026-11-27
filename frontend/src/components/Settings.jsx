@@ -114,7 +114,7 @@ const SECTIONS = [
   { id: 'general', label: 'General', description: 'Appearance and scoring, saved in this browser.', Component: GeneralSettings },
   { id: 'team', label: 'Team', description: 'Members of this workspace and invitations.', Component: TeamSettings },
   { id: 'ai', label: 'AI', description: 'AI usage against the daily limits, by feature and over 30 days, and AI provider status.', Component: AiSettings },
-  { id: 'integrations', label: 'Integrations', description: 'The services ResumeAI runs on, their live limits, and this workspace’s own keys.', Component: IntegrationsSettings },
+  { id: 'integrations', label: 'Integrations', description: 'Your calendar and email, Slack, and the services ResumeAI runs on with their live limits and this workspace’s own keys.', Component: IntegrationsSettings },
   { id: 'api-keys', label: 'API keys', description: 'Keys for calling the ResumeAI API.', Component: ApiKeysSettings },
   { id: 'usage', label: 'Plan & usage', description: 'Plan and workspace counts.', Component: UsageSettings },
 ];
