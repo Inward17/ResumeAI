@@ -19,6 +19,7 @@ from tests.conftest import create_owned_job
     ("post", "/api/v1/scrape-linkedin"),
     ("post", "/api/v1/verify-profile-data"),
     ("post", "/api/v1/search/"),
+    ("get", "/api/jobs/fake-job-id/candidates/fake-cand-id/analysis"),
 ])
 async def test_unscoped_verification_routes_are_gone(client, method, path):
     resp = await client.request(method, path, json={"candidate_id": "x", "github_username": "x"})
