@@ -48,6 +48,12 @@ yarn install
 yarn dev                                          # http://localhost:3000
 ```
 
+Or run both in containers (needs Docker; see [docs/DOCKER.md](docs/DOCKER.md)):
+
+```bash
+docker compose --env-file frontend/.env up --build   # app on http://localhost:3000, API on :8000
+```
+
 Sign in once, then load demo data into your workspace if you want something to click through:
 
 ```bash
@@ -105,6 +111,7 @@ docs/                    Architecture, setup guides, reports
 
 - [Architecture](docs/ARCHITECTURE.md): components, request flow, data model
 - [Deployment](docs/DEPLOYMENT.md): CI/CD, GitHub Pages and Hugging Face setup
+- [Docker](docs/DOCKER.md): run the backend and frontend in containers
 - [Scalability, database, authentication and teams](docs/SCALING_DATABASE_AUTH.md): setup guide
 - [Project report](docs/PROJECT_REPORT.md): algorithms and implementation in depth
 - [Evaluation results](docs/EVALUATION_RESULTS.md)
