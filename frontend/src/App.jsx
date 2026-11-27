@@ -1,15 +1,16 @@
 import React, { Suspense, lazy, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
-import { Loader2 } from "lucide-react";
 import { AuthProvider } from "./context/AuthContext";
 import { isFirebaseConfigured } from "./firebase";
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import ProtectedRoute, { PublicOnlyRoute } from "./components/auth/ProtectedRoute";
 import ConfigMissing from "./components/ConfigMissing";
+import Home from "./components/Home";
 import Sidebar from "./components/Sidebar";
 import TopNavbar from "./components/TopNavbar";
 import { Toaster } from "./components/ui/toaster";
+import { PageSkeleton } from "./components/ui/skeleton";
 
 // Pages load on demand to keep the first download small
 const Dashboard = lazy(() => import("./components/Dashboard"));
@@ -20,12 +21,6 @@ const Settings = lazy(() => import("./components/Settings"));
 const Interviews = lazy(() => import("./components/Interviews"));
 const QAPage = lazy(() => import("./components/QAPage"));
 const JoinOrg = lazy(() => import("./components/JoinOrg"));
-
-const PageLoader = () => (
-  <div className="flex h-full items-center justify-center p-10" role="status">
-    <Loader2 className="h-5 w-5 animate-spin text-ink-3" aria-label="Loading page" />
-  </div>
-);
 
 // Layout for signed-in pages: sidebar (desktop) or header + bottom nav (phone)
 function AppLayout() {
@@ -46,7 +41,7 @@ function AppLayout() {
       <div className="relative order-first flex min-h-0 min-w-0 flex-1 flex-col md:order-none">
         <TopNavbar />
         <main id="main" ref={mainRef} className="flex-1 overflow-y-auto">
-          <Suspense fallback={<PageLoader />}>
+          <Suspense fallback={<PageSkeleton />}>
             <Outlet />
           </Suspense>
         </main>
@@ -62,6 +57,9 @@ function App() {
     <AuthProvider>
       <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
         <Routes>
+          {/* Homepage: open to everyone, signed in or not */}
+          <Route path="/" element={<Home />} />
+
           {/* Public routes */}
           <Route element={<PublicOnlyRoute />}>
             <Route path="/login" element={<Login />} />
