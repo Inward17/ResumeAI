@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, StringConstraints
 
 from app.auth import AuthUser, get_current_user
-from app.org import ensure_org
+from app.org import access, require_action
 from app.services.fact_checker_service import AIServiceUnavailable, _call_groq
 from app.services.quota import rate_limit, use_quota
 from app.utils.text_utils import as_data
@@ -109,8 +109,10 @@ def validate_result(raw, must_have: List[str]) -> dict | None:
 
 @router.post("/generate-description")
 async def generate_description(body: GenerateDescriptionRequest, user: AuthUser = Depends(get_current_user)):
+    acc = await access(user)
+    require_action(acc, "job.create")
     rate_limit(user.uid, "ai")
-    await use_quota(await ensure_org(user), "ai_call", feature="jd_generation")
+    await use_quota(acc["org_id"], "ai_call", feature="jd_generation")
     try:
         raw = await _call_groq(SYSTEM, _build_prompt(body), temperature=0.5)
     except AIServiceUnavailable:

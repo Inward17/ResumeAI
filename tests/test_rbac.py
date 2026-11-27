@@ -80,6 +80,7 @@ class TestRestrictedRoles:
         assert (await client.put(f"/api/jobs/{assigned}", json={"job_title": "X"})).status_code == 403
         assert (await client.put(f"/api/jobs/{assigned}/team", json={"team_uids": []})).status_code == 403
         assert (await client.post("/api/jobs", json={"job_title": "X", "job_description": "Y", "required_skills": []})).status_code == 403
+        assert (await client.post("/api/jobs/generate-description", json={"job_title": "X"})).status_code == 403
         assert (await client.post(f"/api/v1/jobs/{assigned}/candidates/cand-a/cover-letter", json={"text": "hi"})).status_code == 403
 
         # Evaluations are open to every role on an assigned job
