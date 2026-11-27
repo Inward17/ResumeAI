@@ -79,6 +79,7 @@ Indexes for every hot query are created at startup (`database.ensure_indexes`).
 | `app/routes/resume.py` | Upload, task progress, candidate list, status changes, the parse → verify → score pipeline |
 | `app/routes/org_routes.py` | Workspace, members, invitations, API keys, plan & usage |
 | `app/routes/interview_questions_routes.py`, `evaluation_routes.py`, `fact_checker_routes.py` | Interview kit |
+| `app/mcp_server.py` | MCP endpoint at `/mcp` for AI assistants, API-key auth ([MCP.md](MCP.md)) |
 | `app/services/task_queue.py` | Durable MongoDB queue |
 | `app/services/parser.py` | Gemini / langextract resume parsing |
 | `app/services/unified_verification.py` | Runs and merges GitHub, LinkedIn and web verification |
