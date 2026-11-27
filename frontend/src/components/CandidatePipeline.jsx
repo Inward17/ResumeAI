@@ -352,7 +352,7 @@ const CandidatePipeline = () => {
               ) : (
                 <>
                   {/* Desktop table */}
-                  <div className="hidden overflow-x-auto md:block">
+                  <div className="hidden animate-fade-in overflow-x-auto md:block">
                   <table className="w-full min-w-[680px] text-sm">
                     <thead className="border-b border-line text-left text-[11px] uppercase tracking-[0.08em] text-ink-3">
                       <tr>
@@ -391,7 +391,7 @@ const CandidatePipeline = () => {
                   </div>
 
                   {/* Phone list */}
-                  <ul className="divide-y divide-line md:hidden">
+                  <ul className="animate-fade-in divide-y divide-line md:hidden">
                     {visible.map((c) => (
                       <li key={c.id} className="space-y-3 p-4">
                         <div className="flex items-start justify-between gap-3">

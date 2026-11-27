@@ -68,7 +68,7 @@ const BUTTON_SIZES = {
 };
 
 export const buttonClass = (variant = 'primary', size = 'md') => cn(
-  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition-colors',
+  'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition duration-150 ease-out motion-safe:active:translate-y-px',
   'disabled:pointer-events-none disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
   BUTTON_VARIANTS[variant], BUTTON_SIZES[size],
 );

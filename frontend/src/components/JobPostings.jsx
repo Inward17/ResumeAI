@@ -25,7 +25,7 @@ const JobCard = ({ job, onEdit, onToggleClosed, onDelete }) => {
   const { can } = usePermissions();
   const isClosed = job.status === 'Closed';
   return (
-    <Card className="group relative flex flex-col p-5 transition-colors hover:border-line-strong">
+    <Card className="group relative flex flex-col p-5 transition duration-200 ease-out hover:border-line-strong hover:shadow-pop">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-serif text-[1.45rem] leading-tight text-ink">
@@ -195,7 +195,7 @@ const JobPostings = () => {
           )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="animate-fade-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filteredJobs.map((job) => (
             <JobCard
               key={job.id}

@@ -106,7 +106,7 @@ const Dashboard = () => {
               {loading ? (
                 <SkeletonRegion label="Loading recent jobs"><RowsSkeleton rows={3} /></SkeletonRegion>
               ) : (
-                <ul className="divide-y divide-line">
+                <ul className="animate-fade-in divide-y divide-line">
                   {recentJobs.map((job) => (
                     <li key={job.id}>
                       <Link to={`/jobs/${job.id}`}
@@ -143,7 +143,7 @@ const Dashboard = () => {
                 ) : byVolume.length === 0 ? (
                   <EmptyState icon={BarChart3} title="No candidates yet" description="Upload resumes to a job to see volumes here." className="py-6" />
                 ) : (
-                  <ul className="space-y-3.5">
+                  <ul className="animate-fade-in space-y-3.5">
                     {byVolume.map((job) => (
                       <li key={job.id}>
                         <div className="mb-1.5 flex justify-between gap-3 text-sm">

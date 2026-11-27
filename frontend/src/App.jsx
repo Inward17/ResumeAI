@@ -41,9 +41,11 @@ function AppLayout() {
       <div className="relative order-first flex min-h-0 min-w-0 flex-1 flex-col md:order-none">
         <TopNavbar />
         <main id="main" ref={mainRef} className="flex-1 overflow-y-auto">
-          <Suspense fallback={<PageSkeleton />}>
-            <Outlet />
-          </Suspense>
+          <div key={pathname} className="h-full animate-fade-in">
+            <Suspense fallback={<PageSkeleton />}>
+              <Outlet />
+            </Suspense>
+          </div>
         </main>
       </div>
     </div>

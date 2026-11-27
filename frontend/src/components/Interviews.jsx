@@ -13,7 +13,7 @@ import { usePermissions } from '../lib/permissions';
 import { SkeletonRegion, CardGridSkeleton } from './ui/skeleton';
 
 const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove }) => (
-  <Card className="flex flex-col p-4 transition-colors hover:border-line-strong">
+  <Card className="flex flex-col p-4 transition duration-200 ease-out hover:border-line-strong hover:shadow-pop">
     <div className="flex items-start justify-between gap-3">
       <button type="button" onClick={onView} className="flex min-w-0 items-center gap-3 rounded-lg text-left">
         <Initials name={candidate.name} className="h-10 w-10 text-sm" />
@@ -157,7 +157,7 @@ const Interviews = () => {
           )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="animate-fade-in grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map(({ candidate, job }) => (
             <InterviewCard
               key={`${job.id}-${candidate.id}`}
