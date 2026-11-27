@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw, AlertTriangle, UserRound, X } from 'lucide-react';
+import { Mail, Phone, Send, XCircle, Loader2, Bot, Briefcase, HelpCircle, Check, RefreshCw, AlertTriangle, UserRound, X, ClipboardCheck } from 'lucide-react';
 import {
   getJob, getJobCandidate, getInterviewQuestions, getEvaluation, submitEvaluation, updateCandidateStatus,
 } from '../services/jobService';
@@ -8,6 +8,7 @@ import { useToast } from '../hooks/use-toast';
 import { cn } from '../lib/utils';
 import FactCheckerBot from './FactCheckerBot';
 import CandidateDossier from './CandidateDossier';
+import { ScorecardForm } from './Scorecards';
 import { loadPreferences } from '../lib/preferences';
 import { ConfirmDialog } from './Modal';
 import {
@@ -59,7 +60,7 @@ const QuestionCard = ({ index, question, tags, selectedTags, onToggleTag }) => {
   );
 };
 
-const PANEL_TABS = [{ id: 'candidate', label: 'Candidate' }, { id: 'factChecker', label: 'Fact checker' }];
+const PANEL_TABS = [{ id: 'candidate', label: 'Candidate' }, { id: 'scorecard', label: 'Scorecard' }, { id: 'factChecker', label: 'Fact checker' }];
 const PANEL_KEY = 'resumeai.interviewPanel';
 // The open tab (or closed) is remembered for this browser session only
 const readPanel = () => {
@@ -88,7 +89,7 @@ const QAPage = () => {
   // The cover letter changed after these questions were generated
   const [questionsStale, setQuestionsStale] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [panel, setPanel] = useState(readPanel); // null (closed) | 'candidate' | 'factChecker'
+  const [panel, setPanel] = useState(readPanel); // null (closed) | 'candidate' | 'scorecard' | 'factChecker'
   // Visited tabs stay mounted while the panel is open, so the chat survives a tab switch
   const [mounted, setMounted] = useState({});
   const [prefs] = useState(loadPreferences);
@@ -148,7 +149,7 @@ const QAPage = () => {
     const wasOpen = isPanelOpen;
     setPanel(tab);
     // A newly opened fact checker focuses its own input; otherwise focus the tab
-    if (wasOpen || tab === 'candidate') requestAnimationFrame(() => tabRefs.current[tab]?.focus());
+    if (wasOpen || tab !== 'factChecker') requestAnimationFrame(() => tabRefs.current[tab]?.focus());
   };
   const closePanel = () => {
     const opener = openerRefs.current[panel];
@@ -257,6 +258,10 @@ const QAPage = () => {
             <Button variant="secondary" ref={(el) => { openerRefs.current.candidate = el; }} onClick={() => openPanel('candidate')}
               disabled={!candidate} aria-expanded={panel === 'candidate'} aria-controls="interview-panel">
               <UserRound className="text-primary-text" aria-hidden="true" /> View candidate
+            </Button>
+            <Button variant="secondary" ref={(el) => { openerRefs.current.scorecard = el; }} onClick={() => openPanel('scorecard')}
+              disabled={!candidate} aria-expanded={panel === 'scorecard'} aria-controls="interview-panel">
+              <ClipboardCheck className="text-primary-text" aria-hidden="true" /> Fill scorecard
             </Button>
             <Button variant="secondary" ref={(el) => { openerRefs.current.factChecker = el; }} onClick={() => openPanel('factChecker')}
               disabled={!candidate} aria-expanded={panel === 'factChecker'} aria-controls="interview-panel">
@@ -392,7 +397,7 @@ const QAPage = () => {
       </div>
 
       {isPanelOpen && candidate && (
-        <aside id="interview-panel" aria-label={`${candidate.name}: candidate and fact checker`}
+        <aside id="interview-panel" aria-label={`${candidate.name}: candidate, scorecard and fact checker`}
           className="fixed inset-0 z-[45] flex flex-col bg-surface md:inset-y-0 md:left-auto md:right-0 md:w-[380px] md:border-l md:border-line md:shadow-pop"
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); closePanel(); } }}>
           <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-line px-3">
@@ -416,6 +421,12 @@ const QAPage = () => {
             <div role="tabpanel" id="panel-candidate" aria-labelledby="panel-tab-candidate" tabIndex={0}
               className={cn('min-h-0 flex-1 overflow-y-auto outline-none', panel !== 'candidate' && 'hidden')}>
               <CandidateDossier compact candidate={candidate} job={job} prefs={prefs} />
+            </div>
+          )}
+          {mounted.scorecard && (
+            <div role="tabpanel" id="panel-scorecard" aria-labelledby="panel-tab-scorecard" tabIndex={0}
+              className={cn('min-h-0 flex-1 overflow-y-auto outline-none', panel !== 'scorecard' && 'hidden')}>
+              <ScorecardForm jobId={jobId} candidateId={candidateId} />
             </div>
           )}
           {mounted.factChecker && (

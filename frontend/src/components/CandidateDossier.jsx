@@ -12,6 +12,7 @@ import { cn } from '../lib/utils';
 import { ScoreRing, Initials, Tag, scoreLevel } from './common';
 import ProjectReviews, { useProjectReviews } from './ProjectReviews';
 import CoverLetterSection from './CoverLetterSection';
+import { InterviewScorecards } from './Scorecards';
 
 const SOURCES = [
   { key: 'github', label: 'GitHub', Icon: Github },
@@ -339,6 +340,8 @@ const CandidateDossier = ({ candidate, job, prefs = DEFAULT_PREFERENCES, compact
         {job?.id && <CoverLetterSection jobId={job.id} candidateId={candidate.id} />}
 
         {job?.id && <ProjectReviews jobId={job.id} candidateId={candidate.id} state={projectReviews} />}
+
+        {job?.id && <InterviewScorecards jobId={job.id} candidate={candidate} compact={compact} />}
       </div>
 
       {/* Right: evidence */}

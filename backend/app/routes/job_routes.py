@@ -232,6 +232,7 @@ async def delete_job(job_id: str, job: dict = Depends(require_job_action("job.de
     # Candidate records stay: the same person can be in other jobs' pipelines.
     await db.applications.delete_many({"job_id": job_id})
     await db.evaluations.delete_many({"job_id": job_id})
+    await db.scorecards.delete_many({"job_id": job_id})
     # Leftover resume files; a task still being parsed deletes its own when done
     await delete_task_files({"job_id": job_id, "status": {"$ne": "processing"}})
     # Every task of the job goes, including ones a worker is running: their status
