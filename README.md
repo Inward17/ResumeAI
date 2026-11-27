@@ -105,6 +105,7 @@ docs/                    Architecture, setup guides, reports
 
 - [Architecture](docs/ARCHITECTURE.md): components, request flow, data model
 - [Deployment](docs/DEPLOYMENT.md): CI/CD, GitHub Pages and Hugging Face setup
+- [MCP server](docs/MCP.md): connect Claude, Cursor or other AI assistants to a workspace
 - [Scalability, database, authentication and teams](docs/SCALING_DATABASE_AUTH.md): setup guide
 - [Project report](docs/PROJECT_REPORT.md): algorithms and implementation in depth
 - [Evaluation results](docs/EVALUATION_RESULTS.md)

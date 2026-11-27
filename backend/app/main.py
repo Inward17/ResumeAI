@@ -20,6 +20,7 @@ from app.auth import AUTH_DISABLED, AuthUser, get_current_user
 from app.services import provider_keys
 from app.database import client, ensure_indexes, ping_database
 from app.services.task_queue import RESUME_WORKERS, task_queue
+from app import mcp_server
 from app.routes import resume, unified_verification_routes, job_routes, interview_questions_routes, evaluation_routes, fact_checker_routes, auth_routes, org_routes, cover_letter_routes, project_review_routes, jd_routes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -45,7 +46,8 @@ async def lifespan(app: FastAPI):
         await ensure_indexes()
     # RESUME_WORKERS=0 runs an API-only process (pair it with `python -m app.worker`)
     task_queue.start(resume.process_resume_task, RESUME_WORKERS)
-    yield
+    async with mcp_server.mcp.session_manager.run():
+        yield
     await task_queue.stop()
     # Close MongoDB connection on shutdown
     client.close()
@@ -102,6 +104,8 @@ app.include_router(interview_questions_routes.router, prefix="/api", dependencie
 app.include_router(evaluation_routes.router, prefix="/api", dependencies=authenticated)
 app.include_router(fact_checker_routes.router, prefix="/api", dependencies=authenticated)
 app.include_router(org_routes.router, prefix="/api", dependencies=authenticated)
+# MCP for AI assistants: workspace API keys only, checked inside the endpoint (app.mcp_server)
+app.add_route("/mcp", mcp_server.endpoint, include_in_schema=False)
 
 
 @app.get("/")

@@ -227,6 +227,32 @@ export const TeamSettings = () => {
 
 /* ── API keys ──────────────────────────────────────────────────────── */
 
+const MCP_URL = `${API_BASE_URL}/mcp`;
+
+const McpConnect = ({ copy, copied }) => (
+  <Card>
+    <CardHeader title="Connect an AI assistant (MCP)"
+      subtitle="Let Claude, Cursor or another MCP client read jobs and candidates and change candidate statuses. Use a workspace API key; it acts with Recruiter rights in this workspace." />
+    <div className="space-y-3 p-5">
+      <div className="flex items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded bg-subtle px-2 py-1.5 font-mono text-xs text-ink">{MCP_URL}</code>
+        <Button size="sm" variant="secondary" onClick={() => copy(MCP_URL, 'mcp')}>
+          {copied === 'mcp' ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />} {copied === 'mcp' ? 'Copied' : 'Copy URL'}
+        </Button>
+      </div>
+      <p className="text-xs text-ink-3">Claude Code</p>
+      <pre className="overflow-x-auto rounded-md bg-subtle px-3 py-2.5 text-xs leading-relaxed text-ink-2">
+{`claude mcp add --transport http resumeai ${MCP_URL} \\
+  --header "Authorization: Bearer rai_…"`}
+      </pre>
+      <p className="text-xs text-ink-3">Other clients (JSON config)</p>
+      <pre className="overflow-x-auto rounded-md bg-subtle px-3 py-2.5 text-xs leading-relaxed text-ink-2">
+{JSON.stringify({ mcpServers: { resumeai: { type: 'http', url: MCP_URL, headers: { Authorization: 'Bearer rai_…' } } } }, null, 2)}
+      </pre>
+    </div>
+  </Card>
+);
+
 export const ApiKeysSettings = () => {
   const { toast } = useToast();
   const { copy, copied } = useCopy();
@@ -297,6 +323,8 @@ export const ApiKeysSettings = () => {
           )}
         </div>
       </Card>
+
+      <McpConnect copy={copy} copied={copied} />
 
       <Card className="overflow-hidden">
         <CardHeader title="Active keys" />
