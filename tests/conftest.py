@@ -75,24 +75,7 @@ def _patch_db(mock_db):
     import importlib
     from contextlib import ExitStack
 
-    targets = [
-        "app.database.db",
-        "app.routes.job_routes.db",
-        "app.routes.resume.db",
-        "app.auth.db",
-        "app.org.db",
-        "app.routes.org_routes.db",
-        "app.services.task_queue.db",
-        "app.routes.evaluation_routes.db",
-        "app.routes.interview_questions_routes.db",
-        "app.services.fact_checker_service.db",
-        "app.services.cover_letter_service.db",
-        "app.routes.cover_letter_routes.db",
-        "app.routes.project_review_routes.db",
-        "app.services.quota.db",
-        "app.services.provider_keys.db",
-        "app.services.jd_matching_service.db",
-    ]
+    targets = DB_TARGETS
 
     # Pre-import every module so patch() can resolve the attribute
     for target in targets:
