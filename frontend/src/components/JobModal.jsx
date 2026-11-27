@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, Sparkles, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { JOB_STATUSES } from '../lib/statuses';
 import Modal from './Modal';
 import { Button, Field, Input, Select, Textarea } from './common';
+import { generateJobDescription } from '../services/jobService';
 
 const JOB_TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship'];
 const DEPARTMENTS = ['Engineering', 'Design', 'Product', 'Marketing', 'Sales', 'HR', 'Finance', 'Operations', 'Other'];
@@ -87,6 +88,59 @@ const Section = ({ title, children }) => (
   </section>
 );
 
+const TONES = [['neutral', 'Neutral'], ['friendly', 'Friendly'], ['formal', 'Formal']];
+
+/** Inline "Write with AI" panel: uses the title, location, job type, level and required skills above */
+const AiWriter = ({ form, onResult, onClose }) => {
+  const [notes, setNotes] = useState('');
+  const [tone, setTone] = useState('neutral');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const generate = async () => {
+    if (form.description.trim() && !window.confirm('Replace the current description and skills with the AI draft?')) return;
+    setBusy(true);
+    setError('');
+    try {
+      onResult(await generateJobDescription({
+        title: form.title.trim(), seniority: form.experienceLevel, location: form.location.trim(),
+        employmentType: form.employmentType, notes: notes.trim(), mustHaveSkills: form.requirements.slice(0, 20), tone,
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border border-line-strong bg-subtle p-3" aria-label="Write with AI">
+      <p className="text-xs text-ink-3">
+        Uses the title, location, job type, experience level and required skills you've entered. Review the draft before saving.
+      </p>
+      <Field label="Notes for the AI" htmlFor="ai-notes" optional hint="Responsibilities, team, must-haves. Up to 2,000 characters.">
+        <Textarea id="ai-notes" rows={3} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)}
+          placeholder="e.g. Owns the payments API, works with 2 frontend devs, on-call one week a month" />
+      </Field>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Tone" htmlFor="ai-tone" className="w-36">
+          <Select id="ai-tone" value={tone} onChange={(e) => setTone(e.target.value)}>
+            {TONES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </Select>
+        </Field>
+        <div className="ml-auto flex gap-2">
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button onClick={generate} disabled={busy || !form.title.trim()}>
+            <Sparkles aria-hidden="true" />{busy ? 'Writing…' : 'Generate'}
+          </Button>
+        </div>
+      </div>
+      {!form.title.trim() && <p className="text-xs text-ink-3">Add a job title first.</p>}
+      {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+    </div>
+  );
+};
+
 const EMPTY = {
   title: '', description: '', requirements: [], preferredSkills: [],
   employmentType: 'Full-time', location: '', department: '', experienceLevel: '',
@@ -97,11 +151,15 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiNotes, setAiNotes] = useState([]);
   const isEditing = !!job;
 
   useEffect(() => {
     if (!isOpen) return;
     setError('');
+    setAiOpen(false);
+    setAiNotes([]);
     setForm(job ? {
       title: job.title || '',
       description: job.description || '',
@@ -179,11 +237,35 @@ const JobModal = ({ isOpen, onClose, job, onSave }) => {
         </Section>
 
         <Section title="What you're screening for">
-          <Field label="Job description" htmlFor="job-description" required
-            hint="Responsibilities, must-haves and what success looks like. Resumes are scored against this.">
-            <Textarea id="job-description" rows={6} required
-              value={form.description} onChange={(e) => set('description', e.target.value)} />
-          </Field>
+          <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button variant="secondary" size="sm" aria-expanded={aiOpen} onClick={() => setAiOpen((o) => !o)}>
+                <Sparkles aria-hidden="true" />Write with AI
+              </Button>
+            </div>
+            {aiOpen && (
+              <AiWriter form={form} onClose={() => setAiOpen(false)} onResult={(r) => {
+                setForm((f) => ({ ...f, description: r.description, requirements: r.requiredSkills, preferredSkills: r.preferredSkills }));
+                setAiNotes(r.inclusiveLanguageNotes);
+                setAiOpen(false);
+              }} />
+            )}
+            <Field label="Job description" htmlFor="job-description" required
+              hint="Responsibilities, must-haves and what success looks like. Resumes are scored against this.">
+              <Textarea id="job-description" rows={6} required
+                value={form.description} onChange={(e) => set('description', e.target.value)} />
+            </Field>
+            {aiNotes.length > 0 && (
+              <div className="rounded-lg bg-subtle px-3 py-2 text-xs text-ink-2">
+                <p className="font-medium">Inclusive language: consider rewording</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {aiNotes.map((n) => (
+                    <li key={n.phrase}>"{n.phrase}"{n.suggestion && <> → "{n.suggestion}"</>}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
           <SkillsInput id="required-skills" label="Required skills" hint="Each one gets its own match score per candidate."
             skills={form.requirements} onChange={(v) => set('requirements', v)} />
           <SkillsInput id="preferred-skills" label="Preferred skills" optional

@@ -13,8 +13,8 @@ from bson import ObjectId
 from app.auth import AuthUser, get_current_user
 from app.database import db
 from app.org import (
-    email_delivery_configured, hash_secret, join_url, membership, new_api_key, oid, reject_api_key, require_manager,
-    send_invite_email,
+    PERMISSIONS, email_delivery_configured, hash_secret, job_filter, join_url, membership, new_api_key, oid,
+    reject_api_key, require_manager, send_invite_email,
 )
 from app.services import provider_keys
 from app.services.quota import QUOTAS, quota_limit, rate_limit
@@ -29,13 +29,17 @@ class OrgUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+# Every role but owner: there is one owner, set when the workspace is created
+AssignableRole = Literal["admin", "member", "hiring_manager", "interviewer"]
+
+
 class InviteCreate(BaseModel):
     email: str = Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=254)
-    role: Literal["admin", "member"] = "member"
+    role: AssignableRole = "member"
 
 
 class RoleUpdate(BaseModel):
-    role: Literal["admin", "member"]
+    role: AssignableRole
 
 
 class ApiKeyCreate(BaseModel):
@@ -78,6 +82,8 @@ async def get_org(user: AuthUser = Depends(get_current_user)):
         invites = [_invite_out(i, True) async for i in db.invites.find({"org_id": m["org_id"], "status": "pending"}).sort("created_at", -1)]
     return {
         "id": m["org_id"], "name": org["name"] if org else "Workspace", "role": m["role"], "me": user.uid,
+        # What the caller may do with jobs and candidates, so the UI can hide the rest (the API enforces it)
+        "permissions": sorted(PERMISSIONS.get(m["role"], ())),
         "members": [{**x, "picture": pictures.get(x["uid"])} for x in members],
         "invites": invites,
         "email_delivery": email_delivery_configured(),
@@ -120,6 +126,7 @@ async def remove_member(uid: str, user: AuthUser = Depends(get_current_user)):
     await db.api_keys.update_many({"org_id": m["org_id"], "created_by": uid, "revoked_at": None},
                                   {"$set": {"revoked_at": datetime.utcnow()}})
     await db.users.update_one({"uid": uid, "org_id": m["org_id"]}, {"$unset": {"org_id": ""}})
+    await db.jobs.update_many({"org_id": m["org_id"]}, {"$pull": {"team_uids": uid}})
     return {"removed": uid}
 
 
@@ -233,12 +240,15 @@ async def revoke_api_key(key_id: str, user: AuthUser = Depends(get_current_user)
 
 @router.get("/org/usage")
 async def get_usage(refresh: bool = False, user: AuthUser = Depends(get_current_user)):
+    reject_api_key(user)
     m = await membership(user)
     month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    job_ids = [str(j["_id"]) async for j in db.jobs.find({"org_id": m["org_id"]}, {"_id": 1})]
+    # Restricted roles count only the jobs they are assigned to
+    jobs = job_filter({**m, "uid": user.uid})
+    job_ids = [str(j["_id"]) async for j in db.jobs.find(jobs, {"_id": 1})]
     workspace = {
         "jobs": len(job_ids),
-        "active_jobs": await db.jobs.count_documents({"org_id": m["org_id"], "status": "Active"}),
+        "active_jobs": await db.jobs.count_documents({**jobs, "status": "Active"}),
         "candidates_this_month": await db.applications.count_documents({"job_id": {"$in": job_ids}, "application_date": {"$gte": month_start}}),
         "candidates_total": await db.applications.count_documents({"job_id": {"$in": job_ids}}),
         "members": await db.org_members.count_documents({"org_id": m["org_id"]}),
@@ -256,6 +266,7 @@ HISTORY_DAYS = 30
 @router.get("/org/ai-usage")
 async def get_ai_usage(refresh: bool = False, user: AuthUser = Depends(get_current_user)):
     """Today's AI calls and uploads against the daily limits, by feature, the last 30 days, and Gemini/Groq status."""
+    reject_api_key(user)
     m = await membership(user)
     now = datetime.now(timezone.utc)
     today = now.date()

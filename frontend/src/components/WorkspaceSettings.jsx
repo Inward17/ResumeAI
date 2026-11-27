@@ -16,11 +16,10 @@ import {
 import { ConfirmDialog } from './Modal';
 import CalendarSettings from './CalendarSettings';
 import { API_BASE_URL } from '../services/api';
+import { ROLE_LABEL, ASSIGNABLE_ROLES } from '../lib/permissions';
 import {
   Card, CardHeader, Button, IconButton, Field, Input, Select, Initials, EmptyState, Skeleton, Menu, StatStrip, RelativeDate, formatDate, Segmented,
 } from './common';
-
-const ROLE_LABEL = { owner: 'Owner', admin: 'Admin', member: 'Member' };
 
 const useCopy = () => {
   const { toast } = useToast();
@@ -121,15 +120,14 @@ export const TeamSettings = () => {
           <CardHeader title="Invite people" subtitle={org.email_delivery
             ? 'They get an email with a link to join. You can also copy the link.'
             : 'Email sending isn’t configured (COMPOSIO_API_KEY), so you’ll get a link to share.'} />
-          <form onSubmit={sendInvite} className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+          <form onSubmit={sendInvite} className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-[minmax(0,1fr)_11rem_auto] sm:items-end">
             <Field label="Email" htmlFor="invite-email">
               <Input id="invite-email" type="email" required placeholder="colleague@company.com" autoComplete="off"
                 value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
             <Field label="Role" htmlFor="invite-role">
-              <Select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
+              <Select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)} aria-describedby="invite-role-help">
+                {ASSIGNABLE_ROLES.map((r) => <option key={r.id} value={r.id}>{ROLE_LABEL[r.id]}</option>)}
               </Select>
             </Field>
             <Button type="submit" disabled={sending || !email.trim()}>
@@ -137,7 +135,13 @@ export const TeamSettings = () => {
               {sending ? 'Sending…' : 'Send invite'}
             </Button>
           </form>
-          <p className="-mt-2 px-5 pb-4 text-xs text-ink-3">Admins can invite people and manage API keys. Members can work on every job.</p>
+          <dl id="invite-role-help" className="-mt-2 space-y-1 px-5 pb-4 text-xs text-ink-3">
+            {ASSIGNABLE_ROLES.map((r) => (
+              <div key={r.id} className={cn('flex gap-1.5', r.id === role && 'text-ink-2')}>
+                <dt className="shrink-0 font-medium">{ROLE_LABEL[r.id]}:</dt><dd>{r.description}</dd>
+              </div>
+            ))}
+          </dl>
           {lastInvite && (
             <div className={cn('mx-5 mb-5 rounded-md border p-3 text-sm',
               lastInvite.email_sent ? 'border-success/30 bg-success-soft' : 'border-warning/30 bg-warning-soft')}>
@@ -156,7 +160,7 @@ export const TeamSettings = () => {
         </Card>
       )}
 
-      <Card className="overflow-hidden">
+      <Card>
         <CardHeader title="Members" subtitle={`${org.members.length} ${org.members.length === 1 ? 'person' : 'people'}`} />
         <ul className="divide-y divide-line">
           {org.members.map((m) => {
@@ -166,7 +170,9 @@ export const TeamSettings = () => {
               actions.push({ label: 'Leave workspace', Icon: LogOut, danger: true,
                 onSelect: () => setConfirm({ title: 'Leave this workspace?', description: 'You’ll lose access to its jobs and candidates until someone invites you again.', label: 'Leave', run: () => removeMember(m.uid).then(() => window.location.assign(`${import.meta.env.BASE_URL}dashboard`)) }) });
             } else if (manager && !self && m.role !== 'owner') {
-              actions.push({ label: m.role === 'admin' ? 'Make member' : 'Make admin', onSelect: run(() => changeMemberRole(m.uid, m.role === 'admin' ? 'member' : 'admin'), 'Role updated') });
+              ASSIGNABLE_ROLES.filter((r) => r.id !== m.role).forEach((r) => actions.push({
+                label: `Make ${ROLE_LABEL[r.id].toLowerCase()}`, onSelect: run(() => changeMemberRole(m.uid, r.id), 'Role updated'),
+              }));
               actions.push({ separator: true });
               actions.push({ label: 'Remove from workspace', Icon: Trash2, danger: true,
                 onSelect: () => setConfirm({ title: `Remove ${m.name || m.email}?`, description: 'They lose access to every job in this workspace. You can invite them again later.', label: 'Remove', run: run(() => removeMember(m.uid), 'Member removed') }) });
@@ -393,6 +399,7 @@ const FEATURES = [
   { id: 'factChecker', label: 'Fact checker' },
   { id: 'coverLetters', label: 'Cover letters', hint: 'attach and re-analyse' },
   { id: 'projectReviews', label: 'Project reviews', hint: 'one call per project' },
+  { id: 'jdGeneration', label: 'Job descriptions', hint: 'written with AI' },
   { id: 'resumeParsing', label: 'Resume parsing', hint: 'counted as resume uploads' },
 ];
 

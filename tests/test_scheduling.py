@@ -326,3 +326,25 @@ class TestListAndAccess:
         mon = next_monday()
         assert (await client.post(f"{setup['base']}/availability", json={
             "interviewer_uids": ["ana"], "start_date": mon.isoformat(), "end_date": mon.isoformat()})).status_code == 403
+
+
+async def test_roles_limit_scheduling(client, mock_db):
+    from datetime import datetime as _dt
+    from bson import ObjectId
+    from tests.test_rbac import _sign_in_as, _user, _workspace
+    org_id, assigned, other = await _workspace(client, mock_db)
+    now = _dt.utcnow()
+    for job_id in (assigned, other):
+        await mock_db.interviews.insert_one({"_id": ObjectId(), "org_id": org_id, "job_id": job_id, "candidate_id": "c",
+                                             "status": "scheduled", "start": now, "end": now.replace(year=now.year + 1)})
+    body = {"interviewer_uids": ["iv"], "duration_minutes": 30, "timezone": "UTC",
+            "start_date": now.date().isoformat(), "end_date": now.date().isoformat()}
+
+    _sign_in_as(_user("iv"))  # interviewer: can't schedule, sees only assigned jobs' interviews
+    assert (await client.post(f"/api/jobs/{assigned}/candidates/cand-a/interviews/availability", json=body)).status_code == 403
+    assert {i["job_id"] for i in (await client.get("/api/interviews")).json()["interviews"]} == {assigned}
+
+    _sign_in_as(_user("hm"))  # hiring manager: may schedule on assigned jobs only
+    listed = (await client.get("/api/interviews")).json()["interviews"]
+    assert {i["job_id"] for i in listed} == {assigned}
+    assert (await client.post(f"/api/jobs/{other}/candidates/cand-b/interviews/availability", json=body)).status_code == 404

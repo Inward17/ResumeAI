@@ -10,6 +10,7 @@ import { ScheduleDialog, UpcomingInterviews } from './Scheduling';
 import {
   Card, PageContainer, PageHeader, Initials, EmptyState, Button, StatStrip, ScoreBar, Segmented, SearchInput, StatusSelect, Skeleton,
 } from './common';
+import { usePermissions } from '../lib/permissions';
 
 const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove, onSchedule }) => (
   <Card className="flex flex-col p-4 transition-colors hover:border-line-strong">
@@ -23,7 +24,7 @@ const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove, onSched
           </p>
         </div>
       </button>
-      <StatusSelect candidate={candidate} onChange={(_, status) => onMove(status)} />
+      <StatusSelect candidate={candidate} onChange={(_, status) => onMove(status)} disabled={!onMove} />
     </div>
 
     <dl className="mt-4 grid grid-cols-2 gap-4 text-xs">
@@ -45,9 +46,11 @@ const InterviewCard = ({ candidate, job, prefs, onView, onStart, onMove, onSched
 
     <div className="mt-4 flex gap-2 border-t border-line pt-3">
       <Button variant="secondary" size="sm" onClick={onView} className="flex-1">Dossier</Button>
-      <Button variant="secondary" size="sm" onClick={onSchedule} className="flex-1" aria-label={`Schedule interview with ${candidate.name}`}>
-        <CalendarPlus aria-hidden="true" /> Schedule
-      </Button>
+      {onSchedule && (
+        <Button variant="secondary" size="sm" onClick={onSchedule} className="flex-1" aria-label={`Schedule interview with ${candidate.name}`}>
+          <CalendarPlus aria-hidden="true" /> Schedule
+        </Button>
+      )}
       <Button size="sm" onClick={onStart} className="flex-1">
         {candidate.interviewScore != null ? 'Open interview' : 'Start interview'} <ArrowRight aria-hidden="true" />
       </Button>
@@ -66,6 +69,8 @@ const Interviews = () => {
   const [selected, setSelected] = useState(null); // {candidateId, jobId}
   const [scheduling, setScheduling] = useState(null); // {candidate, job}
   const [refreshKey, setRefreshKey] = useState(0);
+  const { can } = usePermissions();
+  const canMove = can('candidate.status');
 
   useEffect(() => {
     const load = async () => {
@@ -172,8 +177,8 @@ const Interviews = () => {
               prefs={prefs}
               onView={() => setSelected({ candidateId: candidate.id, jobId: job.id })}
               onStart={() => startInterview(job.id, candidate.id)}
-              onMove={(status) => handleMove(candidate.id, job.id, status)}
-              onSchedule={() => setScheduling({ candidate, job })}
+              onMove={canMove ? (status) => handleMove(candidate.id, job.id, status) : undefined}
+              onSchedule={canMove ? () => setScheduling({ candidate, job }) : undefined}
             />
           ))}
         </div>
@@ -185,7 +190,7 @@ const Interviews = () => {
         job={selectedEntry?.job}
         prefs={prefs}
         onClose={() => setSelected(null)}
-        onStatusUpdate={(candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status)}
+        onStatusUpdate={canMove ? (candidateId, status) => handleMove(candidateId, selectedEntry.job.id, status) : undefined}
         onTakeInterview={(c) => startInterview(selectedEntry.job.id, c.id)}
         onScheduled={() => setRefreshKey((k) => k + 1)}
       />

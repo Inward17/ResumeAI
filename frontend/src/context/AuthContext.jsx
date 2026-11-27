@@ -13,6 +13,7 @@ import {
     updateProfile
 } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import { forgetOrg } from '../lib/permissions';
 import { apiFetch } from '../services/api';
 
 export const AuthContext = createContext(null);
@@ -83,6 +84,8 @@ export const AuthProvider = ({ children }) => {
     const logout = async () => {
         try {
             await signOut(auth);
+            // Next sign-in may be someone else: drop the cached workspace role (lib/permissions.js)
+            forgetOrg();
             return { success: true };
         } catch (error) {
             return { success: false, error: error.message };

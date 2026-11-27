@@ -64,7 +64,7 @@
 | BE-09 | Medium | Backend | Duplicate check uses exact name + phone (formatting creates duplicates) | ⬜ Open |
 | BE-10 | Medium | Backend | GitHub username taken from URL with query string (`user?tab=…`) | ⬜ Open |
 | BE-11 | Medium | Backend | Deleting a job leaves its applications, tasks and resume files | ⬜ Open |
-| BE-12 | Low | Backend | `ai_analysis_routes` (AI candidate summary) exists but is never mounted | ⬜ Open |
+| BE-12 | Low | Backend | `ai_analysis_routes` (AI candidate summary) exists but is never mounted | ✅ Removed (issue #27) |
 | FE-01 | High | Frontend | Blank white page when Firebase settings are missing | ✅ Fixed `b47024e` |
 | FE-02 | High | Frontend | Draft jobs are published as Active; department and salary are discarded | ✅ Fixed `8307ec4` (API), `b47024e` (UI) |
 | FE-03 | Medium | Frontend | Dashboard shows invented numbers (1.2k, 24, 8, 78%) when data is empty | ✅ Fixed `b47024e` |
@@ -132,7 +132,7 @@ UI-only / mock features (Settings page, Profile save, notifications, etc.) were 
 | ☐ | **BE-09** | Medium | `backend/app/routes/resume.py` L280 | Duplicate check uses exact `full_name + phone_number`. "+91 98200 11111" vs "9820011111" creates duplicates. | Upload the same resume with a reformatted phone | Normalise phone (E.164) and email before matching | |
 | ☐ | **BE-10** | Medium | `backend/app/services/github_services_v2/github_service.py` L364 | `"github.com/user?tab=repositories".split("/")[-1]` gives username `user?tab=repositories`, so the GitHub lookup fails. Usernames are also not validated before being put into API paths. | Resume with a query-string GitHub URL | Parse with `urllib.parse`; validate `^[A-Za-z0-9-]{1,39}$` | |
 | ☐ | **BE-11** | Medium | `backend/app/routes/job_routes.py` (`delete_job`) | Deleting a job leaves applications, tasks and uploaded resume files behind (personal data retention). | Delete a job, count `applications` for it | Cascade delete, or soft-delete with a retention job | |
-| ☐ | **BE-12** | Low | `backend/app/routes/ai_analysis_routes.py`, `backend/app/main.py` | The Gemini candidate-analysis route is never included in the app, so the UI can never show a real AI summary. | `GET /api/jobs/{id}/candidates/{cid}/analysis` → 404 | Mount the router (it already has the owner check) and call it from the modal | |
+| ☑ | **BE-12** | Low | `backend/app/routes/ai_analysis_routes.py`, `backend/app/main.py` | The Gemini candidate-analysis route is never included in the app, so the UI can never show a real AI summary. | `GET /api/jobs/{id}/candidates/{cid}/analysis` → 404 | Removed instead (issue #27): unused, and it sent the Gemini key in the URL | |
 
 ## Frontend bugs (☐ open · ☑ fixed)
 

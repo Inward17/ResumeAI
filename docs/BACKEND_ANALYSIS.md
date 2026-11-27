@@ -108,7 +108,7 @@ Turning the flag on breaks verification for every candidate. Either commit the m
   - `services/github_services/` (v1, plus `utils/date_utils.py`, `text_utils.py`, `constants.py` that only it uses)
   - `services/jd_matching_service.py`
   - `models/github_writer.py`
-  - `routes/ai_analysis_routes.py` (never mounted)
+  - `routes/ai_analysis_routes.py` (never mounted; removed for issue #27)
   - ~~`backend/server.py` (old duplicate API with its own upload route), `resume_parser.py`, `extra/test.py`, `check_db.py`, `test_tasks.py` (hard-coded to the `resumeai` DB, not `resume_validator`), `profile_github.py`~~ — deleted
 - **Two copies of the same logic**: legacy vs agent verification, keyword vs embedding skill scoring, `DUAL_RUN` shadow mode. Pick one path per concern.
 - **Tests mock the integration points** (`run_unified_skill_scoring`, verification service), which is how P0 #1 slipped through. Add a few contract tests that run the real functions with only network I/O stubbed, like the one added on this branch.

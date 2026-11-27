@@ -24,9 +24,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from pymongo import ReturnDocument
 
-from app.auth import AuthUser, get_current_user, require_job_owner
+from app.auth import AuthUser, get_current_user, require_job_action
 from app.database import db
-from app.org import APP_URL, membership, oid, reject_api_key, send_email
+from app.org import APP_URL, RESTRICTED_ROLES, access, job_filter, oid, reject_api_key, require_action, send_email
 from app.routes.evaluation_routes import EARLY_STATUSES
 from app.services import integrations, provider_keys, scheduling
 from app.services.integrations import ProviderError
@@ -36,6 +36,7 @@ from app.services.scheduling import iso, local_time, naive, utc
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["scheduling"])
+SCHEDULE_ACTION = "candidate.status"  # booking moves the candidate to Interview
 public_router = APIRouter(prefix="/public/schedule", tags=["scheduling"])
 
 LINK_DAYS = 7
@@ -102,15 +103,25 @@ class PickIn(BaseModel):
 # ── Access (one place, so it can switch to RBAC permissions later) ──────
 
 async def require_scheduler(user: AuthUser) -> dict:
-    """Who may schedule: any signed-in workspace member. Uses their own calendar, so no API keys."""
+    """Who may schedule: roles that can move candidates (recruiters, hiring managers). Uses their own calendar, so no API keys."""
     reject_api_key(user)
-    return await membership(user)
+    acc = await access(user)
+    require_action(acc, SCHEDULE_ACTION)
+    return acc
+
+
+async def _visible_job_ids(acc: dict) -> Optional[List[str]]:
+    """None for roles that see every job; otherwise the ids of the jobs the caller is assigned to."""
+    if acc["role"] not in RESTRICTED_ROLES:
+        return None
+    return [str(j["_id"]) async for j in db.jobs.find(job_filter(acc), {"_id": 1})]
 
 
 async def _interview(interview_id: str, user: AuthUser) -> tuple:
     m = await require_scheduler(user)
     iv = await db.interviews.find_one({"_id": oid(interview_id), "org_id": m["org_id"]})
-    if not iv:
+    visible = await _visible_job_ids(m) if iv else None
+    if not iv or (visible is not None and iv.get("job_id") not in visible):
         raise HTTPException(404, "Interview not found")
     return m, iv
 
@@ -304,7 +315,7 @@ def _provider_error(exc: ProviderError) -> HTTPException:
 
 @router.post("/jobs/{job_id}/candidates/{candidate_id}/interviews/availability")
 async def availability(job_id: str, candidate_id: str, body: AvailabilityIn,
-                       job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+                       job: dict = Depends(require_job_action(SCHEDULE_ACTION)), user: AuthUser = Depends(get_current_user)):
     """Common free slots of the interviewers whose calendars are connected; the others are listed as not checked."""
     m = await require_scheduler(user)
     rate_limit(user.uid, "availability")
@@ -328,7 +339,7 @@ async def availability(job_id: str, candidate_id: str, body: AvailabilityIn,
 
 @router.post("/jobs/{job_id}/candidates/{candidate_id}/interviews")
 async def book(job_id: str, candidate_id: str, body: BookIn,
-               job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+               job: dict = Depends(require_job_action(SCHEDULE_ACTION)), user: AuthUser = Depends(get_current_user)):
     """Book a slot now on the caller's calendar and invite interviewers + candidate."""
     m = await require_scheduler(user)
     rate_limit(user.uid, "booking")
@@ -350,7 +361,7 @@ async def book(job_id: str, candidate_id: str, body: BookIn,
 
 @router.post("/jobs/{job_id}/candidates/{candidate_id}/interviews/link")
 async def create_link(job_id: str, candidate_id: str, body: LinkIn,
-                      job: dict = Depends(require_job_owner), user: AuthUser = Depends(get_current_user)):
+                      job: dict = Depends(require_job_action(SCHEDULE_ACTION)), user: AuthUser = Depends(get_current_user)):
     """Offer slots to the candidate through a public link; the link is shown once (only its hash is kept)."""
     m = await require_scheduler(user)
     rate_limit(user.uid, "booking")
@@ -374,12 +385,16 @@ async def create_link(job_id: str, candidate_id: str, body: LinkIn,
 @router.get("/interviews")
 async def list_interviews(job_id: Optional[str] = None, mine: bool = False, user: AuthUser = Depends(get_current_user)):
     """Upcoming interviews of the workspace (scheduled, and proposed links not yet expired)."""
-    m = await membership(user)
+    reject_api_key(user)
+    m = await access(user)
     now = datetime.utcnow()
     q = {"org_id": m["org_id"], "$or": [{"status": "scheduled", "end": {"$gte": now}},
                                         {"status": {"$in": ["proposed", "booking"]}, "token_expires_at": {"$gt": now}}]}
     if job_id:
         q["job_id"] = str(job_id)
+    visible = await _visible_job_ids(m)
+    if visible is not None:
+        q = {"$and": [q, {"job_id": {"$in": visible}}]}
     if mine:
         q = {"$and": [q, {"$or": [{"organizer_uid": user.uid}, {"interviewer_uids": user.uid}]}]}
     docs = await db.interviews.find(q).to_list(500)

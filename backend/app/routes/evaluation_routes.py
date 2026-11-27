@@ -3,7 +3,7 @@ Evaluation Routes — Store interview evaluation scores in the evaluations colle
 """
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from app.auth import require_job_owner
+from app.auth import require_job_action, require_job_owner
 from pydantic import BaseModel
 from typing import List, Dict
 
@@ -38,7 +38,7 @@ class EvaluationSubmission(BaseModel):
     total_possible: int
 
 
-@router.post("/{job_id}/candidates/{candidate_id}/evaluation", dependencies=[Depends(require_job_owner)])
+@router.post("/{job_id}/candidates/{candidate_id}/evaluation", dependencies=[Depends(require_job_action("evaluation.write"))])
 async def submit_evaluation(job_id: str, candidate_id: str, evaluation: EvaluationSubmission):
     """
     Store the interviewer's evaluation of a candidate.

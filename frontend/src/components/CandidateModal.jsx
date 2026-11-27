@@ -6,9 +6,11 @@ import { DEFAULT_PREFERENCES } from '../lib/preferences';
 import { Button, Select } from './common';
 import CandidateDossier from './CandidateDossier';
 import { ScheduleDialog } from './Scheduling';
+import { usePermissions } from '../lib/permissions';
 
 const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onClose, onStatusUpdate, onTakeInterview, onScheduled }) => {
   const [scheduling, setScheduling] = useState(false);
+  const { can } = usePermissions();
   if (!candidate) return null;
 
   return (
@@ -22,13 +24,13 @@ const CandidateModal = ({ open, candidate, job, prefs = DEFAULT_PREFERENCES, onC
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <label htmlFor="candidate-status" className="text-sm text-ink-3">Status</label>
-            <Select id="candidate-status" value={candidate.status} className="w-40"
+            <Select id="candidate-status" value={candidate.status} className="w-40" disabled={!onStatusUpdate}
               onChange={(e) => onStatusUpdate?.(candidate.id, e.target.value)}>
               {CANDIDATE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </Select>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {job && (
+            {job && can('candidate.status') && (
               <Button variant="secondary" onClick={() => setScheduling(true)}>
                 <CalendarPlus aria-hidden="true" /> Schedule interview
               </Button>
