@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { Button, Tag } from './common';
 import { getProjectReviews, startProjectReviews } from '../services/jobService';
 import { usePermissions } from '../lib/permissions';
+import { Skeleton, SkeletonRegion } from './ui/skeleton';
 
 const STEP = { queued: 'Queued', visiting: 'Visiting the site…', reviewing: 'AI is reviewing…', done: 'Done', failed: 'Failed' };
 const SITE = {
@@ -181,7 +182,16 @@ const ProjectReviews = ({ jobId, candidateId, state }) => {
     return (
       <section>
         <h3 className="mb-2.5 text-sm font-semibold text-ink">Projects</h3>
-        <p className="text-sm text-ink-3">{error || 'Loading projects…'}</p>
+        {error ? <p className="text-sm text-ink-3">{error}</p> : (
+          <SkeletonRegion label="Loading projects" className="space-y-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-3 rounded-md border border-line p-3" aria-hidden="true">
+                <Skeleton className="h-8 w-8 shrink-0" />
+                <div className="flex-1 space-y-1.5"><Skeleton className="h-3.5 w-1/2" /><Skeleton className="h-3 w-1/3" /></div>
+              </div>
+            ))}
+          </SkeletonRegion>
+        )}
       </section>
     );
   }

@@ -19,6 +19,7 @@ import { ROLE_LABEL, ASSIGNABLE_ROLES } from '../lib/permissions';
 import {
   Card, CardHeader, Button, IconButton, Field, Input, Select, Initials, EmptyState, Skeleton, Menu, StatStrip, RelativeDate, formatDate, Segmented,
 } from './common';
+import { SkeletonRegion, RowsSkeleton, PanelSkeleton } from './ui/skeleton';
 
 const useCopy = () => {
   const { toast } = useToast();
@@ -69,7 +70,7 @@ export const TeamSettings = () => {
   useEffect(() => { load(); }, [load]);
 
   if (error) return <ErrorCard error={error} onRetry={load} />;
-  if (!org) return <div className="space-y-4"><Skeleton className="h-40 rounded-lg" /><Skeleton className="h-64 rounded-lg" /></div>;
+  if (!org) return <SkeletonRegion label="Loading workspace" className="space-y-4"><PanelSkeleton rows={2} /><PanelSkeleton rows={4} avatar /></SkeletonRegion>;
 
   const manager = org.role === 'owner' || org.role === 'admin';
   const run = (fn, success) => async (...args) => {
@@ -300,7 +301,7 @@ export const ApiKeysSettings = () => {
 
       <Card className="overflow-hidden">
         <CardHeader title="Active keys" />
-        {!keys ? <div className="p-5"><Skeleton className="h-10" /></div> : keys.length === 0 ? (
+        {!keys ? <SkeletonRegion label="Loading API keys"><RowsSkeleton rows={2} /></SkeletonRegion> : keys.length === 0 ? (
           <EmptyState icon={KeyRound} title="No API keys yet" description="Keys you create appear here." className="py-8" />
         ) : (
           <ul className="divide-y divide-line">
@@ -478,7 +479,19 @@ export const AiSettings = () => {
   useEffect(() => { load(); }, [load]);
 
   if (error) return <ErrorCard error={error} onRetry={() => load(true)} />;
-  if (!data) return <div className="space-y-4"><Skeleton className="h-36 rounded-lg" /><Skeleton className="h-48 rounded-lg" /></div>;
+  if (!data) {
+    return (
+      <SkeletonRegion label="Loading AI usage" className="space-y-6">
+        <div className="rounded-lg border border-line bg-surface" aria-hidden="true">
+          <div className="border-b border-line px-5 py-4"><Skeleton className="h-4 w-32" /></div>
+          <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
+            {[1, 2].map((i) => <div key={i} className="space-y-2"><Skeleton className="h-3.5 w-28" /><Skeleton className="h-2 rounded-full" /></div>)}
+          </div>
+        </div>
+        <PanelSkeleton rows={4} />
+      </SkeletonRegion>
+    );
+  }
 
   const resets = new Date(data.resetsAt);
   const featureMax = Math.max(1, ...FEATURES.map((f) => data.features[f.id] || 0));
@@ -615,7 +628,19 @@ export const IntegrationsSettings = () => {
   };
 
   if (error) return <ErrorCard error={error} onRetry={() => load(true)} />;
-  if (!data) return <div className="space-y-4"><Skeleton className="h-24 rounded-lg" /><Skeleton className="h-72 rounded-lg" /></div>;
+  if (!data) {
+    return (
+      <SkeletonRegion label="Loading integrations" className="space-y-4">
+        <Skeleton className="h-4 w-full max-w-xl" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="grid grid-cols-1 gap-4 rounded-lg border border-line bg-surface p-5 md:grid-cols-[14rem_minmax(0,1fr)]" aria-hidden="true">
+            <div className="space-y-2"><Skeleton className="h-4 w-24" /><Skeleton className="h-3 w-32" /></div>
+            <div className="space-y-2"><Skeleton className="h-3.5 w-3/4" /><Skeleton className="h-8 w-40" /></div>
+          </div>
+        ))}
+      </SkeletonRegion>
+    );
+  }
 
   const { canManage, keysEnabled } = data;
   return (
@@ -708,7 +733,16 @@ export const UsageSettings = () => {
   useEffect(() => { load(); }, [load]);
 
   if (error) return <ErrorCard error={error} onRetry={load} />;
-  if (!data) return <Skeleton className="h-36 rounded-lg" />;
+  if (!data) {
+    return (
+      <SkeletonRegion label="Loading plan and usage">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="mt-2 h-8 w-32" />
+        <Skeleton className="mt-2 h-4 w-full max-w-lg" />
+        <Skeleton className="mt-4 h-24 rounded-lg" />
+      </SkeletonRegion>
+    );
+  }
 
   const w = data.workspace;
   return (

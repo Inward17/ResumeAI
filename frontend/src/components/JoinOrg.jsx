@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
+import { Skeleton, SkeletonRegion } from './ui/skeleton';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/use-toast';
 import { previewInvite, acceptInvite } from '../services/orgService';
@@ -45,7 +46,13 @@ const JoinOrg = () => {
           <EmptyState icon={AlertTriangle} title="Can't join this workspace" description={error}
             action={<Button variant="secondary" onClick={() => navigate('/dashboard')}>Go to your workspace</Button>} />
         ) : !invite ? (
-          <div className="flex justify-center p-12"><Loader2 className="h-5 w-5 animate-spin text-ink-3" aria-label="Loading invitation" /></div>
+          <SkeletonRegion label="Loading invitation" className="flex flex-col items-center p-8">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="mt-3 h-9 w-56" />
+            <Skeleton className="mt-3 h-4 w-full max-w-xs" />
+            <Skeleton className="mt-1.5 h-4 w-48" />
+            <Skeleton className="mt-6 h-10 w-full" />
+          </SkeletonRegion>
         ) : (
           <div className="p-8 text-center">
             <p className="text-xs font-medium uppercase tracking-[0.08em] text-ink-3">Invitation</p>

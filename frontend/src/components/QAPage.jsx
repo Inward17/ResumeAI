@@ -14,6 +14,7 @@ import {
   Card, CardHeader, PageContainer, BackLink, ScoreRing, StatusPill, Initials, EmptyState, Button, IconButton, Skeleton, formatDate,
 } from './common';
 import { usePermissions } from '../lib/permissions';
+import { SkeletonRegion } from './ui/skeleton';
 
 const TopicTag = ({ label, selected, onClick }) => (
   <button
@@ -251,7 +252,10 @@ const QAPage = () => {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-4"><Skeleton className="h-12 w-12 rounded-full" /><Skeleton className="h-7 w-56" /></div>
+            <SkeletonRegion label="Loading candidate" className="flex items-center gap-4">
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="space-y-2"><Skeleton className="h-7 w-56" /><Skeleton className="h-3.5 w-40" /></div>
+            </SkeletonRegion>
           )}
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" ref={(el) => { openerRefs.current.candidate = el; }} onClick={() => openPanel('candidate')}
@@ -328,7 +332,14 @@ const QAPage = () => {
                     <p className="text-xs text-ink-3">Tailored to the job description and this resume. Usually takes a few seconds.</p>
                   </div>
                 </div>
-                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-lg" />)}
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="space-y-3 rounded-lg border border-line bg-surface p-5" aria-hidden="true">
+                    <div className="flex gap-2"><Skeleton className="h-5 w-20 rounded-full" /><Skeleton className="h-5 w-16 rounded-full" /></div>
+                    <Skeleton className="h-4 w-11/12" />
+                    <Skeleton className="h-4 w-3/5" />
+                    <Skeleton className="h-9 w-full" />
+                  </div>
+                ))}
               </div>
             )}
 

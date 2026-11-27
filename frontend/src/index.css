@@ -90,6 +90,11 @@
   }
 }
 
+@keyframes loader-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

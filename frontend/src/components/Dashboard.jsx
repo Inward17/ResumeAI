@@ -7,6 +7,7 @@ import {
   Card, CardHeader, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, StatStrip, Skeleton, RelativeDate,
 } from './common';
 import { usePermissions } from '../lib/permissions';
+import { SkeletonRegion, RowsSkeleton } from './ui/skeleton';
 
 const GETTING_STARTED = [
   { Icon: Briefcase, title: 'Create a job', body: 'Paste the description and the skills that matter.' },
@@ -103,7 +104,7 @@ const Dashboard = () => {
                 )}
               />
               {loading ? (
-                <div className="space-y-3 p-5">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-10" />)}</div>
+                <SkeletonRegion label="Loading recent jobs"><RowsSkeleton rows={3} /></SkeletonRegion>
               ) : (
                 <ul className="divide-y divide-line">
                   {recentJobs.map((job) => (
@@ -131,7 +132,14 @@ const Dashboard = () => {
               <CardHeader title="Candidates per job" />
               <div className="flex-1 p-5">
                 {loading ? (
-                  <div className="space-y-4">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-7" />)}</div>
+                  <SkeletonRegion label="Loading candidate counts" className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} aria-hidden="true">
+                        <div className="mb-2 flex justify-between"><Skeleton className="h-3.5 w-2/5" /><Skeleton className="h-3.5 w-6" /></div>
+                        <Skeleton className="h-1.5 rounded-full" />
+                      </div>
+                    ))}
+                  </SkeletonRegion>
                 ) : byVolume.length === 0 ? (
                   <EmptyState icon={BarChart3} title="No candidates yet" description="Upload resumes to a job to see volumes here." className="py-6" />
                 ) : (

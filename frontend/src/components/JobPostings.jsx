@@ -11,6 +11,7 @@ import {
   Card, PageContainer, PageHeader, JobStatusPill, EmptyState, Button, IconButton, Menu, Segmented, SearchInput, Tag, Skeleton, RelativeDate,
 } from './common';
 import { usePermissions } from '../lib/permissions';
+import { SkeletonRegion, CardGridSkeleton } from './ui/skeleton';
 
 const FILTERS = [
   { id: 'All', label: 'All' },
@@ -175,9 +176,7 @@ const JobPostings = () => {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
-        </div>
+        <SkeletonRegion label="Loading jobs"><CardGridSkeleton count={3} /></SkeletonRegion>
       ) : filteredJobs.length === 0 ? (
         <Card>
           {jobs.length === 0 ? (
