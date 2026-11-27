@@ -61,6 +61,16 @@ async def use_quota(org_id: str, kind: str, amount: int = 1, feature: str = None
         ))
 
 
+async def usage_today(org_id: str) -> dict:
+    """{kind: {used, limit, label}} for today (UTC)."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    out = {}
+    for kind, (_, _, label) in QUOTAS.items():
+        doc = await db.usage_quotas.find_one({"_id": f"{org_id}:{kind}:{today}"}, {"count": 1}) or {}
+        out[kind] = {"used": doc.get("count", 0), "limit": quota_limit(kind), "label": label}
+    return out
+
+
 async def refund_quota(org_id: str, kind: str, amount: int = 1, feature: str = None):
     """Give back units charged by ``use_quota`` today (UTC) for work that did not run."""
     inc = {"count": -amount}

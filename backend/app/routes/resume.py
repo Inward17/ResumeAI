@@ -21,6 +21,7 @@ from app.services.skill_matching.pipeline import run_unified_skill_scoring
 from app.services.task_queue import task_queue, TERMINAL_STATUSES
 from app.services import cover_letter_service
 from app.services import provider_keys
+from app.services.status_history import history_entry, set_status
 
 # Gemini concurrency, retries and rate-limit backoff are handled in
 # app.services.parser; the number of resumes processed at once is set by
@@ -746,7 +747,8 @@ async def _create_application(candidate_id: str, job_id: str, verification_data:
         {"candidate_id": candidate_id, "job_id": job_id},
         {
             "$set": {"score_details": score_details, "updated_at": now},
-            "$setOnInsert": {"application_date": now, "status": "Under Review", "recruiter_notes": ""},
+            "$setOnInsert": {"application_date": now, "status": "Under Review", "recruiter_notes": "",
+                             "status_history": [history_entry("Under Review", None, now)]},
         },
         upsert=True,
     )
@@ -927,18 +929,15 @@ async def get_job_tasks(job_id: str, limit: int = 200):
 
 
 @router.put("/{job_id}/candidates/{candidate_id}/status", dependencies=[Depends(require_job_action("candidate.status"))])
-async def update_candidate_status(job_id: str, candidate_id: str, status_update: dict):
-    """Update candidate application status"""
+async def update_candidate_status(job_id: str, candidate_id: str, status_update: dict,
+                                  user: AuthUser = Depends(get_current_user)):
+    """Update candidate application status (recorded in its status history)"""
     new_status = normalize_status(status_update.get("status"))
     if not new_status:
         raise HTTPException(400, f"Status must be one of: {', '.join(CANDIDATE_STATUSES)}")
-        
-    result = await db.applications.update_one(
-        {"job_id": job_id, "candidate_id": candidate_id},
-        {"$set": {"status": new_status, "updated_at": datetime.utcnow()}}
-    )
-    
-    if result.matched_count == 0:
+
+    found, _ = await set_status(job_id, candidate_id, new_status, user.uid)
+    if not found:
         raise HTTPException(404, "Application not found")
         
     return {"status": "success", "new_status": new_status}

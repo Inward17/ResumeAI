@@ -20,6 +20,7 @@ const Settings = lazy(() => import("./components/Settings"));
 const Interviews = lazy(() => import("./components/Interviews"));
 const QAPage = lazy(() => import("./components/QAPage"));
 const JoinOrg = lazy(() => import("./components/JoinOrg"));
+const Reports = lazy(() => import("./components/Reports"));
 
 const PageLoader = () => (
   <div className="flex h-full items-center justify-center p-10" role="status">
@@ -75,6 +76,7 @@ function App() {
             <Route path="/jobs/:jobId" element={<CandidatePipeline />} />
             <Route path="/jobs/:jobId/candidates/:candidateId/interview" element={<QAPage />} />
             <Route path="/interviews" element={<Interviews />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/join/:token" element={<JoinOrg />} />
