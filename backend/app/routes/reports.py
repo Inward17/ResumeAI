@@ -28,7 +28,7 @@ from fastapi.responses import Response
 
 from app.auth import AuthUser, get_current_user
 from app.database import db
-from app.org import membership, reject_api_key
+from app.org import access, job_filter, membership, reject_api_key
 from app.routes.job_routes import SHORTLISTED_STATUSES
 from app.routes.resume import normalize_status
 from app.services.quota import usage_today
@@ -377,8 +377,8 @@ def pain_points(report: dict, stuck_rows: list, overdue_rows: list, stuck_days: 
 # ── Data access ─────────────────────────────────────────────────────────
 
 async def _visible_jobs_filter(user) -> dict:
-    """Jobs the caller may see in reports. ponytail: whole workspace; switch to RBAC's job_filter when it lands."""
-    return {"org_id": (await membership(user))["org_id"]}
+    """Jobs the caller may see in reports: the workspace's, only assigned ones for restricted roles."""
+    return job_filter(await access(user))
 
 
 def _date_range(start: Optional[date], end: Optional[date]) -> dict:

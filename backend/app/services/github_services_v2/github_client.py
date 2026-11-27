@@ -330,7 +330,7 @@ class GitHubClient:
         description, stars, html_url, topics.
         """
         # ── try cache first ──
-        cached = self._load_search_cache(query)
+        cached = await asyncio.to_thread(self._load_search_cache, query)
         if cached is not None:
             return cached[:limit]
 
@@ -357,7 +357,7 @@ class GitHubClient:
             })
 
         # ── persist to cache ──
-        self._save_search_cache(query, results)
+        await asyncio.to_thread(self._save_search_cache, query, results)
         return results
 
     # ──────────────────────────────────────────────────────────────
@@ -371,6 +371,7 @@ class GitHubClient:
     def _search_cache_path(self, query: str) -> str:
         return os.path.join(SEARCH_CACHE_DIR, f"{self._search_cache_key(query)}.json")
 
+    # Sync disk I/O: call these through asyncio.to_thread, never on the event loop.
     def _load_search_cache(self, query: str) -> Optional[List[Dict[str, Any]]]:
         path = self._search_cache_path(query)
         if not os.path.exists(path):

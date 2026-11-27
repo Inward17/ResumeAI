@@ -422,3 +422,13 @@ class TestRoutes:
         funnel = list(csv.reader(io.StringIO((await client.get("/api/reports/export.csv?report=funnel")).text)))
         assert [r[0] for r in funnel[1:]] == ["Under Review", "Shortlisted", "Interview", "Offer", "Hired", "Rejected"]
         assert (await client.get("/api/reports/export.csv?report=secrets")).status_code == 422
+
+
+async def test_restricted_roles_see_only_assigned_jobs(client, mock_db):
+    from tests.test_rbac import _sign_in_as, _user, _workspace
+    _, assigned, other = await _workspace(client, mock_db)
+    _sign_in_as(_user("iv"))
+    data = (await client.get("/api/reports/overview")).json()
+    assert data["totals"]["jobs"] == 1
+    assert (await client.get(f"/api/reports/overview?job_id={other}")).status_code == 404
+    assert (await client.get(f"/api/reports/overview?job_id={assigned}")).status_code == 200

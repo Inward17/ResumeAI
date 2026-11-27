@@ -185,14 +185,15 @@ export const StatusPill = ({ status, className }) => (
 );
 
 /** Status as a quiet select with a coloured dot — one click to move a candidate */
-export const StatusSelect = ({ candidate, onChange }) => (
+export const StatusSelect = ({ candidate, onChange, disabled }) => (
   <div className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
     <Dot className={cn('pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2', STATUS_STYLES[candidate.status])} />
     <select
       value={candidate.status}
       onChange={(e) => onChange(candidate.id, e.target.value)}
+      disabled={disabled}
       aria-label={`Status for ${candidate.name}`}
-      className="h-8 cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-0 pl-7 pr-7 text-sm text-ink-2 outline-none transition hover:border-line-strong hover:bg-surface focus:border-primary focus:bg-surface focus:ring-[3px] focus:ring-primary/15"
+      className="h-8 cursor-pointer appearance-none rounded-md border border-transparent bg-transparent py-0 pl-7 pr-7 text-sm text-ink-2 outline-none transition hover:border-line-strong hover:bg-surface focus:border-primary focus:bg-surface focus:ring-[3px] focus:ring-primary/15 disabled:cursor-default disabled:hover:border-transparent disabled:hover:bg-transparent"
     >
       {CANDIDATE_STATUSES.map((st) => <option key={st} value={st} className="bg-surface text-ink">{st}</option>)}
     </select>

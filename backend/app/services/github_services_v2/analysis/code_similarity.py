@@ -102,8 +102,37 @@ async def _ensure_codebert():
 # In-memory LRU embedding cache + optional disk cache
 # ═══════════════════════════════════════════════════════════════════
 
+def _disk_load(key: str) -> Optional[np.ndarray]:
+    """Sync disk read of one cached embedding (expired entries are deleted). Run via asyncio.to_thread."""
+    path = os.path.join(EMBEDDING_CACHE_DIR, f"{key}.npy")
+    meta_path = os.path.join(EMBEDDING_CACHE_DIR, f"{key}.meta")
+    if not (os.path.exists(path) and os.path.exists(meta_path)):
+        return None
+    try:
+        with open(meta_path, "r") as f:
+            ts = datetime.fromisoformat(f.read().strip())
+        if datetime.now() - ts > timedelta(hours=EMBEDDING_CACHE_TTL_HOURS):
+            os.remove(path)
+            os.remove(meta_path)
+            return None
+        return np.load(path)
+    except Exception:
+        return None
+
+
+def _disk_save(key: str, emb: np.ndarray) -> None:
+    """Sync disk write of one embedding. Run via asyncio.to_thread."""
+    try:
+        np.save(os.path.join(EMBEDDING_CACHE_DIR, f"{key}.npy"), emb)
+        with open(os.path.join(EMBEDDING_CACHE_DIR, f"{key}.meta"), "w") as f:
+            f.write(datetime.now().isoformat())
+    except Exception:
+        pass
+
+
 class _EmbeddingCache:
-    """In-memory LRU + optional disk at EMBEDDING_CACHE_DIR. Key = SHA256(text)."""
+    """In-memory LRU + optional disk at EMBEDDING_CACHE_DIR. Key = SHA256(text).
+    The memory LRU is only touched on the event loop; disk I/O runs in one thread call per batch."""
 
     def __init__(self):
         self._mem: OrderedDict[str, np.ndarray] = OrderedDict()
@@ -112,40 +141,27 @@ class _EmbeddingCache:
     def _key(self, text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def get(self, text: str) -> Optional[np.ndarray]:
-        key = self._key(text)
-        # memory
-        if key in self._mem:
-            self._mem.move_to_end(key)
-            return self._mem[key]
-        # disk
-        path = os.path.join(EMBEDDING_CACHE_DIR, f"{key}.npy")
-        meta_path = os.path.join(EMBEDDING_CACHE_DIR, f"{key}.meta")
-        if os.path.exists(path) and os.path.exists(meta_path):
-            try:
-                with open(meta_path, "r") as f:
-                    ts = datetime.fromisoformat(f.read().strip())
-                if datetime.now() - ts > timedelta(hours=EMBEDDING_CACHE_TTL_HOURS):
-                    os.remove(path)
-                    os.remove(meta_path)
-                    return None
-                emb = np.load(path)
-                self._put_mem(key, emb)
-                return emb
-            except Exception:
-                return None
-        return None
+    async def get_many(self, texts: List[str]) -> List[Optional[np.ndarray]]:
+        keys = [self._key(t) for t in texts]
+        out: List[Optional[np.ndarray]] = []
+        for key in keys:
+            if key in self._mem:
+                self._mem.move_to_end(key)
+            out.append(self._mem.get(key))
+        missing = [i for i, emb in enumerate(out) if emb is None]
+        if missing:
+            loaded = await asyncio.to_thread(lambda: [_disk_load(keys[i]) for i in missing])
+            for i, emb in zip(missing, loaded):
+                if emb is not None:
+                    self._put_mem(keys[i], emb)
+                    out[i] = emb
+        return out
 
-    def put(self, text: str, emb: np.ndarray) -> None:
-        key = self._key(text)
-        self._put_mem(key, emb)
-        # disk persist
-        try:
-            np.save(os.path.join(EMBEDDING_CACHE_DIR, f"{key}.npy"), emb)
-            with open(os.path.join(EMBEDDING_CACHE_DIR, f"{key}.meta"), "w") as f:
-                f.write(datetime.now().isoformat())
-        except Exception:
-            pass
+    async def put_many(self, pairs: List[Tuple[str, np.ndarray]]) -> None:
+        items = [(self._key(text), emb) for text, emb in pairs]
+        for key, emb in items:
+            self._put_mem(key, emb)
+        await asyncio.to_thread(lambda: [_disk_save(key, emb) for key, emb in items])
 
     def _put_mem(self, key: str, emb: np.ndarray) -> None:
         if key in self._mem:
@@ -224,8 +240,7 @@ async def _embed_chunks(chunks: List[str]) -> np.ndarray:
     cached_results: Dict[int, np.ndarray] = {}
     to_encode: List[Tuple[int, str]] = []
 
-    for i, chunk in enumerate(chunks):
-        cached = _embedding_cache.get(chunk)
+    for i, (chunk, cached) in enumerate(zip(chunks, await _embedding_cache.get_many(chunks))):
         if cached is not None:
             cached_results[i] = cached
         else:
@@ -259,10 +274,9 @@ async def _embed_chunks(chunks: List[str]) -> np.ndarray:
             return np.vstack(all_embs) if all_embs else np.empty((0, CODEBERT_EMBEDDING_DIM))
 
         new_embs = await asyncio.to_thread(_encode_batch)
-        for j, (idx, text) in enumerate(to_encode):
-            emb = new_embs[j]
-            _embedding_cache.put(text, emb)
-            cached_results[idx] = emb
+        for j, (idx, _) in enumerate(to_encode):
+            cached_results[idx] = new_embs[j]
+        await _embedding_cache.put_many([(text, new_embs[j]) for j, (_, text) in enumerate(to_encode)])
 
     # Reassemble in original order
     return np.array([cached_results[i] for i in range(len(chunks))])

@@ -52,7 +52,7 @@ async def use_quota(org_id: str, kind: str, amount: int = 1, feature: str = None
         upsert=True, return_document=ReturnDocument.AFTER,
     )
     if doc["count"] > limit:
-        await db.usage_quotas.update_one(key, {"$inc": {k: -v for k, v in inc.items()}})
+        await refund_quota(org_id, kind, amount, feature)
         used = doc["count"] - amount
         raise HTTPException(429, (
             f"Daily limit reached: your workspace can make {limit} {label} per day "
@@ -69,6 +69,14 @@ async def usage_today(org_id: str) -> dict:
         doc = await db.usage_quotas.find_one({"_id": f"{org_id}:{kind}:{today}"}, {"count": 1}) or {}
         out[kind] = {"used": doc.get("count", 0), "limit": quota_limit(kind), "label": label}
     return out
+
+
+async def refund_quota(org_id: str, kind: str, amount: int = 1, feature: str = None):
+    """Give back units charged by ``use_quota`` today (UTC) for work that did not run."""
+    inc = {"count": -amount}
+    if feature:
+        inc[f"features.{feature}"] = -amount
+    await db.usage_quotas.update_one({"_id": f"{org_id}:{kind}:{datetime.now(timezone.utc).date().isoformat()}"}, {"$inc": inc})
 
 
 # ponytail: in-memory sliding window, so each process (API server, worker
